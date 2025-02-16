@@ -204,12 +204,14 @@ The router-controller uses this one-hot encoded vector to route the prompt to th
 - `5xx`: Server-side errors
   - Triton server unavailable (503)
   - Router model loading failures (503)
+  - Triton service error with detailed message and code.
 
 #### Manual Routing Strategy Errors
 - `4xx`: Client-side errors
   - Model not found in policy (404)
   - Missing model parameter (400)
   - Invalid routing parameters (400)
+  - Client error with detailed message and type.
 
 #### LLM Service Errors
 - Original status codes from LLM services are passed through
@@ -225,7 +227,7 @@ When an error occurs, the response will contain:
   "error": {
     "message": "Detailed error message",
     "type": "error_type",
-    "code": status_code
+    "status": status_code
   }
 }
 ```

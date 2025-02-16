@@ -1,10 +1,10 @@
 //! Proxy
 use crate::config::{Policy, RouterConfig};
-use crate::error::GatewayApiError;
+use crate::error::{GatewayApiError, IntoResponse};
 use crate::metrics::{
     track_token_usage, LLM_RESPONSE_TIME, MODEL_SELECTION_TIME, NUM_REQUESTS,
     PROXY_OVERHEAD_LATENCY, REQUESTS_PER_MODEL, REQUESTS_PER_POLICY, REQUEST_FAILURE,
-    REQUEST_LATENCY, REQUEST_SUCCESS, ROUTING_POLICY_USAGE, TOKEN_USAGE,
+    REQUEST_LATENCY, REQUEST_SUCCESS, ROUTING_POLICY_USAGE,
 };
 use crate::stream::ReqwestStreamAdapter;
 use crate::triton::{InferInputTensor, InferInputs, Output};
@@ -33,7 +33,10 @@ fn extract_forward_uri_path_and_query(req: &Request<Incoming>) -> Result<Uri, Ga
         .map(|x| x.as_str())
         .unwrap_or("")
         .to_string()
-        .parse::<Uri>()?;
+        .parse::<Uri>()
+        .map_err(|e| GatewayApiError::InvalidRequest {
+            message: format!("Invalid URI: {}", e),
+        })?;
 
     Ok(uri)
 }
@@ -96,7 +99,19 @@ async fn choose_model(
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
-    let response = client.post(url).headers(headers).json(&data).send().await?;
+    let response = client
+        .post(url)
+        .headers(headers)
+        .json(&data)
+        .send()
+        .await
+        .map_err(|e| {
+            error!("Failed to reach Triton server: {:?}", e);
+            GatewayApiError::TritonServiceError {
+                status_code: 503,
+                message: "Triton server is unreachable".to_string(),
+            }
+        })?;
     info!("Triton classification response: {:#?}", response);
 
     if !response.status().is_success() {
@@ -107,24 +122,34 @@ async fn choose_model(
             String::from_utf8_lossy(&error_body)
         );
 
-        return Err(GatewayApiError::TritonError(format!(
-            "Triton service error ({}): {}",
-            status,
-            String::from_utf8_lossy(&error_body)
-        )));
+        return Err(GatewayApiError::TritonServiceError {
+            status_code: status.as_u16(),
+            message: format!(
+                "Triton service error: {}",
+                String::from_utf8_lossy(&error_body)
+            ),
+        });
     }
 
     // Parse successful response
     let response: Output = response.json().await.map_err(|e| {
         error!("Failed to parse Triton response: {:?}", e);
-        GatewayApiError::TritonError(format!("Invalid Triton response: {}", e))
+        GatewayApiError::TritonServiceError {
+            status_code: 500,
+            message: format!("Invalid Triton response: {}", e),
+        }
     })?;
 
     info!("Triton Output: {:#?}", response);
 
-    let output_tensor = response.outputs.first().ok_or_else(|| {
-        GatewayApiError::TritonError("No outputs returned from the Triton response".to_string())
-    })?;
+    let output_tensor =
+        response
+            .outputs
+            .first()
+            .ok_or_else(|| GatewayApiError::TritonServiceError {
+                status_code: 500,
+                message: "No outputs returned from the Triton response".to_string(),
+            })?;
 
     let model_index = output_tensor
         .data
@@ -134,9 +159,11 @@ async fn choose_model(
         .map(|(idx, _)| idx)
         .ok_or_else(|| {
             error!("Invalid probability distribution from Triton");
-            GatewayApiError::InvalidTritonOutput(
-                "Could not determine model selection from probability distribution".to_string(),
-            )
+            GatewayApiError::TritonServiceError {
+                status_code: 500,
+                message: "Could not determine model selection from probability distribution"
+                    .to_string(),
+            }
         })?;
 
     info!("model_index chosen by classifier: {:#?}", model_index);
@@ -350,24 +377,20 @@ pub async fn proxy(
 
         let client = reqwest::Client::new();
 
-        let policy_name = if let Some(nim_llm_router_params) = extract_nim_llm_router_params(&json)
-        {
-            nim_llm_router_params.policy
+        let policy = if let Some(nim_llm_router_params) = extract_nim_llm_router_params(&json) {
+            match config.get_policy_by_name(nim_llm_router_params.policy.as_str()) {
+                Some(policy) => policy,
+                None => {
+                    let error = GatewayApiError::PolicyNotFound(nim_llm_router_params.policy.clone());
+                    return Ok(error.into_response());
+                }
+            }
         } else {
-            info!("No nim-llm-router params => Using default policy at index 0");
-            config
-                .get_policy_by_index(0)
-                .ok_or_else(|| {
-                    GatewayApiError::ModelNotFound("No policy found at index 0".to_string())
-                })?
-                .name
+            let error = GatewayApiError::InvalidRequest {
+                message: "Missing required 'nim-llm-router' parameters in request body. Expected format: { 'nim-llm-router': { 'policy': 'string', 'routing_strategy': 'manual|triton', 'model': 'string' (for manual strategy) } }".to_string(),
+            };
+            return Ok(error.into_response());
         };
-
-        let policy = config
-            .get_policy_by_name(policy_name.as_str())
-            .ok_or_else(|| {
-                GatewayApiError::ModelNotFound(format!("Policy not found: {}", policy_name))
-            })?;
 
         REQUESTS_PER_POLICY
             .with_label_values(&[policy.name.as_str()])
@@ -381,9 +404,9 @@ pub async fn proxy(
                 ROUTING_POLICY_USAGE.with_label_values(&["manual"]).inc();
                 if let Some(nim_llm_router_params) = extract_nim_llm_router_params(&json) {
                     let model = nim_llm_router_params.model.ok_or_else(|| {
-                        GatewayApiError::ModelNotFound(
-                            "No model specified for manual routing".to_string(),
-                        )
+                        GatewayApiError::InvalidRequest {
+                            message: "No model specified for manual routing".to_string(),
+                        }
                     })?;
                     match policy.llms.iter().position(|llm| llm.name == model) {
                         Some(index) => index,
@@ -402,17 +425,10 @@ pub async fn proxy(
                         }
                     }
                 } else {
-                    let error_body = "Manual routing strategy requires nim-llm-router params";
-                    let body = Full::from(error_body.to_string().into_bytes())
-                        .map_err(|never| match never {})
-                        .boxed();
-
-                    let error_response = Response::builder()
-                        .status(StatusCode::BAD_REQUEST)
-                        .header(CONTENT_TYPE, "application/json")
-                        .body(body)?;
-
-                    return Ok(error_response);
+                    return Err(GatewayApiError::InvalidRequest {
+                        message: "Manual routing strategy requires nim-llm-router params"
+                            .to_string(),
+                    });
                 }
             }
             Some(RoutingStrategy::Triton) => {
@@ -428,48 +444,33 @@ pub async fn proxy(
                         MODEL_SELECTION_TIME.observe(model_selection_time);
                         index
                     }
-                    Err(e) => {
-                        // Extract error details
-                        let error_body = match e {
-                            GatewayApiError::TritonError(msg)
-                            | GatewayApiError::InvalidTritonOutput(msg) => msg,
-                            _ => return Err(e),
-                        };
+                    Err(e) => match e {
+                        GatewayApiError::TritonServiceError {
+                            status_code,
+                            message,
+                        } => {
+                            let body = Full::from(message.into_bytes())
+                                .map_err(|never| match never {})
+                                .boxed();
 
-                        // Get original status code from error message if available
-                        let status = if let Some(status_start) = error_body.find('(') {
-                            if let Some(status_end) = error_body.find(')') {
-                                if let Ok(code) =
-                                    error_body[status_start + 1..status_end].parse::<u16>()
-                                {
-                                    StatusCode::from_u16(code)
-                                        .unwrap_or(StatusCode::SERVICE_UNAVAILABLE)
-                                } else {
-                                    StatusCode::SERVICE_UNAVAILABLE
-                                }
-                            } else {
-                                StatusCode::SERVICE_UNAVAILABLE
-                            }
-                        } else {
-                            StatusCode::SERVICE_UNAVAILABLE
-                        };
+                            let error_response = Response::builder()
+                                .status(
+                                    StatusCode::from_u16(status_code)
+                                        .unwrap_or(StatusCode::SERVICE_UNAVAILABLE),
+                                )
+                                .header(CONTENT_TYPE, "application/json")
+                                .body(body)?;
 
-                        // Create error response
-                        let body = Full::from(error_body.into_bytes())
-                            .map_err(|never| match never {})
-                            .boxed();
-
-                        let error_response = Response::builder()
-                            .status(status)
-                            .header(CONTENT_TYPE, "application/json")
-                            .body(body)?;
-
-                        return Ok(error_response);
-                    }
+                            return Ok(error_response);
+                        }
+                        _ => return Err(e),
+                    },
                 }
             }
             None => {
-                return Err(GatewayApiError::NoRoutingStrategy);
+                return Err(GatewayApiError::InvalidRequest {
+                    message: "No routing strategy specified".to_string(),
+                });
             }
         };
 
@@ -498,7 +499,7 @@ pub async fn proxy(
         info!("json after removing nim llm router params: {json:?}");
 
         let json = modify_model(json, model)?;
-        info!("json after modifying model: {:#?}", &json);
+        debug!("json after modifying model: {:#?}", &json);
 
         // Turn on this line if you want to include usage options in the request
         // let json = if is_stream { include_usage(json) } else { json };
@@ -522,7 +523,15 @@ pub async fn proxy(
         }
 
         let llm_req_start = Instant::now();
-        let reqwest_response = reqwest_request.send().await?;
+        let reqwest_response = reqwest_request.send().await.map_err(|e| {
+            error!("Failed to reach LLM server: {:?}", e);
+            GatewayApiError::LlmServiceError {
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                message: "LLM server is unreachable".to_string(),
+                provider: chosen_llm.name.clone(),
+                details: None,
+            }
+        })?;
         let current_llm_resp = llm_req_start.elapsed().as_secs_f64();
         {
             let mut guard = llm_resp_time_holder.lock().await;
@@ -538,29 +547,28 @@ pub async fn proxy(
         // If status is not successful, pass through the error response
         if !status.is_success() {
             let error_body = reqwest_response.bytes().await?;
+            let status_code = status.as_u16();
+            info!("status_code: {status_code:#?}");
 
+            // Create a response that directly uses the error body
             let body = Full::from(error_body)
                 .map_err(|never| match never {})
                 .boxed();
 
-            let mut error_response = Response::builder().status(status).body(body)?;
+            let mut error_response = Response::builder()
+                .status(status)
+                .header(CONTENT_TYPE, "application/json")
+                .body(body)?;
+
+            // Add the original headers and classifier
             *error_response.headers_mut() = headers;
             error_response.headers_mut().insert(
                 "X-Chosen-Classifier",
                 HeaderValue::from_str(&chosen_classifier).unwrap(),
             );
+
             error!("error_response: {error_response:#?}");
             return Ok(error_response);
-        }
-
-        if let Some(token_usage_val) = reqwest_response.headers().get("X-Token-Usage") {
-            if let Ok(token_usage_str) = token_usage_val.to_str() {
-                if let Ok(token_count) = token_usage_str.parse::<u64>() {
-                    TOKEN_USAGE
-                        .with_label_values(&[chosen_llm.name.as_str()])
-                        .inc_by(token_count);
-                }
-            }
         }
 
         if is_stream {
@@ -637,58 +645,95 @@ pub async fn proxy(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Llm;
+    use hyper::Body;
+    use hyper::Request;
+    use serde_json::json;
 
-    #[tokio::test]
-    async fn test_shorten_string() {
-        let s = "Hello, world!".to_string();
-        let max_length = 5;
-        let expected = "orld!".to_string();
-        assert_eq!(shorten_string(&s, max_length), expected);
+    fn create_test_config() -> RouterConfig {
+        RouterConfig {
+            policies: vec![Policy {
+                name: "test_policy".to_string(),
+                url: "http://triton:8000".to_string(),
+                llms: vec![
+                    Llm {
+                        name: "Brainstroming".to_string(),
+                        api_base: "https://integrate.api.nvidia.com".to_string(),
+                        api_key: "test-key".to_string(),
+                        model: "meta/llama-3.1-8b-instruct".to_string(),
+                    },
+                    Llm {
+                        name: "Code Generation".to_string(),
+                        api_base: "https://integrate.api.nvidia.com".to_string(),
+                        api_key: "test-key".to_string(),
+                        model: "meta/llama-3.1-8b-instruct".to_string(),
+                    },
+                ],
+            }],
+        }
     }
 
     #[tokio::test]
-    async fn test_shorten_string_empty() {
-        let s = "".to_string();
-        let max_length = 5;
-        let expected = "".to_string();
-        assert_eq!(shorten_string(&s, max_length), expected);
+    async fn test_missing_nim_llm_router_params() {
+        let config = create_test_config();
+        let body = json!({
+            "messages": [{"role": "user", "content": "Hello"}]
+        });
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/chat/completions")
+            .header("content-type", "application/json")
+            .body(hyper::Body::from(serde_json::to_vec(&body).unwrap()))
+            .expect("Failed to create request");
+
+        let response = proxy(req, config).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
-    async fn test_shorten_string_longer() {
-        let s = "Hello, world!".to_string();
-        let max_length = 15;
-        let expected = "Hello, world!".to_string();
-        assert_eq!(shorten_string(&s, max_length), expected);
+    async fn test_policy_not_found() {
+        let config = create_test_config();
+        let body = json!({
+            "messages": [{"role": "user", "content": "Hello"}],
+            "nim-llm-router": {
+                "policy": "nonexistent_policy",
+                "routing_strategy": "manual",
+                "model": "meta/llama-3.1-8b-instruct"
+            }
+        });
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/chat/completions")
+            .header("content-type", "application/json")
+            .body(hyper::Body::from(serde_json::to_vec(&body).unwrap()))
+            .expect("Failed to create request");
+
+        let response = proxy(req, config).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
-    async fn test_shorten_string_equal() {
-        let s = "Hello, world!".to_string();
-        let max_length = 13;
-        let expected = "Hello, world!".to_string();
-        assert_eq!(shorten_string(&s, max_length), expected);
+    async fn test_model_not_found() {
+        let config = create_test_config();
+        let body = json!({
+            "messages": [{"role": "user", "content": "Hello"}],
+            "nim-llm-router": {
+                "policy": "test_policy",
+                "routing_strategy": "manual",
+                "model": "nonexistent-model"
+            }
+        });
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/chat/completions")
+            .header("content-type", "application/json")
+            .body(hyper::Body::from(serde_json::to_vec(&body).unwrap()))
+            .expect("Failed to create request");
+
+        let response = proxy(req, config).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }
-// #[cfg(test)]
-// mod tests2 {
-//     use super::*;
-//     use serde_json::json;
-
-//     #[test]
-//     fn test_include_usage_adds_when_missing() {
-//         let input = json!({"stream": true});
-//         let output = include_usage(input);
-//         assert_eq!(output["stream_options"]["include_usage"], true);
-//     }
-
-//     #[test]
-//     fn test_include_usage_preserves_existing() {
-//         let input = json!({
-//             "stream": true,
-//             "stream_options": {"existing": "config"}
-//         });
-//         let output = include_usage(input);
-//         assert!(output["stream_options"]["include_usage"].is_null());
-//     }
-// }

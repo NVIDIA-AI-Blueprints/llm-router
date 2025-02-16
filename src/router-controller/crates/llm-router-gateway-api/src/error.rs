@@ -1,10 +1,61 @@
-//! Error
+use http::header::InvalidHeaderValue;
+use http::{Response, StatusCode};
+use http_body_util::{combinators::BoxBody, BodyExt, Full};
+use hyper::body::Bytes;
+use serde_json::{json, Value};
 use std::convert::Infallible;
+use thiserror::Error;
 
-#[derive(Debug, thiserror::Error)]
+pub trait IntoResponse {
+    fn into_response(self) -> Response<BoxBody<Bytes, GatewayApiError>>;
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ErrorSource {
+    Triton,
+    LlmProvider,
+    Router,
+    Client,
+    Infrastructure,
+}
+
+#[derive(Debug, Error)]
 pub enum GatewayApiError {
-    #[error("Generic Error: {0}")]
-    Generic(String),
+    // Triton specific errors
+    #[error("Triton Error: {message}")]
+    TritonError {
+        message: String,
+        code: u16,
+        details: Option<String>,
+    },
+
+    // LLM Provider errors
+    #[error("LLM Service Error: {message}")]
+    LlmServiceError {
+        status: StatusCode,
+        message: String,
+        provider: String,
+        details: Option<Value>,
+    },
+
+    // Router errors
+    #[error("Routing Error: {message}")]
+    RoutingError {
+        message: String,
+        error_type: RoutingErrorType,
+    },
+
+    // Client errors
+    #[error("Client Error: {message}")]
+    ClientError {
+        status: StatusCode,
+        message: String,
+        error_type: String,
+    },
+
+    // Infrastructure errors
+    #[error("Infrastructure Error: {0}")]
+    Infrastructure(String),
 
     #[error(transparent)]
     Json(#[from] serde_json::Error),
@@ -12,172 +63,345 @@ pub enum GatewayApiError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
+    // #[error(transparent)]
+    // InvalidUri(#[from] http::uri::InvalidUri),
     #[error(transparent)]
-    InvalidUri(#[from] http::uri::InvalidUri),
-
-    #[error(transparent)]
-    InvalidHeaderValue(#[from] http::header::InvalidHeaderValue),
-
-    #[error(transparent)]
-    Yaml(#[from] serde_yaml::Error),
-
-    #[error("OpenAI API Error: {0}")]
-    OpenAI(String),
-
-    #[error("Could not parse URI: {0}")]
-    Uri(String),
-
-    #[error("Internal Server Error")]
-    InternalServer,
-
-    #[error("Model not found: {0}")]
-    ModelNotFound(String),
-
-    #[error("Policy not found: {0}")]
-    PolicyNotFound(String),
-
-    #[error("No routing strategy specified")]
-    NoRoutingStrategy,
-
-    #[error(transparent)]
-    Forward(#[from] ForwardError),
-
-    #[error("HTTP Client Error: {0}")]
-    HttpClient(String),
-
-    #[error(transparent)]
-    Join(#[from] tokio::task::JoinError),
+    Http(#[from] http::Error),
 
     #[error(transparent)]
     Hyper(#[from] hyper::Error),
 
-    #[error(transparent)]
-    Http(#[from] http::Error),
+    #[error("Invalid request: {message}")]
+    InvalidRequest { message: String },
 
-    #[error("Triton error: {0}")]
-    TritonError(String),
+    #[error("Triton service error ({status_code}): {message}")]
+    TritonServiceError { status_code: u16, message: String },
 
-    #[error("Invalid Triton output: {0}")]
-    InvalidTritonOutput(String),
+    #[error("Unexpected error: {message}")]
+    UnexpectedError { message: String },
+
+    #[error("Policy not found: {0}")]
+    PolicyNotFound(String),
+
+    #[error("Model not found: {0}")]
+    ModelNotFound(String),
+
+    #[error("No policy specified in nim-llm-router params")]
+    MissingPolicy,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
-    #[error("Failed to read config file: {0}")]
-    FileReadError(#[from] std::io::Error),
-
-    #[error("Failed to parse YAML: {0}")]
-    YamlParseError(#[from] serde_yaml::Error),
-
-    #[error("Missing required field in policy '{policy}': {field}")]
+    #[error("Missing field '{field}' in policy '{policy}'")]
     MissingPolicyField { policy: String, field: String },
-
-    #[error("Missing required field in LLM '{llm}': {field}")]
+    #[error("Missing field '{field}' in LLM '{llm}'")]
     MissingLlmField { llm: String, field: String },
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Yaml(#[from] serde_yaml::Error),
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error("Forward error: {0}")]
-pub struct ForwardError(#[from] Box<dyn std::error::Error + Send + Sync>);
+#[derive(Debug, Clone, PartialEq)]
+pub enum RoutingErrorType {
+    PolicyNotFound,
+    ModelNotFound,
+    NoRoutingStrategy,
+    InvalidConfiguration,
+    TritonUnavailable,
+}
 
-impl ForwardError {
-    pub fn new<E>(error: E) -> Self
-    where
-        E: std::error::Error + Send + Sync + 'static,
-    {
-        ForwardError(Box::new(error))
+impl GatewayApiError {
+    pub fn error_source(&self) -> ErrorSource {
+        match self {
+            Self::TritonError { .. } => ErrorSource::Triton,
+            Self::LlmServiceError { .. } => ErrorSource::LlmProvider,
+            Self::RoutingError { .. } => ErrorSource::Router,
+            Self::ClientError { .. } => ErrorSource::Client,
+            _ => ErrorSource::Infrastructure,
+        }
     }
-}
 
-impl From<hyper::Error> for ForwardError {
-    fn from(err: hyper::Error) -> Self {
-        ForwardError::new(err)
+    pub fn status_code(&self) -> StatusCode {
+        match self {
+            Self::TritonError { code, .. } => {
+                StatusCode::from_u16(*code).unwrap_or(StatusCode::SERVICE_UNAVAILABLE)
+            }
+            Self::LlmServiceError { status, .. } => *status,
+            Self::ClientError { status, .. } => *status,
+            Self::RoutingError { error_type, .. } => match error_type {
+                RoutingErrorType::PolicyNotFound => StatusCode::BAD_REQUEST,
+                RoutingErrorType::ModelNotFound => StatusCode::NOT_FOUND,
+                RoutingErrorType::NoRoutingStrategy => StatusCode::BAD_REQUEST,
+                RoutingErrorType::InvalidConfiguration => StatusCode::INTERNAL_SERVER_ERROR,
+                RoutingErrorType::TritonUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+            },
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    pub fn to_response(&self) -> Result<Response<BoxBody<Bytes, Self>>, Self> {
+        let error_response = match self {
+            Self::LlmServiceError {
+                status,
+                message,
+                provider,
+                details,
+            } => json!({
+                "error": {
+                    "type": "llm_service_error",
+                    "message": message,
+                    "status": status.as_u16(),
+                    "provider": provider,
+                    "details": details,
+                    "source": "llm_provider"
+                }
+            }),
+            Self::TritonError {
+                message,
+                code,
+                details,
+            } => json!({
+                "error": {
+                    "type": "triton_error",
+                    "message": message,
+                    "code": code,
+                    "details": details,
+                    "source": "triton"
+                }
+            }),
+            Self::RoutingError {
+                message,
+                error_type,
+            } => json!({
+                "error": {
+                    "type": format!("routing_error_{:?}", error_type).to_lowercase(),
+                    "message": message,
+                    "status": self.status_code().as_u16(),
+                    "source": "router"
+                }
+            }),
+            Self::ClientError {
+                message,
+                error_type,
+                status,
+            } => json!({
+                "error": {
+                    "type": error_type,
+                    "message": message,
+                    "status": status.as_u16(),
+                    "source": "client"
+                }
+            }),
+            _ => json!({
+                "error": {
+                    "type": "internal_error",
+                    "message": self.to_string(),
+                    "status": self.status_code().as_u16(),
+                    "source": "infrastructure"
+                }
+            }),
+        };
+
+        let body_bytes = Bytes::from(serde_json::to_vec(&error_response)?);
+        let boxed_body = Full::from(body_bytes)
+            .map_err(|never| match never {})
+            .boxed();
+
+        Ok(Response::builder()
+            .status(self.status_code())
+            .header("Content-Type", "application/json")
+            .body(boxed_body)?)
+    }
+
+    // Constructor methods
+    pub fn triton_error(message: impl Into<String>, code: u16) -> Self {
+        Self::TritonError {
+            message: message.into(),
+            code,
+            details: None,
+        }
+    }
+
+    pub fn llm_error(
+        status: StatusCode,
+        message: impl Into<String>,
+        provider: impl Into<String>,
+    ) -> Self {
+        Self::LlmServiceError {
+            status,
+            message: message.into(),
+            provider: provider.into(),
+            details: None,
+        }
+    }
+
+    pub fn routing_error(message: impl Into<String>, error_type: RoutingErrorType) -> Self {
+        Self::RoutingError {
+            message: message.into(),
+            error_type,
+        }
+    }
+
+    pub fn client_error(
+        status: StatusCode,
+        message: impl Into<String>,
+        error_type: impl Into<String>,
+    ) -> Self {
+        Self::ClientError {
+            status,
+            message: message.into(),
+            error_type: error_type.into(),
+        }
     }
 }
 
 impl From<reqwest::Error> for GatewayApiError {
     fn from(error: reqwest::Error) -> Self {
-        GatewayApiError::HttpClient(error.to_string())
+        if let Some(status) = error.status() {
+            Self::client_error(status, error.to_string(), "http_client_error")
+        } else {
+            Self::Infrastructure(error.to_string())
+        }
     }
 }
 
-//
-// Implement conversion from Infallible to your custom error.
-// Since Infallible has no possible values, the match arm is unreachable.
-//
 impl From<Infallible> for GatewayApiError {
     fn from(err: Infallible) -> Self {
         match err {}
     }
 }
 
+impl From<InvalidHeaderValue> for GatewayApiError {
+    fn from(err: InvalidHeaderValue) -> Self {
+        GatewayApiError::InvalidRequest {
+            message: format!("Invalid header value: {}", err),
+        }
+    }
+}
+
+impl IntoResponse for GatewayApiError {
+    fn into_response(self) -> Response<BoxBody<Bytes, GatewayApiError>> {
+        let (status, message) = match &self {
+            GatewayApiError::InvalidRequest { message } => {
+                (StatusCode::BAD_REQUEST, message.clone())
+            }
+            GatewayApiError::PolicyNotFound(policy) => (
+                StatusCode::NOT_FOUND,
+                format!("Policy '{}' not found", policy),
+            ),
+            _ => (self.status_code(), self.to_string()),
+        };
+
+        let error_json = json!({
+            "error": {
+                "message": message,
+                "status": status.as_u16()
+            }
+        });
+
+        let body = Full::from(Bytes::from(
+            serde_json::to_vec(&error_json).unwrap_or_default(),
+        ))
+        .map_err(|never| match never {})
+        .boxed();
+
+        Response::builder()
+            .status(status)
+            .header("Content-Type", "application/json")
+            .body(body)
+            .unwrap_or_else(|_| {
+                Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(
+                        Full::from(Bytes::from("Internal Server Error"))
+                            .map_err(|never| match never {})
+                            .boxed(),
+                    )
+                    .expect("Failed to create error response")
+            })
+    }
+}
+
+impl From<()> for GatewayApiError {
+    fn from(_: ()) -> Self {
+        GatewayApiError::UnexpectedError {
+            message: "Empty error conversion".to_string(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use serde::de::Error;
-
     use super::*;
 
-    #[test]
-    fn test_json_error() {
-        let error = serde_json::Error::custom("invalid json");
-        let gateway_api_error = GatewayApiError::Json(error);
-        assert_eq!(gateway_api_error.to_string(), "invalid json");
-    }
-
-    #[test]
-    fn test_io_error() {
-        let error = std::io::Error::new(std::io::ErrorKind::Other, "io error");
-        let gateway_api_error = GatewayApiError::Io(error);
-        assert_eq!(gateway_api_error.to_string(), "io error");
-    }
-
-    #[test]
-    fn test_yaml_error() {
-        let error = serde_yaml::Error::custom("invalid yaml");
-        let gateway_api_error = GatewayApiError::Yaml(error);
-        assert_eq!(gateway_api_error.to_string(), "invalid yaml");
-    }
-
-    #[test]
-    fn test_openai_error() {
-        let gateway_api_error = GatewayApiError::OpenAI("OpenAI error".to_string());
-        assert_eq!(
-            gateway_api_error.to_string(),
-            "OpenAI API Error: OpenAI error"
+    #[tokio::test]
+    async fn test_llm_service_error() {
+        let error = GatewayApiError::llm_error(
+            StatusCode::PAYMENT_REQUIRED,
+            "Insufficient credits",
+            "OpenAI",
         );
+        let response = error.to_response().unwrap();
+
+        assert_eq!(response.status(), StatusCode::PAYMENT_REQUIRED);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["error"]["type"], "llm_service_error");
+        assert_eq!(json["error"]["provider"], "OpenAI");
+        assert_eq!(json["error"]["status"], 402);
+        assert_eq!(json["error"]["source"], "llm_provider");
     }
 
-    #[test]
-    fn test_uri_error() {
-        let gateway_api_error = GatewayApiError::Uri("invalid uri".to_string());
-        assert_eq!(
-            gateway_api_error.to_string(),
-            "Could not parse URI: invalid uri"
+    #[tokio::test]
+    async fn test_triton_error() {
+        let error = GatewayApiError::triton_error("Model loading failed", 503);
+        let response = error.to_response().unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["error"]["type"], "triton_error");
+        assert_eq!(json["error"]["code"], 503);
+        assert_eq!(json["error"]["source"], "triton");
+    }
+
+    #[tokio::test]
+    async fn test_routing_error() {
+        let error = GatewayApiError::routing_error(
+            "No appropriate model found",
+            RoutingErrorType::ModelNotFound,
         );
+        let response = error.to_response().unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["error"]["type"], "routing_error_model_not_found");
+        assert_eq!(json["error"]["source"], "router");
     }
 
-    #[test]
-    fn test_internal_server_error() {
-        let gateway_api_error = GatewayApiError::InternalServer;
-        assert_eq!(gateway_api_error.to_string(), "Internal Server Error");
-    }
-
-    #[test]
-    fn test_model_not_found_error() {
-        let gateway_api_error = GatewayApiError::ModelNotFound("model not found".to_string());
-        assert_eq!(
-            gateway_api_error.to_string(),
-            "Model not found: model not found"
+    #[tokio::test]
+    async fn test_client_error() {
+        let error = GatewayApiError::client_error(
+            StatusCode::BAD_REQUEST,
+            "Invalid request parameters",
+            "validation_error",
         );
-    }
+        let response = error.to_response().unwrap();
 
-    #[test]
-    fn test_forward_error() {
-        let error = Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "forward error",
-        ));
-        let forward_error = ForwardError(error);
-        assert_eq!(forward_error.to_string(), "Forward error: forward error");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["error"]["type"], "validation_error");
+        assert_eq!(json["error"]["source"], "client");
     }
 }
