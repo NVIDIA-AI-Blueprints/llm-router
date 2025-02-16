@@ -259,3 +259,14 @@ The blueprint includes a variety of tools to help understand, evaluate, customiz
 - Metrics are automatically collected and can be exported via Prometheus to Grafana. Details are available in the source README and an example is provided in the quickstart notebook.
 - A sample loadtest is available in the `demo/loadtest` folder with instructions in the associated README.
 - The blueprint includes two default routing policies available for download from NGC. The `customize` directory includes two notebooks showing how each policy model was created. There is also an example notebook showing how to create a third policy. The `intent_router` is created by fine-tuning a model to classify prompts based on a user's intent, assuming they are interacting with a support chatbot at a bank.
+
+## Security Considerations
+
+- The LLM Router Blueprint doesn't generate any code that may require sandboxing.
+- The LLM Router Development Blueprint is shared as a reference and is provided "as is". The security in the production environment is the responsibility of the end users deploying it. When deploying in a production environment, please have security experts review any potential risks and threats; define the trust boundaries, implement logging and monitoring capabilities, secure the communication channels, integrate AuthN & AuthZ with appropriate access controls, keep the deployment up to date, ensure the containers/source code are secure and free of known vulnerabilities.
+- The users need to be aware that the api_key for the end LLM for the router-controller is obtained by populating the config.yaml file and this might lead to the leakage of api_key and unauthorized access for the end LLM and the end users are responsible for safeguarding the config.yaml file and the api_key in it.
+- The LLM Router doesn't require any privileged access to the system.
+- The end users are responsible for ensuring the availability of their deployment.
+- The end users are responsible for building the container images and keeping them up to date.
+- The end users are responsible for ensuring that OSS packages used by the developer blueprint are current.
+- The logs from router-controller, router-server, and the demo app are printed to standard out, they include input prompts and output completions for development purposes. The end users are advised to handle logging securely and avoid information leakage for production use cases.

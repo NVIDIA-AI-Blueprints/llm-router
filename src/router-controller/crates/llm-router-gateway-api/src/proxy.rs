@@ -661,7 +661,7 @@ pub async fn proxy(
 mod tests {
     use super::*;
     use crate::config::Llm;
-    use hyper::Body;
+    use hyper::body::Body;
     use hyper::Request;
     use serde_json::json;
 
@@ -699,7 +699,7 @@ mod tests {
             .method("POST")
             .uri("/v1/chat/completions")
             .header("content-type", "application/json")
-            .body(hyper::Body::from(serde_json::to_vec(&body).unwrap()))
+            .body(Full::new(Bytes::from(serde_json::to_vec(&body).unwrap())))
             .expect("Failed to create request");
 
         let response = proxy(req, config).await.unwrap();
@@ -722,7 +722,7 @@ mod tests {
             .method("POST")
             .uri("/v1/chat/completions")
             .header("content-type", "application/json")
-            .body(hyper::Body::from(serde_json::to_vec(&body).unwrap()))
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
             .expect("Failed to create request");
 
         let response = proxy(req, config).await.unwrap();
