@@ -10,7 +10,7 @@ To see these metrics you can use the included prometheus and grafana components:
 
 - `make metrics` will start grafana and prometheus
 - access grafana at `localhost:3000` using the default username: `admin` and password: `secret` 
-- click "add data source" and select prometheus, supplying the default prometheus url of `http://localhost:9090`
+- click "add data source" and select prometheus, supplying the docker-compose prometheus url of `http://prometheus:9090`
 - run any number of requests through the LLM Router
 - from the grafana home page click "explore" and you will be able to view the available metrics
 

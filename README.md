@@ -14,7 +14,7 @@ For example, using a task classification policy, the following user prompts can 
 
 | User Prompt | Task Classification | Route To |
 |---|---|---|
-| "Help me write a python function to load salesforce data into my warehouse." | Code Generation | mixtral |
+| "Help me write a python function to load salesforce data into my warehouse." | Code Generation | deepseek |
 | "Tell me about your return policy " | Open QA | llama 70B | 
 | "Rewrite the user prompt to be better for an LLM agent. User prompt: what is the best coffee recipe" | Rewrite | llama 8B |
 

@@ -1,3 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import logging
 
 import gradio as gr
@@ -99,14 +114,15 @@ with gr.Blocks(theme=theme, css=css) as chat:
             choices=list_routing_strategy(), 
             label="Select the Routing Strategy", 
             min_width=50, 
-            scale=1
+            scale=1, 
+            value="triton"
         )
         policy_dropdown = gr.Dropdown(
-            choices=[],
+            choices=["task_router"],
             label="Select a Routing Policy",
             min_width=50,
             scale=1,
-            visible=False
+            value="task_router"
         )
         model_dropdown = gr.Dropdown(
             choices=[],
@@ -125,7 +141,6 @@ with gr.Blocks(theme=theme, css=css) as chat:
         inputs=[policy_dropdown, routing_strategy],
         outputs=[model_dropdown]
     )
-
 
     chat_interface = gr.ChatInterface(
         fn=client.predict,
