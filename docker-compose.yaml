@@ -25,6 +25,9 @@ services:
             - driver: nvidia
               device_ids: [ "0" ]
               capabilities: [ gpu ]
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+    
 
   app:
     build:
@@ -41,6 +44,8 @@ services:
         source: demo/app
         target: /app
     command: python app.py
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
 
   router-controller:
     build:
@@ -51,6 +56,8 @@ services:
       - "8084:8084"
     networks:
       - llm-router-network
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
 
   prometheus:
     image: prom/prometheus:v2.35.0
@@ -64,12 +71,15 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.enable-lifecycle'
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
 
   grafana:
     image: grafana/grafana:9.1.6
     volumes:
       - grafana_data:/var/lib/grafana
     environment:
+      - PYTHONDONTWRITEBYTECODE=1
       - GF_SECURITY_ADMIN_PASSWORD=secret # Change this password
     ports:
       - "3000:3000"
@@ -91,6 +101,8 @@ services:
     command: -f /mnt/locust/locustfile.py --host http://router-controller:8084
     networks:
       - llm-router-network
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
 
   router-builder:
     build:
@@ -114,6 +126,8 @@ services:
             - driver: nvidia
               device_ids: [ "0" ]
               capabilities: [ gpu ]
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
 
 volumes:
   grafana_data:

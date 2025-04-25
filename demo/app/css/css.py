@@ -25,7 +25,9 @@ header = f"""
 </span>
 """
 
-with open("/app/css/style.css", "r") as file:
+style_path = "/project/demo/app/css/style.css" if os.getenv("AI_WORKBENCH_FLAG") == "true" else "/app/css/style.css"
+
+with open(style_path, "r") as file:
     css = file.read()
 
 theme = gr.themes.Monochrome(primary_hue="emerald", secondary_hue="green", font=["nvidia-sans", "sans-serif"]).set(
