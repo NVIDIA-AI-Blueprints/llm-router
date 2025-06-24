@@ -1,0 +1,229 @@
+configs:
+  router_config:
+    content: |
+      policies:
+        - name: "task_router"
+          url: http://router-server:8000/v2/models/task_router_ensemble/infer
+          llms:
+            - name: Brainstorming
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            - name: Chatbot
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: mistralai/mixtral-8x22b-instruct-v0.1
+            - name: Classification
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+            - name: Closed QA
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            - name: Code Generation
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: nvidia/llama-3.3-nemotron-super-49b-v1
+            - name: Extraction
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+            - name: Open QA
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            - name: Other
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: mistralai/mixtral-8x22b-instruct-v0.1
+            - name: Rewrite
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+            - name: Summarization
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            - name: Text Generation
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: mistralai/mixtral-8x22b-instruct-v0.1
+            - name: Unknown
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+        - name: "complexity_router"
+          url: http://router-server:8000/v2/models/complexity_router_ensemble/infer
+          llms:
+            - name: Creativity
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            - name: Reasoning
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: nvidia/llama-3.3-nemotron-super-49b-v1
+            - name: Contextual-Knowledge
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+            - name: Few-Shot
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            - name: Domain-Knowledge
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: mistralai/mixtral-8x22b-instruct-v0.1
+            - name: No-Label-Reason
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+            - name: Constraint
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+          
+services:
+
+  router-server:
+    build:
+      context: ../../
+      dockerfile: src/router-server/router-server.dockerfile
+    image: router-server:latest
+    shm_size: 8G
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    volumes:
+      - ../../routers/:/model_repository
+    command: tritonserver --log-verbose=1 --model-repository=/model_repository
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+      - "8002:8002"
+    networks:
+      - llm-router-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: [ "0" ]
+              capabilities: [ gpu ]
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+    
+
+  app:
+    build:
+      context: ../../
+      dockerfile: demo/app/app.dockerfile
+    image: llm-router-client:app
+    working_dir: /app
+    ports:
+      - 8008:8008
+    networks:
+      - llm-router-network
+    volumes:
+      - type: bind
+        source: ../../demo/app
+        target: /app
+    command: python app.py
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+
+  router-controller:
+    build:
+      context: ../../
+      dockerfile: src/router-controller/router-controller.dockerfile
+    image: router-controller:latest
+    configs:
+      - source: router_config
+        target: /app/config.yaml
+    ports:
+      - "8084:8084"
+    networks:
+      - llm-router-network
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+
+  prometheus:
+    image: prom/prometheus:v2.35.0
+    volumes:
+      - ../../src/prometheus:/etc/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - llm-router-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+
+  grafana:
+    image: grafana/grafana:9.1.6
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - GF_SECURITY_ADMIN_PASSWORD=secret # Change this password
+    ports:
+      - "3000:3000"
+    networks:
+      - llm-router-network
+    depends_on:
+      - prometheus
+
+  locust:
+    build:
+      context: ../../
+      dockerfile: demo/loadtest/locust.dockerfile
+    image: locust:latest
+    ports:
+      - "8089:8089"
+      - "4000:4000"
+    volumes:
+      - ../../demo/loadtest/:/mnt/locust
+    command: -f /mnt/locust/locustfile.py --host http://router-controller:8084
+    networks:
+      - llm-router-network
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+
+  router-builder:
+    build:
+      context: ../../
+      dockerfile: customize/router_builder.dockerfile
+    shm_size: 8G
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    volumes:
+      - ../../customize:/workspace
+      - ../../routers/:/model_repository
+    command: jupyter lab --no-browser --allow-root --ip=0.0.0.0 --port=9999 --NotebookApp.token "" --NotebookApp.password "" --notebook-dir "/workspace/"
+    ports:
+      - "9999:9999"
+    networks:
+      - llm-router-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: [ "0" ]
+              capabilities: [ gpu ]
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+
+volumes:
+  grafana_data:
+
+
+networks:
+  llm-router-network:
+    driver: bridge

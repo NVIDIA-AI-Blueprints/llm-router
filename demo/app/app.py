@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import logging
+import os
 
 import gradio as gr
 import yaml
@@ -33,7 +34,7 @@ CONFIG = {}
 def read_config():
     global CONFIG
     try:
-        with open("config.yaml", "r") as file:
+        with open("/project/demo/app/config.yaml" if os.getenv("AI_WORKBENCH_FLAG") == "true" else "config.yaml", "r") as file:
             CONFIG = yaml.safe_load(file)
 
         logging.info("Successfully parsed YAML data:")
@@ -158,12 +159,26 @@ with gr.Blocks(theme=theme, css=css) as chat:
     # chat_interface.render()
 
 if __name__ == "__main__":
-    chat.queue().launch(
-        share=False,
-        favicon_path="/app/css/faviconV2.png",
-        allowed_paths=[
-            "/app/fonts/NVIDIASansWebWOFFFontFiles/WOFF2/NVIDIASans_W_Rg.woff2",
-            "/app/fonts/NVIDIASansWebWOFFFontFiles/WOFF2/NVIDIASans_W_Bd.woff2",
-            "/app/fonts/NVIDIASansWebWOFFFontFiles/WOFF2/NVIDIASans_W_It.woff2",
-        ],
-    )
+    if os.getenv("AI_WORKBENCH_FLAG") == "true":
+        # Launch with workbench reverse proxy settings
+        chat.queue().launch(
+            share=False,
+            favicon_path="/project/demo/app/css/faviconV2.png",
+            allowed_paths=[
+                "/project/demo/app/fonts/NVIDIASansWebWOFFFontFiles/WOFF2/NVIDIASans_W_Rg.woff2",
+                "/project/demo/app/fonts/NVIDIASansWebWOFFFontFiles/WOFF2/NVIDIASans_W_Bd.woff2",
+                "/project/demo/app/fonts/NVIDIASansWebWOFFFontFiles/WOFF2/NVIDIASans_W_It.woff2",
+            ],
+            server_name="0.0.0.0", 
+            root_path=os.getenv("PROXY_PREFIX")
+        )
+    else:
+        chat.queue().launch(
+            share=False,
+            favicon_path="/app/css/faviconV2.png",
+            allowed_paths=[
+                "/app/fonts/NVIDIASansWebWOFFFontFiles/WOFF2/NVIDIASans_W_Rg.woff2",
+                "/app/fonts/NVIDIASansWebWOFFFontFiles/WOFF2/NVIDIASans_W_Bd.woff2",
+                "/app/fonts/NVIDIASansWebWOFFFontFiles/WOFF2/NVIDIASans_W_It.woff2",
+            ],
+        )
