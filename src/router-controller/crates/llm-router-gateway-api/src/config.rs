@@ -40,9 +40,40 @@ pub struct Llm {
 impl RouterConfig {
     pub fn load_config(path: &str) -> Result<RouterConfig> {
         let content = std::fs::read_to_string(path)?;
-        let config: RouterConfig = serde_yaml::from_str(&content)?;
+        // Perform environment variable substitution
+        let expanded_content = Self::expand_env_vars(&content);
+        let config: RouterConfig = serde_yaml::from_str(&expanded_content)?;
         validate_config(&config)?;
         Ok(config)
+    }
+
+    fn expand_env_vars(content: &str) -> String {
+        use std::env;
+        let mut result = content.to_string();
+
+        // Find all ${VAR_NAME} patterns and replace them with environment variable values
+        let re = regex::Regex::new(r"\$\{([^}]+)\}").unwrap();
+
+        result = re
+            .replace_all(&result, |caps: &regex::Captures| {
+                let var_name = &caps[1];
+                match env::var(var_name) {
+                    Ok(value) => {
+                        println!("Substituted environment variable '{}' in config", var_name);
+                        value
+                    }
+                    Err(_) => {
+                        println!(
+                            "Warning: Environment variable '{}' not found, keeping placeholder",
+                            var_name
+                        );
+                        caps[0].to_string()
+                    }
+                }
+            })
+            .to_string();
+
+        result
     }
 
     pub fn get_policy_by_name(&self, name: &str) -> Option<Policy> {
@@ -123,11 +154,18 @@ fn validate_config(config: &RouterConfig) -> Result<()> {
                     field: "model".to_string(),
                 });
             }
+            // Allow either hardcoded API keys or environment variable placeholders, but not empty strings
             if llm.api_key.is_empty() {
                 return Err(ConfigError::MissingLlmField {
                     llm: llm.name.clone(),
                     field: "api_key".to_string(),
                 });
+            }
+            // Check if it's still a placeholder after environment variable substitution
+            if llm.api_key.starts_with("${") && llm.api_key.ends_with("}") {
+                println!("Warning: API key for LLM '{}' contains unresolved environment variable placeholder: {}", 
+                         llm.name, llm.api_key);
+                // Don't fail validation - let it continue and fail at runtime if needed
             }
         }
     }

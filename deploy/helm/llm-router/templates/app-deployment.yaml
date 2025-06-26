@@ -8,6 +8,10 @@ metadata:
     app.kubernetes.io/component: app
 spec:
   replicas: {{ .Values.app.replicas }}
+  {{- if .Values.app.strategy }}
+  strategy:
+    {{- toYaml .Values.app.strategy | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "llm-router.selectorLabels" . | nindent 6 }}
@@ -18,6 +22,10 @@ spec:
         {{- include "llm-router.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: app
     spec:
+      {{- if .Values.app.securityContext.pod }}
+      securityContext:
+        {{- toYaml .Values.app.securityContext.pod | nindent 8 }}
+      {{- end }}
       containers:
         - name: app
           image: "{{ .Values.global.imageRegistry }}{{ .Values.app.image.repository }}:{{ .Values.app.image.tag }}"
@@ -30,6 +38,22 @@ spec:
               protocol: TCP
           resources:
             {{- toYaml .Values.app.resources | nindent 12 }}
+          {{- if .Values.app.securityContext.container }}
+          securityContext:
+            {{- toYaml .Values.app.securityContext.container | nindent 12 }}
+          {{- end }}
+          {{- if .Values.app.healthChecks.readinessProbe }}
+          readinessProbe:
+            {{- toYaml .Values.app.healthChecks.readinessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.app.healthChecks.livenessProbe }}
+          livenessProbe:
+            {{- toYaml .Values.app.healthChecks.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.app.healthChecks.startupProbe }}
+          startupProbe:
+            {{- toYaml .Values.app.healthChecks.startupProbe | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: config-volume
               mountPath: /app/config.yaml
@@ -48,23 +72,34 @@ spec:
             name: {{ include "llm-router.fullname" . }}-app-config
         {{- if .Values.app.volumes.appDir.enabled }}
         - name: app-volume
-          {{- if .Values.app.volumes.appDir.persistentVolumeClaim.claimName }}
+          {{- if .Values.app.volumes.appDir.storage.persistentVolumeClaim.enabled }}
+          {{- if .Values.app.volumes.appDir.storage.persistentVolumeClaim.existingClaim }}
           persistentVolumeClaim:
-            claimName: {{ .Values.app.volumes.appDir.persistentVolumeClaim.claimName }}
-          {{- else if .Values.app.volumes.appDir.hostPath }}
-          hostPath:
-            path: {{ .Values.app.volumes.appDir.hostPath }}
+            claimName: {{ .Values.app.volumes.appDir.storage.persistentVolumeClaim.existingClaim }}
           {{- else }}
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: {{ include "llm-router.fullname" . }}-app-storage
+          {{- end }}
+          {{- else if .Values.app.volumes.appDir.storage.hostPath.enabled }}
+          hostPath:
+            path: {{ .Values.app.volumes.appDir.storage.hostPath.path }}
+          {{- else }}
+          emptyDir:
+            {{- if .Values.app.volumes.appDir.storage.emptyDir.sizeLimit }}
+            sizeLimit: {{ .Values.app.volumes.appDir.storage.emptyDir.sizeLimit }}
+            {{- end }}
           {{- end }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
+      {{- if .Values.app.affinity }}
       affinity:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml .Values.app.affinity | nindent 8 }}
+      {{- else if .Values.affinity }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
       {{- end }}
       {{- with .Values.tolerations }}
       tolerations:

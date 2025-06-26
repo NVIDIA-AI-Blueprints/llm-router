@@ -1,30 +1,43 @@
 # LLM Router Helm deployment sample configuration
-# Copy this file to values.override.yaml and fill in your specific values
-
-# Set your NVIDIA API key if you're using NVIDIA AI Foundation Models
-apiKeys:
-  nvidia_api_key: "YOUR_NVIDIA_API_KEY_HERE"  # Replace with your actual NVIDIA API key
-
-# Use your preferred storage class and registry
+# Copy this file to values.override.yaml and customize for your environment
+# Prerequisites: Follow README Quick Start steps 1-4 before deployment
 global:
   storageClass: "YOUR_STORAGE_CLASS"  # e.g., "standard", "microk8s-hostpath"
-  imageRegistry: "YOUR_REGISTRY/"     # e.g., "localhost:32000/", "docker.io/"
+  imageRegistry: "YOUR_REGISTRY/"  # e.g., "nvcr.io/yourorg/", "docker.io/youruser/"
+  imagePullSecrets:
+    - name: nvcr-secret  # Change name to match your registry secret
 
-# Ingress configuration (optional - enables external access via domain names)
-# Uncomment and configure if you want to access services via ingress
-# ingress:
-#   enabled: true
-#   hosts:
-#     - host: llm-router.local  # Change to your domain
-#       # paths are pre-configured in values.yaml with working defaults
+ingress:
+  enabled: false  # Enable for external access via domain names
+  className: ""  # Use default ingress class for microk8s
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+  hosts:
+    - host: llm-router.local
+      paths:
+        - path: /app(/|$)(.*)
+          pathType: ImplementationSpecific
+          service: app
+        - path: /router-controller(/|$)(.*)
+          pathType: ImplementationSpecific
+          service: router-controller
 
 # Router Server
 routerServer:
   enabled: true
+  replicas: 1  # Single replica for simpler deployment
   image:
-    repository: router-server
+    repository: llm-router-server
     tag: latest
     pullPolicy: IfNotPresent
+  env:
+    - name: HF_HOME
+      value: "/tmp/huggingface"
+    - name: TRANSFORMERS_CACHE
+      value: "/tmp/huggingface/transformers"
+    - name: HF_HUB_CACHE
+      value: "/tmp/huggingface/hub"
   resources:
     limits:
       nvidia.com/gpu: 1
@@ -32,12 +45,16 @@ routerServer:
     requests:
       nvidia.com/gpu: 1
       memory: "8Gi"
+  modelRepository:
+    path: "/model_repository/routers"
   volumes:
     modelRepository:
       enabled: true
-      mountPath: /model_repository
-      hostPath: "/path/to/your/model/repository"  # Replace with your model repository path
-  command: ["tritonserver", "--log-verbose=1", "--model-repository=/model_repository"]
+      mountPath: "/model_repository"
+      storage:
+        persistentVolumeClaim:
+          enabled: true
+          existingClaim: "router-models-pvc"
   service:
     type: ClusterIP
   shm_size: "8G"
@@ -45,33 +62,20 @@ routerServer:
 # Router Controller
 routerController:
   enabled: true
+  replicas: 1  # Single replica for simpler deployment
   image:
-    repository: router-controller
+    repository: llm-router-controller
     tag: latest
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
 
-# App 
 app:
-  enabled: true
+  enabled: false  # Enable for demo web interface
+  replicas: 1  # Single replica for simpler deployment
   image:
-    repository: llm-router-client
-    tag: app
+    repository: llm-router-app
+    tag: latest
     pullPolicy: IfNotPresent
-  volumes:
-    appDir:
-      enabled: true
-      mountPath: /app
-      hostPath: "/path/to/your/app/directory"  # Replace with your app directory path
-  command: ["python", "app.py"]
   service:
     type: ClusterIP  
-
-# Example endpoints when ingress is enabled:
-# - App: http://llm-router.local/app/
-# - Router Controller API: http://llm-router.local/router-controller/
-# - Router Controller Health: http://llm-router.local/router-controller/health
-# - Router Controller Config: http://llm-router.local/router-controller/config
-# - Router Controller Metrics: http://llm-router.local/router-controller/metrics
-# - Router Server Metrics: http://llm-router.local/router-server/ 

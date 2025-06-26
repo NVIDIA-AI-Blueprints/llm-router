@@ -13,80 +13,80 @@ data:
         llms:
           - name: Brainstorming
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: meta/llama-3.1-70b-instruct
           - name: Chatbot
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: mistralai/mixtral-8x22b-instruct-v0.1
           - name: Classification
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: meta/llama-3.1-8b-instruct
           - name: Closed QA
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: meta/llama-3.1-70b-instruct
           - name: Code Generation
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: nvidia/llama-3.3-nemotron-super-49b-v1
           - name: Extraction
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: meta/llama-3.1-8b-instruct
           - name: Open QA
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: meta/llama-3.1-70b-instruct
           - name: Other
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: mistralai/mixtral-8x22b-instruct-v0.1
           - name: Rewrite
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: meta/llama-3.1-8b-instruct
           - name: Summarization
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: meta/llama-3.1-70b-instruct
           - name: Text Generation
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: mistralai/mixtral-8x22b-instruct-v0.1
           - name: Unknown
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: meta/llama-3.1-8b-instruct
       - name: "complexity_router"
         url: http://{{ include "llm-router.fullname" . }}-router-server:8000/v2/models/complexity_router_ensemble/infer
         llms:
           - name: Creativity
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: meta/llama-3.1-70b-instruct
           - name: Reasoning
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: nvidia/llama-3.3-nemotron-super-49b-v1
           - name: Contextual-Knowledge
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: meta/llama-3.1-8b-instruct
           - name: Few-Shot
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: meta/llama-3.1-70b-instruct
           - name: Domain-Knowledge
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: mistralai/mixtral-8x22b-instruct-v0.1
           - name: No-Label-Reason
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: meta/llama-3.1-8b-instruct
           - name: Constraint
             api_base: https://integrate.api.nvidia.com
-            api_key: {{ .Values.apiKeys.nvidia_api_key }}
+            api_key: ${NVIDIA_API_KEY}
             model: meta/llama-3.1-8b-instruct 

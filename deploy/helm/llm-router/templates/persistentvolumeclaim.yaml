@@ -1,0 +1,18 @@
+{{- if and .Values.routerServer.enabled .Values.routerServer.volumes.modelRepository.enabled .Values.routerServer.volumes.modelRepository.storage.persistentVolumeClaim.enabled (not .Values.routerServer.volumes.modelRepository.storage.persistentVolumeClaim.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "llm-router.fullname" . }}-router-server-model-repo
+  labels:
+    {{- include "llm-router.labels" . | nindent 4 }}
+    app.kubernetes.io/component: router-server
+spec:
+  accessModes:
+    - {{ .Values.routerServer.volumes.modelRepository.storage.persistentVolumeClaim.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.routerServer.volumes.modelRepository.storage.persistentVolumeClaim.size }}
+  {{- if .Values.routerServer.volumes.modelRepository.storage.persistentVolumeClaim.storageClass }}
+  storageClassName: {{ .Values.routerServer.volumes.modelRepository.storage.persistentVolumeClaim.storageClass }}
+  {{- end }}
+{{- end }} 

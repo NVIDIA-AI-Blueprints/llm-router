@@ -18,6 +18,12 @@ download:
 	echo "Models downloaded and stored in routers directory successfully."
 
 up:
+	@if [ -z "$$NVIDIA_API_KEY" ]; then \
+		echo "NVIDIA_API_KEY environment variable is not set. Please set this environment variable and run again."; \
+		exit 1; \
+	else \
+		echo "NVIDIA_API_KEY environment variable is set."; \
+	fi
 	docker compose up router-server router-controller --build -d
 
 down:
@@ -36,3 +42,13 @@ loadtest:
 
 build-router:
 	docker compose up router-builder --build -d
+
+all:
+	@if [ -z "$$NVIDIA_API_KEY" ]; then \
+		echo "NVIDIA_API_KEY environment variable is not set. Please set this environment variable and run again."; \
+		exit 1; \
+	else \
+		echo "NVIDIA_API_KEY environment variable is set."; \
+	fi
+	docker compose up router-server router-controller app --build -d
+	echo "All services started. Visit the app at localhost:8008"
