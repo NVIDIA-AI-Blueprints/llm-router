@@ -10,3 +10,7 @@ ENV GRADIO_SERVER_PORT=8008
 COPY demo/app/requirements.txt /tmp/requirements.txt
 RUN pip3 install -r /tmp/requirements.txt
 WORKDIR /app
+
+# Copy application code into container
+COPY demo/app/ /app/
+CMD ["python", "app.py"]

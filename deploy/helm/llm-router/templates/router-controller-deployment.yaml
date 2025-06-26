@@ -8,6 +8,10 @@ metadata:
     app.kubernetes.io/component: router-controller
 spec:
   replicas: {{ .Values.routerController.replicas }}
+  {{- if .Values.routerController.strategy }}
+  strategy:
+    {{- toYaml .Values.routerController.strategy | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "llm-router.selectorLabels" . | nindent 6 }}
@@ -18,6 +22,11 @@ spec:
         {{- include "llm-router.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: router-controller
     spec:
+      {{- if .Values.routerController.securityContext.pod }}
+      securityContext:
+        {{- toYaml .Values.routerController.securityContext.pod | nindent 8 }}
+      {{- end }}
+
       containers:
         - name: {{ .Chart.Name }}-router-controller
           image: "{{ .Values.global.imageRegistry }}{{ .Values.routerController.image.repository }}:{{ .Values.routerController.image.tag }}"
@@ -34,10 +43,26 @@ spec:
             - name: NVIDIA_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "llm-router.fullname" . }}-api-keys
+                  name: llm-api-keys  # User-created secret (see README)
                   key: nvidia_api_key
           resources:
             {{- toYaml .Values.routerController.resources | nindent 12 }}
+          {{- if .Values.routerController.securityContext.container }}
+          securityContext:
+            {{- toYaml .Values.routerController.securityContext.container | nindent 12 }}
+          {{- end }}
+          {{- if .Values.routerController.healthChecks.readinessProbe }}
+          readinessProbe:
+            {{- toYaml .Values.routerController.healthChecks.readinessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.routerController.healthChecks.livenessProbe }}
+          livenessProbe:
+            {{- toYaml .Values.routerController.healthChecks.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.routerController.healthChecks.startupProbe }}
+          startupProbe:
+            {{- toYaml .Values.routerController.healthChecks.startupProbe | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: config-volume
               mountPath: {{ .Values.routerController.config.mountPath }}
@@ -53,9 +78,12 @@ spec:
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
+      {{- if .Values.routerController.affinity }}
       affinity:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml .Values.routerController.affinity | nindent 8 }}
+      {{- else if .Values.affinity }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
       {{- end }}
       {{- with .Values.tolerations }}
       tolerations:

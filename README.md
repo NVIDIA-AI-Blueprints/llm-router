@@ -55,6 +55,30 @@ The LLM Router has three components:
 
 ![architecture diagram](assets/llm-router-blueprint.png)
 
+## Deployment Options
+
+The LLM Router can be deployed using either Docker Compose or Kubernetes:
+
+### Docker Deployment (Development)
+Follow the quickstart guide above for local development and testing.
+
+### Kubernetes Deployment (Production)
+For production deployments on Kubernetes, use the provided Helm chart:
+
+```bash
+# See detailed instructions in deploy/helm/llm-router/README.md
+helm install llm-router ./deploy/helm/llm-router -f values.override.yaml
+```
+
+The Kubernetes deployment includes:
+- High availability with multiple replicas
+- Resource management and limits
+- Health checks and monitoring
+- Persistent storage for models
+- Environment variable substitution for API keys
+
+**Note:** The router controller supports both hardcoded API keys and environment variable substitution using `${NVIDIA_API_KEY}` placeholders in the configuration.
+
 ## Target Audience 
 This blueprint is for: 
 
@@ -129,7 +153,7 @@ The LLM Router is composed of three components:
 - <b>Router Server</b> - is a service that classifies the user's prompt according to a routing strategy and policy. The classification is made using a pre-trained model. 
 - <b>Downstream LLMs</b> - are the LLMs the prompt will be routed to, typically foundational LLMs. 
 
-These three components are all managed in the LLM Router configuration file which is located at `src/router-controller/config.yml`. 
+These three components are all managed in the LLM Router configuration file which is located at `src/router-controller/config.yaml`. 
 
 ```yaml 
 policies:
@@ -138,11 +162,11 @@ policies:
     llms:
       - name: Brainstorming
         api_base: https://integrate.api.nvidia.com
-        api_key: 
+        api_key: ${NVIDIA_API_KEY}
         model: meta/llama-3.1-70b-instruct
       - name: Chatbot
         api_base: https://integrate.api.nvidia.com
-        api_key: 
+        api_key: ${NVIDIA_API_KEY}
         model: mistralai/mixtral-8x22b-instruct-v0.1
     ...    
   - name: "complexity_router"
@@ -150,11 +174,11 @@ policies:
     llms:
       - name: Creativity
         api_base: https://integrate.api.nvidia.com
-        api_key: 
+        api_key: ${NVIDIA_API_KEY}
         model: meta/llama-3.1-70b-instruct
       - name: Reasoning
         api_base: https://integrate.api.nvidia.com
-        api_key: 
+        api_key: ${NVIDIA_API_KEY}
         model: nvidia/llama-3.3-nemotron-super-49b-v1
     ...
 ```
@@ -201,11 +225,11 @@ policies:
     llms:
       - name: Brainstorming
         api_base: https://integrate.api.nvidia.com
-        api_key: 
-        model: meta/llama-3.1-70b-instruct
+        api_key: ${NVIDIA_API_KEY}
+        model: nvdev/meta/llama-3.1-70b-instruct
       - name: Chatbot
         api_base: https://integrate.api.nvidia.com
-        api_key: 
+        api_key: ${NVIDIA_API_KEY}
         model: mistralai/mixtral-8x22b-instruct-v0.1
 ```
 

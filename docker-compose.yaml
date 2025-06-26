@@ -36,17 +36,14 @@ services:
       - 8008:8008
     networks:
       - llm-router-network
-    volumes:
-      - type: bind
-        source: demo/app
-        target: /app
-    command: python app.py
 
   router-controller:
     build:
       context: .
       dockerfile: src/router-controller/router-controller.dockerfile
     image: router-controller:latest
+    environment:
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
     ports:
       - "8084:8084"
     networks:
@@ -86,8 +83,6 @@ services:
     ports:
       - "8089:8089"
       - "4000:4000"
-    volumes:
-      - ./demo/loadtest/:/mnt/locust
     command: -f /mnt/locust/locustfile.py --host http://router-controller:8084
     networks:
       - llm-router-network
