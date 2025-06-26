@@ -9,16 +9,35 @@ global:
 
 ingress:
   enabled: false  # Enable for external access via domain names
-  # hosts:
-  #   - host: llm-router.local
+  className: ""  # Use default ingress class for microk8s
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+  hosts:
+    - host: llm-router.local
+      paths:
+        - path: /app(/|$)(.*)
+          pathType: ImplementationSpecific
+          service: app
+        - path: /router-controller(/|$)(.*)
+          pathType: ImplementationSpecific
+          service: router-controller
 
 # Router Server
 routerServer:
   enabled: true
+  replicas: 1  # Single replica for simpler deployment
   image:
     repository: llm-router-server
     tag: latest
     pullPolicy: IfNotPresent
+  env:
+    - name: HF_HOME
+      value: "/tmp/huggingface"
+    - name: TRANSFORMERS_CACHE
+      value: "/tmp/huggingface/transformers"
+    - name: HF_HUB_CACHE
+      value: "/tmp/huggingface/hub"
   resources:
     limits:
       nvidia.com/gpu: 1
