@@ -1,0 +1,93 @@
+# Example: Local Model Integration (Custom Config)
+# This example shows how to configure LLM Router to use local model deployment
+# instead of NVIDIA Cloud API
+
+routerController:
+  config:
+    customConfig: |
+      policies:
+        - name: "task_router"
+          url: http://router-server:8000/v2/models/task_router_ensemble/infer
+          llms:
+            - name: Brainstorming
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-405b-instruct
+            - name: Chatbot
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: mistralai/mixtral-8x22b-instruct-v0.1
+            - name: Classification
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+            - name: Closed QA
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            - name: Code Generation
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: nvidia/llama-3.3-nemotron-super-49b-v1
+            - name: Extraction
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+            - name: Open QA
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            - name: Other
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: mistralai/mixtral-8x22b-instruct-v0.1
+            - name: Rewrite
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+            - name: Summarization
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            - name: Text Generation
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: mistralai/mixtral-8x22b-instruct-v0.1
+            - name: Unknown
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+        - name: "complexity_router"
+          url: http://router-server:8000/v2/models/complexity_router_ensemble/infer
+          llms:
+            - name: Creativity
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-405b-instruct
+            - name: Reasoning
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: nvidia/llama-3.3-nemotron-super-49b-v1
+            - name: Contextual-Knowledge
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            - name: Few-Shot
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            - name: Domain-Knowledge
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: mistralai/mixtral-8x22b-instruct-v0.1
+            - name: No-Label-Reason
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+            - name: Constraint
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+
+# Usage:
+# helm install llm-router ./deploy/helm/llm-router -f examples/values-local.yaml

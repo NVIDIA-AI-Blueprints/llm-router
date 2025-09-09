@@ -73,7 +73,11 @@ spec:
       volumes:
         - name: config-volume
           configMap:
+{{- if .Values.routerController.config.existingConfigMap }}
+            name: {{ .Values.routerController.config.existingConfigMap }}
+{{- else }}
             name: {{ include "llm-router.fullname" . }}-router-controller-config
+{{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

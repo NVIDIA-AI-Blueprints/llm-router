@@ -1,0 +1,14 @@
+# Example: External ConfigMap
+# This example shows how to use an existing ConfigMap for router configuration
+# Useful for advanced users who want to manage configuration outside of Helm
+
+routerController:
+  config:
+    existingConfigMap: "my-custom-router-config"
+
+# Usage:
+# 1. Create your custom ConfigMap:
+#    kubectl create configmap my-custom-router-config --from-file=config.yaml=my-config.yaml
+# 
+# 2. Deploy with external ConfigMap:
+#    helm install llm-router ./deploy/helm/llm-router -f examples/values-external-configmap.yaml

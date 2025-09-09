@@ -9,7 +9,85 @@ Deploys the LLM Router with all required components on Kubernetes: Router Server
 - GPU nodes with NVIDIA drivers for Router Server
 - NVIDIA API key from [NVIDIA API Catalog](https://build.nvidia.com/explore/discover)
 
+## Router Controller Configuration
+
+The router controller can be configured to work with different LLM backends: NVIDIA Cloud API, local models, or hybrid setups. Choose your configuration method before deployment:
+
+### 1. Templated Configuration (Default)
+
+Uses the built-in template with NVIDIA Cloud API. **No custom configuration needed** for basic usage.
+
+**Default behavior** - Follow the complete Quick Start process below:
+- **API Base**: `https://integrate.api.nvidia.com`
+- **Models**: llama-3.1-70b-instruct, mixtral-8x22b-instruct-v0.1, etc.
+
+**Customize models** (optional) - Override specific models while keeping cloud API:
+
+```yaml
+# values.override.yaml
+routerController:
+  config:
+    useTemplate: true
+    apiBase: "https://integrate.api.nvidia.com"
+    models:
+      brainstorming: "meta/llama-3.1-405b-instruct"  # Upgrade to larger model
+      creativity: "meta/llama-3.1-405b-instruct"     # Upgrade to larger model
+      # ... other models use defaults
+```
+
+### 2. Custom Configuration
+
+Provide your own complete configuration for local models, hybrid setups, or advanced use cases.
+
+**Option A: Inline Configuration**
+
+```yaml
+# values.override.yaml
+routerController:
+  config:
+    customConfig: |
+      policies:
+        - name: "task_router"
+          url: http://router-server:8000/v2/models/task_router_ensemble/infer  # Note: Use actual service name in production
+          llms:
+            - name: Brainstorming
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-405b-instruct
+            # ... more models
+```
+
+**Option B: External ConfigMap**
+
+```yaml
+# values.override.yaml
+routerController:
+  config:
+    existingConfigMap: "my-custom-router-config"
+```
+
+First create your ConfigMap:
+```bash
+kubectl create configmap my-custom-router-config --from-file=config.yaml=my-config.yaml
+```
+
+### Configuration Examples
+
+Complete examples are provided in the `examples/` directory:
+
+**Templated Configuration (Option 1):**
+- **`examples/values-templated-cloud.yaml`**: Shows how to customize models while using the built-in template and NVIDIA Cloud API
+
+**Custom Configuration (Option 2A - Inline):**
+- **`examples/values-local.yaml`**: Complete local model deployment using your own LLM service
+- **`examples/values-hybrid.yaml`**: Strategic mix of cloud models (complex tasks) and local models (simple tasks)
+
+**Custom Configuration (Option 2B - External):**
+- **`examples/values-external-configmap.yaml`**: References an external ConfigMap for GitOps workflows
+
 ## Quick Start
+
+**Note**: This Quick Start uses the default NVIDIA Cloud API configuration. See the "Router Controller Configuration" section above if you want to use local models instead.
 
 ### 1. Build and Push Images
 
@@ -76,7 +154,6 @@ spec:
   resources:
     requests:
       storage: 100Gi
-  storageClassName: microk8s-hostpath  # Replace with your cluster's storage class
 EOF
 
 # Step 2: Create temporary pod to upload models

@@ -1,0 +1,98 @@
+# Example: Hybrid Configuration (Cloud + Local)
+# This example shows a hybrid setup using both cloud and local models
+
+routerController:
+  config:
+    customConfig: |
+      policies:
+        - name: "task_router"
+          url: http://router-server:8000/v2/models/task_router_ensemble/infer
+          llms:
+            # Use cloud models for complex tasks
+            - name: Brainstorming
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            - name: Code Generation
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: nvidia/llama-3.3-nemotron-super-49b-v1
+            - name: Closed QA
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            - name: Open QA
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            - name: Summarization
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            
+            # Use local models for simple/frequent tasks
+            - name: Chatbot
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: mistralai/mixtral-8x22b-instruct-v0.1
+            - name: Classification
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+            - name: Extraction
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+            - name: Other
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: mistralai/mixtral-8x22b-instruct-v0.1
+            - name: Rewrite
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+            - name: Text Generation
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: mistralai/mixtral-8x22b-instruct-v0.1
+            - name: Unknown
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+        - name: "complexity_router"
+          url: http://router-server:8000/v2/models/complexity_router_ensemble/infer
+          llms:
+            # Complex reasoning tasks use cloud models
+            - name: Creativity
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            - name: Reasoning
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: nvidia/llama-3.3-nemotron-super-49b-v1
+            - name: Domain-Knowledge
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: mistralai/mixtral-8x22b-instruct-v0.1
+            - name: Few-Shot
+              api_base: https://integrate.api.nvidia.com
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-70b-instruct
+            
+            # Simple tasks use local models
+            - name: Contextual-Knowledge
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+            - name: No-Label-Reason
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+            - name: Constraint
+              api_base: http://your-local-llm-service:8000/v1
+              api_key: ${NVIDIA_API_KEY}
+              model: meta/llama-3.1-8b-instruct
+
+# Usage:
+# helm install llm-router ./deploy/helm/llm-router -f examples/values-hybrid.yaml
