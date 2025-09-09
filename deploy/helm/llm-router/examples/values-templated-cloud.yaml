@@ -1,0 +1,34 @@
+# Example: Templated Cloud Configuration
+# This example shows how to use the templated configuration with custom models
+# while still using NVIDIA Cloud API
+
+routerController:
+  config:
+    useTemplate: true
+    apiBase: "https://integrate.api.nvidia.com"
+    models:
+      # Task router models
+      brainstorming: "meta/llama-3.1-405b-instruct"  # Use larger model for brainstorming
+      chatbot: "mistralai/mixtral-8x22b-instruct-v0.1"
+      classification: "meta/llama-3.1-8b-instruct"
+      closedQA: "meta/llama-3.1-70b-instruct"
+      codeGeneration: "nvidia/llama-3.3-nemotron-super-49b-v1"
+      extraction: "meta/llama-3.1-8b-instruct"
+      openQA: "meta/llama-3.1-70b-instruct"
+      other: "mistralai/mixtral-8x22b-instruct-v0.1"
+      rewrite: "meta/llama-3.1-8b-instruct"
+      summarization: "meta/llama-3.1-70b-instruct"
+      textGeneration: "mistralai/mixtral-8x22b-instruct-v0.1"
+      unknown: "meta/llama-3.1-8b-instruct"
+      
+      # Complexity router models
+      creativity: "meta/llama-3.1-405b-instruct"  # Use larger model for creativity
+      reasoning: "nvidia/llama-3.3-nemotron-super-49b-v1"
+      contextualKnowledge: "meta/llama-3.1-70b-instruct" 
+      fewShot: "meta/llama-3.1-70b-instruct"
+      domainKnowledge: "mistralai/mixtral-8x22b-instruct-v0.1"
+      noLabelReason: "meta/llama-3.1-8b-instruct"
+      constraint: "meta/llama-3.1-8b-instruct"
+
+# Usage:
+# helm install llm-router ./deploy/helm/llm-router -f examples/values-templated-cloud.yaml

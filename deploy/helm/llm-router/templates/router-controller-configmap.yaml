@@ -1,3 +1,4 @@
+{{- if not .Values.routerController.config.existingConfigMap }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -7,6 +8,94 @@ metadata:
     app.kubernetes.io/component: router-controller
 data:
   config.yaml: |-
+{{- if .Values.routerController.config.customConfig }}
+{{ .Values.routerController.config.customConfig | indent 4 }}
+{{- else if .Values.routerController.config.useTemplate }}
+    policies:
+      - name: "task_router"
+        url: http://{{ include "llm-router.fullname" . }}-router-server:8000/v2/models/task_router_ensemble/infer
+        llms:
+          - name: Brainstorming
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.brainstorming }}
+          - name: Chatbot
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.chatbot }}
+          - name: Classification
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.classification }}
+          - name: Closed QA
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.closedQA }}
+          - name: Code Generation
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.codeGeneration }}
+          - name: Extraction
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.extraction }}
+          - name: Open QA
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.openQA }}
+          - name: Other
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.other }}
+          - name: Rewrite
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.rewrite }}
+          - name: Summarization
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.summarization }}
+          - name: Text Generation
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.textGeneration }}
+          - name: Unknown
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.unknown }}
+      - name: "complexity_router"
+        url: http://{{ include "llm-router.fullname" . }}-router-server:8000/v2/models/complexity_router_ensemble/infer
+        llms:
+          - name: Creativity
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.creativity }}
+          - name: Reasoning
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.reasoning }}
+          - name: Contextual-Knowledge
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.contextualKnowledge }}
+          - name: Few-Shot
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.fewShot }}
+          - name: Domain-Knowledge
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.domainKnowledge }}
+          - name: No-Label-Reason
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.noLabelReason }}
+          - name: Constraint
+            api_base: {{ .Values.routerController.config.apiBase }}
+            api_key: ${NVIDIA_API_KEY}
+            model: {{ .Values.routerController.config.models.constraint }}
+{{- else }}
+    # Fallback to original hardcoded config for backward compatibility
     policies:
       - name: "task_router"
         url: http://{{ include "llm-router.fullname" . }}-router-server:8000/v2/models/task_router_ensemble/infer
@@ -89,4 +178,6 @@ data:
           - name: Constraint
             api_base: https://integrate.api.nvidia.com
             api_key: ${NVIDIA_API_KEY}
-            model: meta/llama-3.1-8b-instruct 
+            model: meta/llama-3.1-8b-instruct
+{{- end }}
+{{- end }}

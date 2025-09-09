@@ -371,6 +371,45 @@ routerController:
   config:
     mountPath: /app
     logLevel: info
+    
+    # Router Controller Configuration Options
+    
+    # Option 1: Templated Configuration (Default)
+    # Uses built-in template with NVIDIA Cloud API - customize models via 'models' section below
+    useTemplate: true
+    
+    # Option 2: Custom Configuration
+    # Option 2A: Inline - provide complete custom configuration
+    customConfig: ""  # If set, overrides templated configuration
+    
+    # Option 2B: External - reference existing ConfigMap  
+    existingConfigMap: ""  # If set, uses existing ConfigMap instead of generating one
+    
+    # Template variables for default config (when useTemplate: true)
+    apiBase: "https://integrate.api.nvidia.com"
+    apiKeySecret: "llm-api-keys"
+    apiKeySecretKey: "nvidia_api_key"
+    models:
+      brainstorming: "meta/llama-3.1-70b-instruct"
+      chatbot: "mistralai/mixtral-8x22b-instruct-v0.1"
+      classification: "meta/llama-3.1-8b-instruct"
+      closedQA: "meta/llama-3.1-70b-instruct"
+      codeGeneration: "nvidia/llama-3.3-nemotron-super-49b-v1"
+      extraction: "meta/llama-3.1-8b-instruct"
+      openQA: "meta/llama-3.1-70b-instruct"
+      other: "mistralai/mixtral-8x22b-instruct-v0.1"
+      rewrite: "meta/llama-3.1-8b-instruct"
+      summarization: "meta/llama-3.1-70b-instruct"
+      textGeneration: "mistralai/mixtral-8x22b-instruct-v0.1"
+      unknown: "meta/llama-3.1-8b-instruct"
+      # Complexity router models
+      creativity: "meta/llama-3.1-70b-instruct"
+      reasoning: "nvidia/llama-3.3-nemotron-super-49b-v1"
+      contextualKnowledge: "meta/llama-3.1-8b-instruct"
+      fewShot: "meta/llama-3.1-70b-instruct"
+      domainKnowledge: "mistralai/mixtral-8x22b-instruct-v0.1"
+      noLabelReason: "meta/llama-3.1-8b-instruct"
+      constraint: "meta/llama-3.1-8b-instruct"
 
 # App configuration (demo client)
 # Disabled by default - enable via values override if needed for development/demo
