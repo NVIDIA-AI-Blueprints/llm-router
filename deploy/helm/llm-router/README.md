@@ -146,7 +146,6 @@ routerController:
 ## Deployment Steps
 
 ### Step 4: Build and Push Images
->>>>>>> helm-fix
 
 ```bash
 # Build all required images
