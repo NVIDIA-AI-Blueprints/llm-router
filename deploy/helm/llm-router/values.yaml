@@ -288,6 +288,19 @@ routerController:
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 2  # High availability - increased from 1
+  
+  # Custom environment variables
+  env: []  # Custom environment variables
+  # Example usage:
+  # env:
+  #   - name: DYNAMO_API_KEY
+  #     valueFrom:
+  #       secretKeyRef:
+  #         name: dynamo-api-secret
+  #         key: DYNAMO_API_KEY
+  #   - name: CUSTOM_CONFIG
+  #     value: "custom-value"
+  
   # Pod Anti-Affinity for high availability
   affinity:
     podAntiAffinity:

@@ -11,36 +11,61 @@ Deploys the LLM Router with all required components on Kubernetes: Router Server
 
 ## Router Controller Configuration
 
-The router controller can be configured to work with different LLM backends: NVIDIA Cloud API, local models, or hybrid setups. Choose your configuration method before deployment:
+The router controller can be configured to work with different LLM backends. **All configurations require API key secrets** - choose your approach:
 
-### 1. Templated Configuration (Default)
+### Step 1: Create API Key Secret (Required for All)
 
-Uses the built-in template with NVIDIA Cloud API. **No custom configuration needed** for basic usage.
+**Default NVIDIA Cloud API:**
+```bash
+kubectl create secret generic llm-api-keys \
+  --from-literal=nvidia_api_key=nvapi-your-key-here
+```
 
-**Default behavior** - Follow the complete Quick Start process below:
-- **API Base**: `https://integrate.api.nvidia.com`
-- **Models**: llama-3.1-70b-instruct, mixtral-8x22b-instruct-v0.1, etc.
+**Custom secret name:**
+```bash
+kubectl create secret generic my-custom-secret \
+  --from-literal=my_api_key=your-key-here
+```
 
-**Customize models** (optional) - Override specific models while keeping cloud API:
+**Multiple providers:**
+```bash
+kubectl create secret generic multi-provider-keys \
+  --from-literal=nvidia_key=nvapi-your-key \
+  --from-literal=openai_key=sk-your-key \
+  --from-literal=anthropic_key=ant-your-key
+```
 
+### Step 2: Choose Configuration Approach
+
+#### Option A: Built-in Template (Recommended)
+
+**Default NVIDIA Cloud API** - No additional configuration needed:
+- Uses `llm-api-keys` secret with `nvidia_api_key`
+- API Base: `https://integrate.api.nvidia.com`
+- Pre-configured models for different tasks
+
+**Customize models** (optional):
 ```yaml
 # values.override.yaml
 routerController:
   config:
-    useTemplate: true
-    apiBase: "https://integrate.api.nvidia.com"
     models:
       brainstorming: "meta/llama-3.1-405b-instruct"  # Upgrade to larger model
       creativity: "meta/llama-3.1-405b-instruct"     # Upgrade to larger model
-      # ... other models use defaults
 ```
 
-### 2. Custom Configuration
+**Custom secret configuration:**
+```yaml
+# values.override.yaml
+routerController:
+  config:
+    apiKeySecret: "my-custom-secret"
+    apiKeySecretKey: "my_api_key"
+```
 
-Provide your own complete configuration for local models, hybrid setups, or advanced use cases.
+#### Option B: Custom Configuration (Advanced)
 
-**Option A: Inline Configuration**
-
+**Inline configuration:**
 ```yaml
 # values.override.yaml
 routerController:
@@ -48,17 +73,15 @@ routerController:
     customConfig: |
       policies:
         - name: "task_router"
-          url: http://router-server:8000/v2/models/task_router_ensemble/infer  # Note: Use actual service name in production
+          url: http://llm-router-router-server:8000/v2/models/task_router_ensemble/infer
           llms:
             - name: Brainstorming
               api_base: http://your-local-llm-service:8000/v1
               api_key: ${NVIDIA_API_KEY}
               model: meta/llama-3.1-405b-instruct
-            # ... more models
 ```
 
-**Option B: External ConfigMap**
-
+**External ConfigMap:**
 ```yaml
 # values.override.yaml
 routerController:
@@ -71,25 +94,59 @@ First create your ConfigMap:
 kubectl create configmap my-custom-router-config --from-file=config.yaml=my-config.yaml
 ```
 
-### Configuration Examples
+### Step 3: Add Custom Environment Variables (Optional)
 
-Complete examples are provided in the `examples/` directory:
+**Local LLM deployments (Dynamo, vLLM, etc.):**
+```yaml
+# values.override.yaml
+routerController:
+  env:
+    - name: DYNAMO_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: dynamo-api-secret
+          key: DYNAMO_API_KEY
+    - name: DYNAMO_API_BASE
+      value: "http://dynamo-service.namespace.svc.cluster.local:8000"
+```
 
-**Templated Configuration (Option 1):**
-- **`examples/values-templated-cloud.yaml`**: Shows how to customize models while using the built-in template and NVIDIA Cloud API
+**Multiple API providers:**
+```yaml
+# values.override.yaml
+routerController:
+  env:
+    - name: OPENAI_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: multi-provider-keys
+          key: openai_key
+    - name: ANTHROPIC_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: multi-provider-keys
+          key: anthropic_key
+```
 
-**Custom Configuration (Option 2A - Inline):**
-- **`examples/values-local.yaml`**: Complete local model deployment using your own LLM service
-- **`examples/values-hybrid.yaml`**: Strategic mix of cloud models (complex tasks) and local models (simple tasks)
+**Custom configuration:**
+```yaml
+# values.override.yaml
+routerController:
+  env:
+    - name: ROUTER_TIMEOUT
+      value: "30s"
+    - name: MAX_CONCURRENT_REQUESTS
+      value: "100"
+    - name: CUSTOM_API_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: custom-tokens
+          key: api_token
+```
 
-**Custom Configuration (Option 2B - External):**
-- **`examples/values-external-configmap.yaml`**: References an external ConfigMap for GitOps workflows
+## Deployment Steps
 
-## Quick Start
-
-**Note**: This Quick Start uses the default NVIDIA Cloud API configuration. See the "Router Controller Configuration" section above if you want to use local models instead.
-
-### 1. Build and Push Images
+### Step 4: Build and Push Images
+>>>>>>> helm-fix
 
 ```bash
 # Build all required images
@@ -103,18 +160,7 @@ docker push <your-registry>/router-controller:latest
 docker push <your-registry>/llm-router-client:app
 ```
 
-### 2. Create API Key Secret
-
-```bash
-# Create secret with your NVIDIA API key
-kubectl create secret generic llm-api-keys \
-  --from-literal=nvidia_api_key=nvapi-your-key-here
-
-# Verify
-kubectl get secret llm-api-keys
-```
-
-### 3. Create Registry Secret
+### Step 5: Create Registry Secret
 
 ```bash
 # Create secret for NVIDIA Container Registry authentication
@@ -127,7 +173,7 @@ kubectl create secret docker-registry nvcr-secret \
 kubectl get secret nvcr-secret
 ```
 
-### 4. Prepare Models (Before Deployment)
+### Step 6: Prepare Models
 
 ```bash
 # Download models first (follow main project README)
@@ -187,7 +233,7 @@ kubectl exec model-uploader -- ls -la /models/
 kubectl delete pod model-uploader
 ```
 
-### 5. Install Chart
+### Step 7: Install Chart
 
 ```bash
 # Step 1: Copy and edit configuration
@@ -224,7 +270,7 @@ kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=router-ser
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=router-controller --timeout=60s
 ```
 
-### 6. Access Services
+### Step 8: Access Services
 
 ```bash
 # Router Controller API
@@ -237,7 +283,7 @@ kubectl port-forward svc/llm-router-app 8008:8008
 curl http://localhost:8084/health
 ```
 
-## Configuration
+## Chart Parameters & Advanced Options
 
 ### Essential Parameters
 
@@ -282,18 +328,6 @@ routerServer:
 
 **See `values.yaml` for all storage options: NFS, existing PVCs, different storage classes, etc.**
 
-### Multi-Provider API Keys
-
-For multiple LLM providers:
-
-```bash
-kubectl create secret generic llm-api-keys \
-  --from-literal=nvidia_api_key=nvapi-your-key \
-  --from-literal=openai_api_key=sk-your-key \
-  --from-literal=anthropic_api_key=ant-your-key
-```
-
-Then update the router-controller config.yaml to use different providers.
 
 ### Security & Production Features
 

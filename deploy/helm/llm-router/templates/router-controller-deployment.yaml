@@ -43,8 +43,11 @@ spec:
             - name: NVIDIA_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: llm-api-keys  # User-created secret (see README)
-                  key: nvidia_api_key
+                  name: {{ .Values.routerController.config.apiKeySecret | default "llm-api-keys" }}
+                  key: {{ .Values.routerController.config.apiKeySecretKey | default "nvidia_api_key" }}
+{{- if .Values.routerController.env }}
+{{- toYaml .Values.routerController.env | nindent 12 }}
+{{- end }}
           resources:
             {{- toYaml .Values.routerController.resources | nindent 12 }}
           {{- if .Values.routerController.securityContext.container }}

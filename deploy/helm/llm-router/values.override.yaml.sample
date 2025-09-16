@@ -1,6 +1,6 @@
 # LLM Router Helm deployment sample configuration
 # Copy this file to values.override.yaml and customize for your environment
-# Prerequisites: Follow README Quick Start steps 1-4 before deployment
+# Prerequisites: Complete README Steps 1-3 (Router Controller Configuration) before deployment
 global:
   storageClass: "YOUR_STORAGE_CLASS"  # e.g., "standard", "microk8s-hostpath"
   imageRegistry: "YOUR_REGISTRY/"  # e.g., "nvcr.io/yourorg/", "docker.io/youruser/"
@@ -67,6 +67,38 @@ routerController:
     repository: llm-router-controller
     tag: latest
     pullPolicy: IfNotPresent
+  
+  # Configuration Examples (uncomment and customize as needed)
+  
+  # Option 1: Default NVIDIA Cloud API (no changes needed)
+  # Uses llm-api-keys secret with nvidia_api_key (created in Step 1)
+  
+  # Option 2: Custom secret configuration
+  # config:
+  #   apiKeySecret: "my-custom-secret"
+  #   apiKeySecretKey: "my_api_key"
+  
+  # Option 3: Custom models (while keeping NVIDIA Cloud API)
+  # config:
+  #   models:
+  #     brainstorming: "meta/llama-3.1-405b-instruct"
+  #     creativity: "meta/llama-3.1-405b-instruct"
+  
+  # Option 4: Custom environment variables for local LLMs or multiple providers
+  # env:
+  #   - name: DYNAMO_API_KEY
+  #     valueFrom:
+  #       secretKeyRef:
+  #         name: dynamo-api-secret
+  #         key: DYNAMO_API_KEY
+  #   - name: OPENAI_API_KEY
+  #     valueFrom:
+  #       secretKeyRef:
+  #         name: multi-provider-keys
+  #         key: openai_key
+  #   - name: ROUTER_TIMEOUT
+  #     value: "30s"
+  
   service:
     type: ClusterIP
 
