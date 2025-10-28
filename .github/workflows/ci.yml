@@ -63,23 +63,35 @@ jobs:
           OUTPUT_NOTEBOOK="result.ipynb"
           jupyter nbconvert --to html "$OUTPUT_NOTEBOOK"
 
-      - name: Checkout Test repository
-        uses: actions/checkout@v3
-        with:
-          repository: 'NVIDIA-AI-Blueprints/blueprint-github-test'
-          token: ${{ secrets.BLUEPRINT_GITHUB_TEST }}
-          path: blueprint-github-test2
-          
-      - name: Install Poetry/Dependencies and Execute test
+      #- name: Checkout Test repository
+      #  uses: actions/checkout@v3
+      #  with:
+      #    repository: 'NVIDIA-AI-Blueprints/blueprint-github-test'
+      #    token: ${{ secrets.BLUEPRINT_GITHUB_TEST }}
+      #    path: blueprint-github-test2
+
+      - name: Run Test Code
+        env:
+          TEST_DOCKER_PULL_KEY: ${{ secrets.TEST_DOCKER_PULL_KEY }}
         run: |
-          cd blueprint-github-test2
-          curl -sSL https://install.python-poetry.org | python3 -          
-          $HOME/.local/bin/poetry install
-          source $($HOME/.local/bin/poetry env info --path)/bin/activate
-          rm -rf input/*
-          cp ../result.html input/1_Deploy_LLM_Router.html
-          ls -l input/
-          pytest -m llm_router --disable-warnings --html=llm_router.html --capture=tee-sys 
+          echo "======================================="
+          echo "$TEST_DOCKER_PULL_KEY" |docker login nvcr.io --username  '$oauthtoken' --password-stdin 
+          docker run \
+            -v ./result.html:/app/input/1_Deploy_LLM_Router.html \
+            -v "$(pwd):/workspace" \
+            nvcr.io/rw983xdqtcdp/auto_test_team/blueprint-github-test-image:latest \
+            pytest -m llm_router --disable-warnings --html=/workspace/llm_router
+          
+      #- name: Install Poetry/Dependencies and Execute test
+      #  run: |
+      #    cd blueprint-github-test2
+      #    curl -sSL https://install.python-poetry.org | python3 -          
+      #    $HOME/.local/bin/poetry install
+      #    source $($HOME/.local/bin/poetry env info --path)/bin/activate
+      #    rm -rf input/*
+      #    cp ../result.html input/1_Deploy_LLM_Router.html
+      #    ls -l input/
+      #    pytest -m llm_router --disable-warnings --html=llm_router.html --capture=tee-sys 
                              
       - name: Upload the result notebook as artifact
         if: always()
@@ -88,5 +100,6 @@ jobs:
           name: result-notebook
           path: |
              result.html
-             blueprint-github-test2/llm_router.html
+             #blueprint-github-test2/llm_router.html
+             /workspace/llm_router
           retention-days: 30
