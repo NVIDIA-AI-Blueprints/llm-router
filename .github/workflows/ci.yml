@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   run-notebook:
-    runs-on: arc-runner-set-oke-org-nv-ai-bp
+    runs-on: arc-runners-org-nvidia-ai-bp-1-gpu
     env:
       NOTEBOOK_PATH: ./launchable/1_Deploy_LLM_Router.ipynb
       PYTHON_VERSION: 3.12
@@ -35,17 +35,8 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install papermill
           pip install ipywidgets
           pip install torch
-          # Install wget
-          sudo apt-get update
-          sudo apt-get install wget
-          # Install Docker and Docker Compose in a single step
-          curl -fsSL https://get.docker.com -o get-docker.sh
-          sudo sh get-docker.sh
-          sudo apt-get update
-          sudo apt-get install -y docker-compose-plugin docker-compose build-essential
           # Get System Info
           echo "===================== System Info ====================="
           more /etc/os-release
