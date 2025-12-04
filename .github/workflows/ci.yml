@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   run-notebook:
-    runs-on: arc-runner-set-oke-org-nv-ai-bp
+    runs-on: arc-runners-org-nvidia-ai-bp-1-gpu
     env:
       NOTEBOOK_PATH: ./launchable/1_Deploy_LLM_Router.ipynb
       PYTHON_VERSION: 3.12
