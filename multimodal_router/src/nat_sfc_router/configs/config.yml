@@ -1,0 +1,66 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+general:
+  front_end:
+    _type: fastapi
+    endpoints:
+      - path: /sfc_router/chat/completions
+        method: POST
+        description: Routes the request to the best model based on the context.
+        function_name: sfc_router_fn
+      - path: /health
+        method: GET
+        description: Health check endpoint.
+        function_name: healthcheck_fn        
+      - path: /nn_objective_fn/chat/completions
+        method: POST
+        description: Get the model and probabilities from the neural network objective function.
+        function_name: nn_objective_fn
+      - path: /hf_intent_objective_fn/chat/completions
+        method: POST
+        description: Get the model and probabilities from the hf intent objective function.
+        function_name: hf_intent_objective_fn
+
+
+functions:
+  healthcheck_fn:
+    _type: healthcheck
+  hf_intent_objective_fn:
+    _type: hf_intent_objective_fn
+
+  nn_objective_fn:
+    _type: nn_objective_fn
+    # Model confidence thresholds - only route to model if confidence exceeds threshold
+    # If top choice doesn't meet threshold, falls back to next best option that does
+    model_thresholds:
+      'gpt-5-chat': 0.70
+      'Qwen/Qwen3-VL-8B-Instruct': 0.75
+      'nvidia/nvidia-nemotron-nano-9b-v2': 0.4
+    # Model cost factors for cost-based routing
+    # Among models meeting their threshold, select the one with lowest cost
+    # Typical values: expensive models (1.0), mid-tier (0.5), efficient (0.2-0.3)
+    model_costs:
+      'gpt-5-chat': 1.0
+      'Qwen/Qwen3-VL-8B-Instruct': 0.5
+      'nvidia/nvidia-nemotron-nano-9b-v2': 0.3
+  sfc_router_fn:
+    _type: sfc_router
+    objective_fn: nn_objective_fn
+
+
+workflow:
+  _type: sfc_router
+  objective_fn: nn_objective_fn

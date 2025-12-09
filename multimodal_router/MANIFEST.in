@@ -1,0 +1,7 @@
+recursive-include src/nat_sfc_router *.npy
+recursive-include src/nat_sfc_router *.json
+recursive-include src/nat_sfc_router *.pt
+recursive-include src/nat_sfc_router *.pth
+recursive-include src/nat_sfc_router *.yml
+recursive-include src/nat_sfc_router/training/router_artifacts *
+
