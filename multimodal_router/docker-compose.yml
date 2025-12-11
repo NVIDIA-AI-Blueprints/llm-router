@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # Router Backend - handles routing logic and endpoints
+  router-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: router-backend
+    ports:
+      - "8001:8001"
+    volumes:
+      # Mount configs for dynamic configuration without rebuilding
+      - ./src/nat_sfc_router/configs:/opt/dgxcbot/router/configs
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ipc: host
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - router-network
+
+  # Arch-Router Model - vLLM serving the Arch-Router-1.5B model
+  arch-router:
+    image: vllm/vllm-openai:latest
+    container_name: arch-router
+    ports:
+      - "8011:8000"
+    volumes:
+      # Cache HuggingFace models locally to avoid re-downloading
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ipc: host
+    command: ["--model", "katanemo/Arch-Router-1.5B"]
+    networks:
+      - router-network
+
+  # Demo Web App - Gradio UI for interacting with the router
+  demo-app:
+    build:
+      context: ./demo
+      dockerfile: Dockerfile
+    container_name: router-demo
+    ports:
+      - "7860:7860"
+    environment:
+      # Router endpoint (uses internal docker network)
+      - ROUTER_ENDPOINT=http://router-backend:8001/sfc_router/chat/completions
+      # API Keys (set these via .env file or environment variables)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+    depends_on:
+      - router-backend
+    networks:
+      - router-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  router-network:
+    driver: bridge
+
