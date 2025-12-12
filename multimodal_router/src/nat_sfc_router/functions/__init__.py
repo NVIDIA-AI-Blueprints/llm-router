@@ -14,9 +14,6 @@
 # limitations under the License.
 
 from nat_sfc_router.functions.router_fn import sfc_router
-from nat_sfc_router.functions import round_robin_objective_fn
 from nat_sfc_router.functions.healthcheck_fn import healthcheck_fn
-from nat_sfc_router.functions.mf_objective_fn import mf_objective_fn
 from nat_sfc_router.functions.hf_intent_objective_fn import hf_intent_objective_fn
-from nat_sfc_router.functions.linear_mf_cost_latency_fn import linear_mf_cost_latency
 from nat_sfc_router.functions.nn_objective_fn import nn_objective_fn
