@@ -1,0 +1,32 @@
+name: SonarQube Analysis
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  sonarqube:
+    uses: NVIDIA-AI-Blueprints/sonarqube-workflows/.github/workflows/sonarqube-reusable-template.yml@main
+    with:
+      # Required: Project identification (used to create project key)
+      organization: TEGRASW # See valid options below
+      team: Blueprints-SRE # Your team name
+      product: NVIDIA-AI-Blueprints # Product/project name
+      scmRepoName: llm-router # Repository name
+
+      # Required: Language and testing
+      language: python # go, python, java, javascript, typescript
+      # testCommand: go test -v -coverprofile=coverage.out ./...
+
+      # Optional: Additional project metadata
+      # mailingList: user1,user2,my-dl  # Notification recipients
+      # scmRepoUrl: https://github.com/NVIDIA-AI-Blueprints/my-service-repo
+      # nspectId: NSPECT-GLCE-X007     # nSpect integration ID
+      projectTags: CreatedBy-automation,WorkflowContact-blueprintsSre # Tags (letters, digits, dashes only)
+
+      # Optional: Behavior flags
+      skipProjectCreation: true # Set true if project already exists
+    secrets: inherit
