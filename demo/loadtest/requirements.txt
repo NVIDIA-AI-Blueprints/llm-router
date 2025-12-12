@@ -1,4 +1,0 @@
-locust
-prometheus-client
-pydantic
-pandas

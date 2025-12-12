@@ -1,5 +1,0 @@
-router_controller_url: http://router-controller:8084
-openai_api_key: "api-key"
-routing_strategy:
-  - manual
-  - triton

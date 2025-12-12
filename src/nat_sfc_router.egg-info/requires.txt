@@ -1,0 +1,15 @@
+nvidia-nat[phoenix]
+torch
+transformers==4.51.3
+numpy<2.00
+docarray==0.21.0
+scikit-learn
+openai
+requests
+clip-client
+joblib
+tqdm
+Pillow
+datasets
+gradio
+python-dotenv

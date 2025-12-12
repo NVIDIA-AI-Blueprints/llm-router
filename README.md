@@ -1,288 +1,406 @@
-<h2><img align="center" src="https://github.com/user-attachments/assets/cbe0d62f-c856-4e0b-b3ee-6184b7c4d96f">NVIDIA AI Blueprint: LLM Router</h2>
+<h2><img align="center" src="https://github.com/user-attachments/assets/cbe0d62f-c856-4e0b-b3ee-6184b7c4d96f">NVIDIA AI Blueprint: LLM Router v2 (Experimental)</h2>
+
+> **⚠️ EXPERIMENTAL BRANCH**: This branch contains LLM Router v2, a next-generation routing system with multimodal support. For the production-ready LLM Router v1, please visit the [main branch](https://github.com/NVIDIA-AI-Blueprints/llm-router/tree/main).
+
+## Important Notes
+
+**LLM Router v2 is currently experimental** and not yet backwards compatible with v1. Key differences:
+
+| Feature | v1 (Main Branch) | v2 (Experimental) |
+|---------|------------------|-------------------|
+| **Server Implementation** | Rust proxy | NVIDIA NeMo Agent Toolkit (FastAPI) |
+| **Inference Backend** | BERT model + NVIDIA Triton Inference Server | Arch-Router LLM or CLIP + Neural Network |
+| **Functionality** | Classification + Proxying to LLM | Classification only (returns model name) |
+| **Input Support** | Text only | Text + Images (multimodal) |
+| **Routing Methods** | Task or complexity classification | Intent-based or Auto-routing (neural network) |
+
+**Future Plans**: The intent is to make v2 fully backwards compatible with v1's proxying capabilities, then merge to main and retire the experimental label.
 
 ## Overview
 
-Ever struggled to decide which LLM to use for a specific task? In an ideal world the most accurate LLM would also be the cheapest and fastest, but in practice modern agentic AI systems have to make trade-offs between accuracy, speed, and cost.
+Ever struggled to decide which LLM or Vision-Language Model (VLM) to use for a specific task? In an ideal world the most accurate model would also be the cheapest and fastest, but in practice modern agentic AI systems have to make trade-offs between accuracy, speed, and cost.
 
-This blueprint provides a router that automates these tradeoffs by routing user prompts between different LLMs. Given a user prompt, the router:
+This blueprint provides an experimental next-generation router that automates these tradeoffs by analyzing user prompts and identifying optimal models. Given a user prompt (text or multimodal), the router:
 
-- applies a policy (eg task classification or intent classification)
-- uses a router trained for that policy to map the prompt to an appropriate LLM
-- proxies the prompt to the identified fit-for-purpose LLM
+- applies one of two routing strategies: intent-based classification or auto-routing (based on a trained neural network)
+- analyzes the prompt content, including images if present
+- returns the name of the most appropriate LLM or VLM for the task
 
-For example, using a task classification policy, the following user prompts can be classified into tasks and directed to the appropriate LLM.
+For example, using intent-based routing:
 
-| User Prompt | Task Classification | Route To |
+| User Prompt | Intent Classification | Recommended Model |
 |---|---|---|
-| "Help me write a python function to load salesforce data into my warehouse." | Code Generation | deepseek |
-| "Tell me about your return policy " | Open QA | llama 70B | 
-| "Rewrite the user prompt to be better for an LLM agent. User prompt: what is the best coffee recipe" | Rewrite | llama 8B |
+| "What's in this image?" (with image) | image_understanding | nvidia/nemotron-nano-12b-v2-vl |
+| "Solve this complex math problem: ..." | hard_question | gpt-5-chat |
+| "Hello, how are you?" | chit_chat | nvidia/nvidia-nemotron-nano-9b-v2 |
 
-The key features of the LLM Router framework are:
+The key features of the experimental LLM Router v2 are:
 
-- OpenAI API compliant: use the LLM Router as a drop-in replacement in code regardless of which LLM framework you use.
-- Flexible: use the default policy and router, or create your own policy and fine tune a router. We expect additional trained routers to be available from the community as well.
-- Configurable: easily configure which backend models are available. 
-- Performant: LLM Router uses Rust and NVIDIA Triton Inference Server to add minimal latency compared to routing requests directly to a model.
+- **Multimodal Support**: Route based on both text and images, optimized for VLMs
+- **Two Routing Strategies**: Intent-based (using Arch-Router-1.5B) OR auto-routing (using CLIP embeddings + trained neural network)
+- **OpenAI API compliant**: Returns model recommendations via chat completions endpoint
+- **Flexible**: Use pre-configured intent mappings or train custom neural network routers on your own data
 
-## Quickstart Guide
+### Models
 
-After meeting the pre-requisites follow these steps.
+This blueprint is pre-configured to route between three complementary models:
 
-#### 1. Install necessary python libraries
+| Model | Type | Provider | Use Case |
+|-------|------|----------|----------|
+| **gpt-5-chat** | Frontier LLM | Azure OpenAI or OpenAI | Complex reasoning, hard questions |
+| **nvidia/nemotron-nano-12b-v2-vl** | Open VLM | NVIDIA Build API | Multimodal queries, image understanding |
+| **nvidia/nvidia-nemotron-nano-9b-v2** | Small Open LLM | NVIDIA Build API | Simple text queries, chit chat |
 
-Create and activate a Python virtual environment, then run: 
+- **gpt-5-chat**: Can be sourced from Azure OpenAI (default) or standard OpenAI API
+- **Nemotron models**: Configured to use NVIDIA Build API endpoints (hosted), but can also use locally deployed NVIDIA NIMs for on-premise deployment
 
-```
-pip install -r requirements.txt
-```
+#### Using Different Models
 
-#### 2. Access Jupyter Notebook
+The three default models are **examples only** - you can route to any models by (1) updating the intent router's configuration or (b) re-training the auto-router.
 
-Bring up Jupyter and open the notebook in the `launchable` directory called `1_Deploy_LLM_Router.ipynb`.
+*The main goal of the LLM router is to intelligently route across frontier and open models* to optimize the cost-quality-latency tradeoff.
 
-```
-jupyter lab --no-browser --ip 0.0.0.0 --NotebookApp.token=’’
-```
+## Target Audience
 
+This experimental blueprint is for:
 
-## Software Components 
+- **AI Engineers and Developers**: Developers interested in exploring next-generation routing approaches with multimodal support.
+- **MLOps Teams**: Teams interested in learning-based routing optimization and custom model selection strategies.
+- **Research Teams**: Teams evaluating different routing strategies for production deployment.
 
-The LLM Router has three components: 
-- <b>Router Controller</b> - is a service similar to a proxy that routes OpenAI compatible requests. The controller is implemented as a Rust proxy and the code is available in `src/router-controller`.
-- <b>Router Server</b> - is a service that classifies the user's prompt using a pre-trained model. In this blueprint, the router server is implemented as a NVIDIA Triton Inference Server with pre-trained router models based off of [`Nvidia/prompt-task-and-complexity-classifier`](https://huggingface.co/nvidia/prompt-task-and-complexity-classifier). The pre-trained router models are available on NGC.
-- <b>Downstream LLMs</b> - are the LLMs the prompt will be passed to, typically foundational LLMs. In this blueprint the downstream models are NVIDIA NIMs, specifically `meta/llama-3.1-70b-instruct`, `meta/llama-3.1-8b-instruct`, `mistralai/mixtral-8x22b-instruct-v0.1`, and `nvidia/llama-3.3-nemotron-super-49b-v1`. Other LLMs are supported such as locally hosted NVIDIA NIMs or third party OpenAI compatible API endpoints.
-
-![architecture diagram](assets/llm-router-blueprint.png)
-
-## Deployment Options
-
-The LLM Router can be deployed using either Docker Compose or Kubernetes:
-
-### Docker Deployment (Development)
-Follow the quickstart guide above for local development and testing.
-
-### Kubernetes Deployment (Production)
-For production deployments on Kubernetes, use the provided Helm chart:
-
-```bash
-# See detailed instructions in deploy/helm/llm-router/README.md
-helm install llm-router ./deploy/helm/llm-router -f values.override.yaml
-```
-
-The Kubernetes deployment includes:
-- High availability with multiple replicas
-- Resource management and limits
-- Health checks and monitoring
-- Persistent storage for models
-- Environment variable substitution for API keys
-
-**Note:** The router controller supports both hardcoded API keys and environment variable substitution using `${NVIDIA_API_KEY}` placeholders in the configuration.
-
-## Target Audience 
-This blueprint is for: 
-
--  <b>AI Engineers and Developers</b>: Developers building or maintaining AI systems benefit from LLM routers by integrating them into applications for scalable, cost-effective solutions.
-- <b>MLOps Teams</b>: People can use LLM routers to optimize resource allocation, ensuring efficient use of computational resources.
-
-## Prerequisites 
+## Prerequisites
 
 ### Software
 
-- Linux operating systems (Ubuntu 22.04 or later recommended)
+- Linux operating systems (Ubuntu 22.04 or later recommended) or macOS
 - [Docker](https://docs.docker.com/engine/install/)
 - [Docker Compose](https://docs.docker.com/compose/install/)
-- [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) (NVIDIA Driver >= `535`, CUDA >= `12.2`)
+- For local development: Python 3.12+ and [uv](https://github.com/astral-sh/uv) package manager
 
-### Clone repository and install software
+### Clone repository
 
-1. Clone Git repository
-
-```
+```bash
 git clone https://github.com/NVIDIA-AI-Blueprints/llm-router
 cd llm-router
+git checkout experimental  # or the appropriate v2 branch name
 ```
 
-2. Install [Docker](https://docs.docker.com/engine/install/ubuntu/)
+### Get API Keys
 
-> Tip: Ensure the Docker Compose plugin version is 2.29.1 or higher.  Run `docker compose --version` to confirm. 
+1. **NVIDIA Build API key**
 
-3. Install **[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installing-the-nvidia-container-toolkit)** to configure Docker for GPU-accelerated containers.
+   - Navigate to [NVIDIA API Catalog](https://build.nvidia.com/explore/discover)
+   - Click one of the models, such as nemotron-nano-12b-v2-vl
+   - Select the "Python" input option
+   - Click "Get API Key"
+   - Click "Generate Key" and copy the resulting key (starts with `nvapi-`)
 
-### Get API Keys 
+2. **Azure OpenAI API access**
 
-1. NVIDIA NGC API key
+   This project uses Azure OpenAI for the GPT-5-chat model. You'll need:
+   
+   - An Azure subscription with Azure OpenAI service enabled
+   - An Azure OpenAI resource deployed with `gpt-5-chat` model
+   - Your Azure OpenAI endpoint URL (format: `https://your-resource-name.openai.azure.com/`)
+   - Your Azure OpenAI API key (found in the Azure portal under your resource's "Keys and Endpoint")
 
-The NVIDIA NGC API Key is used in this blueprint in order to pull the default router models from NGC as well as the NVIDIA Triton server docker image which is used to run those models. Refer to [Generating NGC API Keys](https://docs.nvidia.com/ngc/gpu-cloud/ngc-user-guide/index.html#generating-api-key) in the NVIDIA NGC User Guide for more information.
+   Set these environment variables:
+   ```bash
+   export AZURE_OPENAI_ENDPOINT="https://your-resource-name.openai.azure.com/"
+   export OPENAI_API_KEY="your-azure-openai-api-key"
+   ```
 
-Once you have the key, login with: 
-
-```
-docker login nvcr.io
-```
-
-Use `$oauthtoken` as the username and the API key as the password.
-
-2. NVIDIA API Catalog key
-
-- Navigate to [NVIDIA API Catalog](https://build.nvidia.com/explore/discover). 
-- Click one of the models, such as llama3-8b-instruct. 
-- Select the "Docker" input option. 
-- Click "Get API Key".
-- Click "Generate Key" and copy the resulting key, save it somewhere safe for later use
-
-> Tip: The NVIDIA API Catalog key will start with nvapi- whereas the NVIDIA NGC key will not.
+   > **Using regular OpenAI instead:** If you prefer to use OpenAI's API instead of Azure OpenAI, you'll need to update:
+   > - `demo/app.py`: Change `call_model_azure_openai()` to use `OpenAI()` client with `base_url="https://api.openai.com/v1"` and update model provider from `"azure_openai"` to `"openai"`
+   > - `demo/env_template.txt` and `demo/.env`: Replace `AZURE_OPENAI_ENDPOINT` with `OPENAI_API_KEY=sk-...`
+   > - `src/nat_sfc_router/training/prepare_hf_data.py`: Replace `AzureOpenAI` client initialization with `OpenAI` client
+   > - `2_Embedding_NN_Training.ipynb`: Update cells that reference `AZURE_OPENAI_ENDPOINT` and `AzureOpenAI` client
+   > - Get your OpenAI API key from [OpenAI Platform](https://platform.openai.com/api-keys)
 
 ## Hardware Requirements
 
-Using LLM router models used in blueprint:
+For the Arch-Router model server:
+
 | GPU | Family | Memory | # of GPUs (min.) |
 | ------ | ------ | ------ | ------ |
-| V100 or newer | SXM or PCIe | 4GB | 1 |
+| T4 or newer | Any | 16GB | 1 |
 
-Using a custom LLM-router model not included in blueprint (requirements may vary based on customizations):
-| GPU | Family | Memory | # of GPUs (min.) |
+For training and using the auto-router (CLIP + Neural Network):
+
+| Component | GPU Required | Memory | Notes |
 | ------ | ------ | ------ | ------ |
-| A10G or newer | SXM or PCIe | 24GB | 1 |
+| CLIP Embedding Server | Yes | 8GB+ | NVIDIA NVClip NIM (required for generating embeddings) |
+| Neural Network Training | Optional | 4GB+ (if GPU) | Can run on CPU, but GPU accelerates training |
+| Neural Network Inference | No | N/A | Router inference runs on CPU |
 
-## Understand the blueprint
+**Note**: Training the auto-router requires:
+1. A running CLIP server (GPU required) to generate embeddings from text and images
+2. PyTorch for neural network training (GPU optional but recommended for faster training)
+3. Once trained, the router artifacts can be used for inference on CPU-only systems 
 
-The LLM Router is composed of three components: 
 
-- <b>Router Controller</b> - is a service similar to a proxy that routes OpenAI compatible requests.
-- <b>Router Server</b> - is a service that classifies the user's prompt according to a routing strategy and policy. The classification is made using a pre-trained model. 
-- <b>Downstream LLMs</b> - are the LLMs the prompt will be routed to, typically foundational LLMs. 
+## Quickstart Guide
 
-These three components are all managed in the LLM Router configuration file which is located at `src/router-controller/config.yaml`. 
+After meeting the prerequisites, follow these steps to start a demo chat application that uses the intent based router and supports multimodal inputs:
 
-```yaml 
-policies:
-  - name: "task_router"
-    url: http://router-server:8000/v2/models/task_router_ensemble/infer
-    llms:
-      - name: Brainstorming
-        api_base: https://integrate.api.nvidia.com
-        api_key: ${NVIDIA_API_KEY}
-        model: meta/llama-3.1-70b-instruct
-      - name: Chatbot
-        api_base: https://integrate.api.nvidia.com
-        api_key: ${NVIDIA_API_KEY}
-        model: mistralai/mixtral-8x22b-instruct-v0.1
-    ...    
-  - name: "complexity_router"
-    url: http://router-server:8000/v2/models/complexity_router_ensemble/infer
-    llms:
-      - name: Creativity
-        api_base: https://integrate.api.nvidia.com
-        api_key: ${NVIDIA_API_KEY}
-        model: meta/llama-3.1-70b-instruct
-      - name: Reasoning
-        api_base: https://integrate.api.nvidia.com
-        api_key: ${NVIDIA_API_KEY}
-        model: nvidia/llama-3.3-nemotron-super-49b-v1
-    ...
+#### 1. Configure API Keys
+
+Create a `.env` file in the project root:
+
+```bash
+# API Keys
+OPENAI_API_KEY=sk-your-openai-key-here
+NVIDIA_API_KEY=nvapi-your-nvidia-key-here
 ```
 
-### Policies
+#### 2. Launch Services with Docker Compose
 
-The configuration file specifies the routing policies. In the default configuration, a prompt can either be classified using a `task_router` policy or a `complexity_router` policy. 
+```bash
+docker-compose up -d --build
+```
 
-The `task_router` uses a pre-trained model that will be deployed at `http://router-server:8000/v2/models/task_router_ensemble/infer`. The model classifies prompts into categories based on the task of the prompt:
-  - Brainstorming
-  - Chatbot
-  - Classification
-  - Closed QA
-  - Code Generation
-  - Extraction
-  - Open QA
-  - Other
-  - Rewrite
-  - Summarization
-  - Text Generation
-  - Unknown
+This starts three services:
+- **router-backend** (port 8001): Main routing service using NVIDIA NeMo Agent Toolkit
+- **arch-router** (port 8011): Arch-Router-1.5B model server for intent-based routing
+- **demo-app** (port 7860): Interactive web interface
 
-For example, the prompt `Help me write a python function to load salesforce data into my warehouse` would be classified as a `Code Generation` task.
+#### 3. Access the Demo
 
-The `complexity_router` uses a different pre-trained model that will be deployed at `http://router-server:8000/v2/models/complexity_router_ensemble/infer`. This model classifies prompts into categories based on the complexity of the prompt:
-  - Creativity: Prompts that require create knowledge, eg "write me a science fiction story".
-  - Reasoning: Prompts that require reasoning, eg solving a riddle.
-  - Contextual-Knowledge: Prompts that require background information, eg asking for technical help with a specific product.
-  - Few-Shot: Prompts that include example questions and answers.
-  - Domain-Knowledge: Prompts that require broad domain knowledge, such as asking for an explanation of a historical event.
-  - No-Label-Reason: Prompts that are not classified into one of the other categories.
-  - Constraint: Prompts that include specific constraints, eg requesting an answer in a haiku format.
+Open your browser to: **http://localhost:7860**
 
-The `customize/READEME.md` describes how to create your own policy and classification model, providing an example showing a policy for classifying user interactions with a bank support chatbot. 
+Try sending messages with or without images to see routing decisions in real-time.
 
-### LLMs 
+### Quickstart Alternative -  Explore the Notebooks 
 
-The `llms` portion of the configuration file specifies where the classified prompts should be routed. For example, in the default configuration file: 
+Bring up Jupyter to explore the routing methods and training pipeline:
+
+```bash
+jupyter lab --no-browser --ip 0.0.0.0 --NotebookApp.token=''
+```
+
+Open the notebooks:
+- `1_ArchRouter_Example.ipynb` - Intent-based routing examples
+- `2_Embedding_NN_Training.ipynb` - Train custom neural network router
+- `3_Embedding_NN_Usage.ipynb` - Use trained neural network router
+
+## Software Components
+
+The experimental LLM Router v2 has three main components:
+
+- **Router Backend** - A service built on NVIDIA NeMo Agent Toolkit that exposes a FastAPI endpoint compatible with OpenAI's chat completions API. The router backend analyzes prompts (text and images) and returns the optimal model name. Code is available in `src/nat_sfc_router/`.
+
+- **Routing Models** - Two routing strategies are available:
+  - **Intent-Based Router**: Uses the Arch-Router-1.5B model to match user intents to specific models. Requires the arch-router service running on port 8011.
+  - **Auto-Router**: Uses CLIP embeddings and a trained neural network to predict optimal models based on quality, latency, and cost metrics. Requires the CLIP service running and a trained neural network model.
+
+- **Demo Application** - An interactive Gradio web interface that demonstrates the router in action. After receiving a routing decision, the demo app calls the recommended model's API and displays results. Code is available in `demo/`.
+
+**Note**: Unlike v1, v2 does not proxy requests to downstream LLMs. It only returns model recommendations. The demo app handles the actual API calls to recommended models.
+
+![Architecture Overview](https://github.com/user-attachments/assets/multimodal-router-arch.png)
+
+## Routing Methods
+
+The experimental v2 router provides two distinct routing approaches:
+
+### 1. Intent-Based Routing (Arch-Router)
+
+Uses the [Arch-Router-1.5B](https://huggingface.co/katanemo/Arch-Router-1.5B) model to match user intents to specific models.
+
+**Advantages**:
+- No training required
+- Understands semantic intent
+- Works out-of-the-box
+- Easily configurable via intent mappings
+
+**Use Case**: When you have clear intent categories (e.g., "visual analysis" → VLM, "code generation" → specialized LLM)
+
+**Configuration**: See `src/nat_sfc_router/configs/config.yml` and `src/nat_sfc_router/functions/hf_intent_objective_fn.py` 
+
+```python
+route_config = [
+    {
+        "name": "hard_question",
+        "description": "A question that requires deep reasoning, or complex problem solving, or if the user asks for careful thinking or careful consideration",
+    },
+    {
+        "name": "chit_chat",
+        "description": "Any social chit chat, small talk, or casual conversation.",
+    },
+    {
+        "name": "try_again",
+        "description": "Only if the user explicitly says the previous answer was incorrect or incomplete.",
+    },
+    {
+        "name": "image_understanding",
+        "description": "A question that requires understanding an image.",
+    },
+    {
+        "name": "image_question",
+        "description": "A question that requires the assistant to see the user eg a question about their appearance, environment, scene or surroundings.",
+    },
+]
+
+MAP_INTENT_TO_PIPELINE = {
+    "other": "nvidia/nvidia-nemotron-nano-9b-v2",
+    "chit_chat": "nvidia/nvidia-nemotron-nano-9b-v2",
+    "hard_question": "gpt-5-chat",
+    "image_understanding": "nvidia/nemotron-nano-12b-v2-vl",
+    "image_question": "nvidia/nemotron-nano-12b-v2-vl",
+    "try_again": "gpt-5-chat",
+}
+```
+
+### 2. Auto-Routing (CLIP + Neural Network)
+
+Uses CLIP embeddings to encode text/image pairs, then a trained neural network to predict the optimal model.
+
+**Advantages**:
+- Learns from actual usage patterns
+- Optimizes for quality, latency, and cost
+- Adapts to your specific workload
+- Handles multimodal input natively
+
+**Use Case**: When you have historical data and want data-driven routing decisions
+
+**Training Required**: See notebooks for training pipeline:
+- `2_Embedding_NN_Training.ipynb` - Training the neural network
+- `3_Embedding_NN_Usage.ipynb` - Using the trained router
+
+## Deployment Options
+
+### Docker Deployment
+
+```bash
+docker-compose up -d --build
+```
+
+This starts three services:
+- **router-backend** (port 8001): Main routing service using NVIDIA NeMo Agent Toolkit
+- **arch-router** (port 8011): Arch-Router-1.5B model server (for intent-based routing)
+- **demo-app** (port 7860): Interactive Gradio web interface
+
+Access the demo at: **http://localhost:7860**
+
+## Understand the Blueprint
+
+The experimental LLM Router v2 is structured around selecting the right model for a given request:
+
+### Router Backend
+
+The router backend is built on the NVIDIA NeMo Agent Toolkit and exposes a FastAPI service at `http://localhost:8001/sfc_router/chat/completions`. The endpoint accepts OpenAI-compatible chat completion requests with multimodal content (text and images) and returns the name of the optimal model.
+
+The router backend is configured via `src/nat_sfc_router/configs/config.yml`:
 
 ```yaml
-policies:
-  - name: "task_router"
-    url: http://router-server:8000/v2/models/task_router_ensemble/infer
-    llms:
-      - name: Brainstorming
-        api_base: https://integrate.api.nvidia.com
-        api_key: ${NVIDIA_API_KEY}
-        model: nvdev/meta/llama-3.1-70b-instruct
-      - name: Chatbot
-        api_base: https://integrate.api.nvidia.com
-        api_key: ${NVIDIA_API_KEY}
-        model: mistralai/mixtral-8x22b-instruct-v0.1
+functions:
+  healthcheck_fn:
+    _type: healthcheck
+  hf_intent_objective_fn:
+    _type: hf_intent_objective_fn
+
+  nn_objective_fn:
+    _type: nn_objective_fn
+    
+    model_thresholds:
+      'gpt-5-chat': 0.70
+      'nvidia/nemotron-nano-12b-v2-vl': 0.75
+      'nvidia/nvidia-nemotron-nano-9b-v2': 0.4
+    
+    model_costs:
+      'gpt-5-chat': 1.0
+      'nvidia/nemotron-nano-12b-v2-vl': 0.5
+      'nvidia/nvidia-nemotron-nano-9b-v2': 0.3
+
+  sfc_router_fn:
+    _type: sfc_router
+    objective_fn: hf_intent_objective_fn # <--- select routing function
+
+workflow:
+  _type: sfc_router
+  objective_fn: hf_intent_objective_fn # <--- select routing function
 ```
 
-A prompt sent to the `task_router` policy classified as a Brainstorming task would be proxied to the NVIDIA NIM `meta/llama-3.1-70b-instruct` whereas a prompt classified as a Chatbot task would be sent to `mistralai/mixtral-8x22b-instruct-v0.1`. 
+### Routing Strategies
 
-### Using the router
+The router backend can use one of two strategies, configured by setting the `objective_fn` parameter:
 
-The LLM Router is compatible with OpenAI API requests. This means that any applications or code that normally use an OpenAI API client (such as LangChain) can use LLM Router with minimal modification. For example, this RESTful API request to LLM Router follows the OpenAI specification with a few modifications:
+1. **Intent-Based Routing (`hf_intent_objective_fn`)**: Uses the Arch-Router-1.5B model to classify user intents and map them to models. Intent mappings are defined in `src/nat_sfc_router/functions/hf_intent_objective_fn.py`. No training required.
 
-```console
-curl -X 'POST' \
-  'http://0.0.0.0:8084/v1/chat/completions' \   # the URL to the deployed LLM router
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
+2. **Auto-Routing (`nn_objective_fn`)**: Uses CLIP embeddings and a trained neural network to predict optimal models. Requires training on your data using the provided notebooks. Models are stored in `src/nat_sfc_router/training/router_artifacts/`.
+
+### Using the Router
+
+The LLM Router v2 is compatible with OpenAI chat completion requests. Unlike v1, the router **does not proxy** requests to downstream models - it only returns the recommended model name. Here's an example request:
+
+```bash
+curl -X POST http://localhost:8001/sfc_router/chat/completions \
+  -H "Content-Type: application/json" \
   -d '{
-    "model": "",                                # the model field is left blank, as the LLM router will add this based on the prompt classification
     "messages": [
       {
-        "role":"user",
-        "content":"Hello! How are you?"
-      },
-      {
-        "role":"assistant",
-        "content":"Hi! I am quite well, how can I help you today?"
-      },
-      {
-        "role":"user",
-        "content":"Can you write me a song? Use as many emojis as possible."
+        "role": "user",
+        "content": "Explain quantum computing"
       }
     ],
-    "max_tokens": 64,
-    "stream": true,
-    "nim-llm-router": {"policy": "task_router",
-                       "routing_strategy": "triton",
-                       "model": ""}
+    "stream": false
   }'
 ```
 
-The primary modification is the inclusion of the `nim-llm-router` metadata in the body of the request. In most python clients this metadata would be added as `extra_body`, see `src/test_router.py` for an example. The required metadata is:
+Response:
 
-- policy: the policy to use for classification, by default either `task_router`  or `complexity_router`.
-- routing_strategy: either `triton` which means the prompt is sent to a model for classification or `manual` which means that the classification is skipped - use this if the client needs to make a manual over-ride
-- model: if the `routing_strategy` is `triton` leave this blank, if the routing strategy is `manual` specify the model over-ride
+```json
+{
+  "id": "chatcmpl-1765473022",
+  "choices": [{
+    "message": {
+      "content": "nvidia/nvidia-nemotron-nano-9b-v2",
+      "role": "assistant"
+    }
+  }],
+  "model": "hf_intent_objective_fn"
+}
+```
+
+The selected model name is in `choices[0].message.content`. Your application is responsible for calling the recommended model's API.
+
+### Multimodal Support
+
+The router supports multimodal requests with images encoded as base64 data URLs:
+
+```bash
+curl -X POST http://localhost:8001/sfc_router/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {"type": "text", "text": "What is in this image?"},
+          {
+            "type": "image_url",
+            "image_url": {"url": "data:image/jpeg;base64,/9j/4AAQ..."}
+          }
+        ]
+      }
+    ]
+  }'
+```
 
 ## Next Steps
 
-The blueprint includes a variety of tools to help understand, evaluate, customize, and monitor the LLM Router.
+The experimental blueprint includes several resources to help you understand, evaluate, and customize the LLM Router v2:
 
-- Read more about the router controller implementation and capabilities in the source README located at `src/router-controller/readme.md`.
-- A sample client application is available in the `demo/app` folder.
-- Metrics are automatically collected and can be exported via Prometheus to Grafana. Details are available in the source README and an example is provided in the quickstart notebook.
-- A sample loadtest is available in the `demo/loadtest` folder with instructions in the associated README.
-- The blueprint includes two default routing policies available for download from NGC. The `customize` directory includes two notebooks showing how each policy model was created. There is also an example notebook showing how to create a third policy. The `intent_router` is created by fine-tuning a model to classify prompts based on a user's intent, assuming they are interacting with a support chatbot at a bank.
+- **Explore the notebooks**: Three Jupyter notebooks demonstrate the routing methods and training pipeline:
+  - `1_ArchRouter_Example.ipynb` - Intent-based routing examples and configuration
+  - `2_Embedding_NN_Training.ipynb` - Train custom neural network router on your data
+  - `3_Embedding_NN_Usage.ipynb` - Use and evaluate trained routers
+
+- **Try the demo application**: An interactive Gradio web interface in `demo/` demonstrates end-to-end routing and model calling.
+
+- **Review the source code**: The router implementation is in `src/nat_sfc_router/` with detailed documentation.
+
+- **Train a custom router**: Follow the notebooks to create a router optimized for your specific use case and workload.
 
 ## License 3<sup>rd</sup> Party
 
@@ -290,12 +408,12 @@ This project will download and install additional third-party open source softwa
 
 ## Security Considerations
 
-- The LLM Router Blueprint doesn't generate any code that may require sandboxing.
-- The LLM Router Development Blueprint is shared as a reference and is provided "as is". The security in the production environment is the responsibility of the end users deploying it. When deploying in a production environment, please have security experts review any potential risks and threats; define the trust boundaries, implement logging and monitoring capabilities, secure the communication channels, integrate AuthN & AuthZ with appropriate access controls, keep the deployment up to date, ensure the containers/source code are secure and free of known vulnerabilities.
-- A frontend that handles AuthN & AuthZ should be in place as missing AuthN & AuthZ could provide un gated access to customer models if directly exposed to e.g. the internet, resulting in either cost to the customer, resource exhaustion, or denial of service.
-- The users need to be aware that the api_key for the end LLM for the router-controller is obtained by populating the config.yaml file and this might lead to the leakage of api_key and unauthorized access for the end LLM and the end users are responsible for safeguarding the config.yaml file and the api_key in it.
+- The LLM Router v2 Blueprint doesn't generate any code that may require sandboxing.
+- The LLM Router v2 Blueprint is shared as a reference and is provided "as is". The security in the production environment is the responsibility of the end users deploying it. When deploying in a production environment, please have security experts review any potential risks and threats; define the trust boundaries, implement logging and monitoring capabilities, secure the communication channels, integrate AuthN & AuthZ with appropriate access controls, keep the deployment up to date, ensure the containers/source code are secure and free of known vulnerabilities.
+- A frontend that handles AuthN & AuthZ should be in place as missing AuthN & AuthZ could provide un gated access to the router if directly exposed to e.g. the internet.
+- API keys for downstream models (OpenAI, NVIDIA Build) are configured in the demo application's `.env` file. The end users are responsible for safeguarding these credentials.
 - The LLM Router doesn't require any privileged access to the system.
 - The end users are responsible for ensuring the availability of their deployment.
 - The end users are responsible for building the container images and keeping them up to date.
-- The end users are responsible for ensuring that OSS packages used by the developer blueprint are current.
-- The logs from router-controller, router-server, and the demo app are printed to standard out, they include input prompts and output completions for development purposes. The end users are advised to handle logging securely and avoid information leakage for production use cases.
+- The end users are responsible for ensuring that OSS packages used by the blueprint are current.
+- The logs from the router backend and demo app are printed to standard out and include input prompts and routing decisions for development purposes. The end users are advised to handle logging securely and avoid information leakage for production use cases.

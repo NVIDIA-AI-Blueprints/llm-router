@@ -1,9 +1,0 @@
-# Router Configuration
-ROUTER_ENDPOINT=http://localhost:8001/sfc_router/chat/completions
-
-# OpenAI API Configuration
-OPENAI_API_KEY=your_openai_api_key_here
-
-# NVIDIA Build API Configuration
-NVIDIA_API_KEY=your_nvidia_api_key_here
-

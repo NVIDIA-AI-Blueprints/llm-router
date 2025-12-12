@@ -1,0 +1,22 @@
+Metadata-Version: 2.4
+Name: nat_sfc_router
+Version: 0.0.0
+Summary: Simple Calculator NeMo Agent toolkit example
+Keywords: ai,rag,agents
+Classifier: Programming Language :: Python
+Requires-Python: >=3.11.0
+Requires-Dist: nvidia-nat[phoenix]
+Requires-Dist: torch
+Requires-Dist: transformers==4.51.3
+Requires-Dist: numpy<2.00
+Requires-Dist: docarray==0.21.0
+Requires-Dist: scikit-learn
+Requires-Dist: openai
+Requires-Dist: requests
+Requires-Dist: clip-client
+Requires-Dist: joblib
+Requires-Dist: tqdm
+Requires-Dist: Pillow
+Requires-Dist: datasets
+Requires-Dist: gradio
+Requires-Dist: python-dotenv

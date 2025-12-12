@@ -1,0 +1,2 @@
+[nat.components]
+nat_multimodal_agent = nat_sfc_router.register
