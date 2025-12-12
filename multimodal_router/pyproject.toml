@@ -7,14 +7,19 @@ name = "nat_sfc_router"
 dynamic = ["version"]
 dependencies = [
     "nvidia-nat[phoenix]",
-    "safetensors",
     "torch",
-    "flash-attn",
     "transformers==4.51.3",
-    "accelerate",
     "numpy<2.00",
     "scikit-learn",
-    "matplotlib"
+    "openai",
+    "requests",
+    "clip-client",
+    "joblib",
+    "tqdm",
+    "Pillow",
+    "datasets",
+    "gradio",
+    "python-dotenv"
 ]
 requires-python = ">=3.11.0"
 description = "Simple Calculator NeMo Agent toolkit example"
@@ -23,12 +28,6 @@ classifiers = ["Programming Language :: Python"]
 
 [project.entry-points.'nat.components']
 nat_multimodal_agent = "nat_sfc_router.register"
-
-[tool.uv.extra-build-dependencies]
-flash-attn = [{ requirement = "torch", match-runtime = true }]
-
-[tool.uv.extra-build-variables]
-flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "FALSE" }
 
 [tool.setuptools.package-data]
 nat_sfc_router = [
