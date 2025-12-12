@@ -391,9 +391,7 @@ class ModelRouter:
                 self.router_model,
                 self.model_names,
                 return_probs=True,
-                model_thresholds=self.model_thresholds,
-                cost_aware=self.cost_aware,
-                high_confidence_threshold=self.high_confidence_threshold
+                model_thresholds=self.model_thresholds
             )
             chosen_model = chosen_models[0]
             probs_dict = {
@@ -402,14 +400,13 @@ class ModelRouter:
             }
             
             if return_all_info:
-                # Get original choice (without thresholds and cost-aware routing)
+                # Get original choice (without thresholds)
                 original_chosen, _ = route_embeddings(
                     embedding_2d,
                     self.router_model,
                     self.model_names,
                     return_probs=True,
-                    model_thresholds=None,
-                    cost_aware=False
+                    model_thresholds=None
                 )
                 
                 routing_info = {
@@ -431,9 +428,7 @@ class ModelRouter:
                 self.router_model,
                 self.model_names,
                 return_probs=False,
-                model_thresholds=self.model_thresholds,
-                cost_aware=self.cost_aware,
-                high_confidence_threshold=self.high_confidence_threshold
+                model_thresholds=self.model_thresholds
             )
             chosen_model = chosen_models[0]
         
