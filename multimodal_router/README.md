@@ -243,6 +243,55 @@ curl -X POST http://localhost:8001/sfc_router/chat/completions \
 
 The selected model is returned in `choices[0].message.content`.
 
+### Router-Only Response
+
+For use cases where you only need the routing decision without the ChatCompletion wrapper, use the `/router` endpoint. This returns a purpose-built response format with model probabilities and selection metadata.
+
+**Endpoint**: `POST /router`
+
+**Request** (same format as chat completions):
+
+```bash
+curl -X POST http://localhost:8001/router \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": "Explain quantum computing"
+      }
+    ]
+  }'
+```
+
+**Response Format**:
+
+```json
+{
+  "id": "routing-1734567890123",
+  "object": "routing.decision",
+  "created": 1734567890,
+  "selected_model": "gpt-5-chat",
+  "classifications": [
+    {"label": "gpt-5-chat", "score": 0.75},
+    {"label": "Qwen/Qwen3-VL-8B-Instruct", "score": 0.20},
+    {"label": "nvidia/nvidia-nemotron-nano-9b-v2", "score": 0.05}
+  ],
+  "selection_reason": "cost_optimized"
+}
+```
+
+**Response Fields**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique identifier for this routing decision |
+| `object` | string | Always `"routing.decision"` |
+| `created` | integer | Unix timestamp of when the decision was made |
+| `selected_model` | string | The model selected for routing |
+| `classifications` | array | All models with confidence scores (sorted descending) |
+| `selection_reason` | string | Why this model was selected (`cost_optimized`, `highest_probability`, `threshold_fallback`) |
+
 ## Configuration
 
 ### Router Configuration

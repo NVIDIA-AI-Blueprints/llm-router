@@ -33,6 +33,10 @@ general:
         method: POST
         description: Get the model and probabilities from the hf intent objective function.
         function_name: hf_intent_objective_fn
+      - path: /router
+        method: POST
+        description: Router-only endpoint that returns routing decisions without ChatCompletion wrapping.
+        function_name: router_only_fn
 
 
 functions:
@@ -58,6 +62,10 @@ functions:
       'nvidia/nvidia-nemotron-nano-9b-v2': 0.3
   sfc_router_fn:
     _type: sfc_router
+    objective_fn: nn_objective_fn
+
+  router_only_fn:
+    _type: router_only
     objective_fn: nn_objective_fn
 
 

@@ -17,3 +17,4 @@ from nat_sfc_router.functions.router_fn import sfc_router
 from nat_sfc_router.functions.healthcheck_fn import healthcheck_fn
 from nat_sfc_router.functions.hf_intent_objective_fn import hf_intent_objective_fn
 from nat_sfc_router.functions.nn_objective_fn import nn_objective_fn
+from nat_sfc_router.functions.router_only_fn import router_only
