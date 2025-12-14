@@ -1,4 +1,4 @@
-<h2><img align="center" src="https://github.com/user-attachments/assets/cbe0d62f-c856-4e0b-b3ee-6184b7c4d96f">NVIDIA AI Blueprint: LLM Router v2 (Experimental)</h2>
+ <h2><img align="center" src="https://github.com/user-attachments/assets/cbe0d62f-c856-4e0b-b3ee-6184b7c4d96f">NVIDIA AI Blueprint: LLM Router v2 (Experimental)</h2>
 
 > **⚠️ EXPERIMENTAL BRANCH**: This branch contains LLM Router v2, a next-generation routing system with multimodal support. For the production-ready LLM Router v1, please visit the [main branch](https://github.com/NVIDIA-AI-Blueprints/llm-router/tree/main).
 

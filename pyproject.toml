@@ -23,7 +23,7 @@ dependencies = [
     "docarray==0.21.0"
 ]
 requires-python = ">=3.11.0"
-description = "Simple Calculator NeMo Agent toolkit example"
+description = "NeMo Agent toolkit router"
 keywords = ["ai", "rag", "agents"]
 classifiers = ["Programming Language :: Python"]
 

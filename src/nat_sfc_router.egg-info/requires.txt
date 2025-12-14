@@ -2,7 +2,6 @@ nvidia-nat[phoenix]
 torch
 transformers==4.51.3
 numpy<2.00
-docarray==0.21.0
 scikit-learn
 openai
 requests
@@ -13,3 +12,4 @@ Pillow
 datasets
 gradio
 python-dotenv
+docarray==0.21.0
