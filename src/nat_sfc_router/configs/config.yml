@@ -60,9 +60,9 @@ functions:
       'nvidia/nvidia-nemotron-nano-9b-v2': 0.3
   sfc_router_fn:
     _type: sfc_router
-    objective_fn: nn_objective_fn
+    objective_fn: hf_intent_objective_fn
 
 
 workflow:
   _type: sfc_router
-  objective_fn: nn_objective_fn
+  objective_fn: hf_intent_objective_fn

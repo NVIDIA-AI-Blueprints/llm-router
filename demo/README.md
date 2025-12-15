@@ -17,6 +17,8 @@ The demo follows a two-step process for each chat request:
 1. **Step 1 - Routing**: Send the request to the router backend which analyzes the message and selects the optimal model
 2. **Step 2 - Execution**: Send the request to the selected model and display the response
 
+By default, this example uses the intent based router.
+
 ## Supported Models
 
 The demo is configured to work with three models:
@@ -25,19 +27,35 @@ The demo is configured to work with three models:
 - **Nemotron Nano v2** (NVIDIA Build API)
 - **Nemotron Nano VLM 12B** (NVIDIA Build API) - Multimodal vision-language model
 
-## Prerequisites
+## Getting Started
 
-1. **Router Service**: The router backend must be running on `http://localhost:8001`
+The easiest way to get started is using docker compose.
+
+1. **Configure environment variables**:
    ```bash
-   # From the multimodal_router directory
-   ./scripts/run_local.sh
+   cp demo/env_template.txt .env
+   # Edit .env and add your API keys
    ```
 
-2. **API Keys**: You need valid API keys for:
-   - Azure OpenAI API (with access to gpt-5-chat deployment)
-   - NVIDIA Build API
+2. **Start all services**:
+   ```bash
+   docker compose -f docker-compose.yml up -d --build
+   ```
 
-## Installation
+3. **Check all services started**:
+   ```bash
+   docker ps
+   ```
+
+4. **Access the UI**: `http://localhost:7860`
+
+
+## Development
+
+1. **Set working directory**:
+   ```bash 
+   cd ./demo
+   ```
 
 1. **Create a virtual environment** (recommended):
    ```bash
@@ -52,7 +70,7 @@ The demo is configured to work with three models:
 
 3. **Configure environment variables**:
    ```bash
-   cp .env_template.txt .env
+   cp env_template.txt .env
    # Edit .env and add your API keys
    ```
 
@@ -82,12 +100,13 @@ NVIDIA_API_KEY=nvapi-...
 
 1. **Start the router service** (in a separate terminal):
    ```bash
-   cd multimodal_router
+   cd llm-router
    ./scripts/run_local.sh
    ```
 
 2. **Launch the demo**:
    ```bash
+   cd demo
    python app.py
    ```
 
@@ -137,7 +156,7 @@ Error encoding image
 demo/
 ├── app.py              # Main application file
 ├── requirements.txt    # Python dependencies
-├── .env_template.txt    # Example environment configuration
+├── env_template.txt    # Example environment configuration
 ```
 
 ### Customization

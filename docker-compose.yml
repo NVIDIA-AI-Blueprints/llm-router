@@ -11,9 +11,10 @@ services:
       - "8001:8001"
     volumes:
       # Mount configs for dynamic configuration without rebuilding
-      - ./src/nat_sfc_router/configs:/opt/dgxcbot/router/configs
+      - ./src/nat_sfc_router/configs/config.yml:/opt/dgxcbot/router/config.yml
     environment:
       - CUDA_VISIBLE_DEVICES=0
+      - ARCH_ROUTER_ENDPOINT=http://arch-router:8000
     runtime: nvidia
     deploy:
       resources:
@@ -70,6 +71,7 @@ services:
       # API Keys (set these via .env file or environment variables)
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
     depends_on:
       - router-backend
     networks:
