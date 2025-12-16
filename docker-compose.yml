@@ -14,7 +14,8 @@ services:
       - ./src/nat_sfc_router/configs/config.yml:/opt/dgxcbot/router/config.yml
     environment:
       - CUDA_VISIBLE_DEVICES=0
-      - ARCH_ROUTER_ENDPOINT=http://arch-router:8000
+      - ROUTER_MODEL_URL=http://qwen-router:8000
+      - ROUTER_MODEL_NAME=Qwen/Qwen3-1.7B
     runtime: nvidia
     deploy:
       resources:
@@ -33,15 +34,16 @@ services:
     networks:
       - router-network
 
-  # Arch-Router Model - vLLM serving the Arch-Router-1.5B model
-  arch-router:
+  # Qwen3 1.7B used for routing
+  qwen-router:
     image: vllm/vllm-openai:latest
-    container_name: arch-router
+    container_name: qwen-router
     ports:
       - "8011:8000"
     volumes:
       # Cache HuggingFace models locally to avoid re-downloading
       - ~/.cache/huggingface:/root/.cache/huggingface
+      - ./qwen3_nonthinking.jinja:/app/qwen3_nonthinking.jinja
     environment:
       - CUDA_VISIBLE_DEVICES=0
     runtime: nvidia
@@ -53,7 +55,7 @@ services:
               count: 1
               capabilities: [gpu]
     ipc: host
-    command: ["--model", "katanemo/Arch-Router-1.5B"]
+    command: ["--model", "Qwen/Qwen3-1.7B", "--chat-template", "/app/qwen3_nonthinking.jinja"]
     networks:
       - router-network
 

@@ -9,7 +9,7 @@
 | Feature | v1 (Main Branch) | v2 (Experimental) |
 |---------|------------------|-------------------|
 | **Server Implementation** | Rust proxy | NVIDIA NeMo Agent Toolkit (FastAPI) |
-| **Inference Backend** | BERT model + NVIDIA Triton Inference Server | Arch-Router LLM or CLIP + Neural Network |
+| **Inference Backend** | BERT model + NVIDIA Triton Inference Server | Qwen 1.7B LLM or CLIP + Neural Network |
 | **Functionality** | Classification + Proxying to LLM | Classification only (returns model name) |
 | **Input Support** | Text only | Text + Images (multimodal) |
 | **Routing Methods** | Task or complexity classification | Intent-based or Auto-routing (neural network) |
@@ -37,7 +37,7 @@ For example, using intent-based routing:
 The key features of the experimental LLM Router v2 are:
 
 - **Multimodal Support**: Route based on both text and images, optimized for VLMs
-- **Two Routing Strategies**: Intent-based (using Arch-Router-1.5B) OR auto-routing (using CLIP embeddings + trained neural network)
+- **Two Routing Strategies**: Intent-based (using Qwen 1.7B) OR auto-routing (using CLIP embeddings + trained neural network)
 - **OpenAI API compliant**: Returns model recommendations via chat completions endpoint
 - **Flexible**: Use pre-configured intent mappings or train custom neural network routers on your own data
 
@@ -119,7 +119,7 @@ git checkout experimental  # or the appropriate v2 branch name
 
 ## Hardware Requirements
 
-For the Arch-Router model server:
+For the Qwen 1.7B model:
 
 | GPU | Family | Memory | # of GPUs (min.) |
 | ------ | ------ | ------ | ------ |
@@ -161,7 +161,7 @@ docker-compose up -d --build
 
 This starts three services:
 - **router-backend** (port 8001): Main routing service using NVIDIA NeMo Agent Toolkit
-- **arch-router** (port 8011): Arch-Router-1.5B model server for intent-based routing
+- **qwen-router** (port 8011): Qwen 1.7B model server for intent-based routing
 - **demo-app** (port 7860): Interactive web interface
 
 #### 3. Access the Demo
@@ -179,7 +179,7 @@ jupyter lab --no-browser --ip 0.0.0.0 --NotebookApp.token=''
 ```
 
 Open the notebooks:
-- `1_ArchRouter_Example.ipynb` - Intent-based routing examples
+- `1_IntentRouter_Example.ipynb` - Intent-based routing examples
 - `2_Embedding_NN_Training.ipynb` - Train custom neural network router
 - `3_Embedding_NN_Usage.ipynb` - Use trained neural network router
 
@@ -190,7 +190,7 @@ The experimental LLM Router v2 has three main components:
 - **Router Backend** - A service built on NVIDIA NeMo Agent Toolkit that exposes a FastAPI endpoint compatible with OpenAI's chat completions API. The router backend analyzes prompts (text and images) and returns the optimal model name. Code is available in `src/nat_sfc_router/`.
 
 - **Routing Models** - Two routing strategies are available:
-  - **Intent-Based Router**: Uses the Arch-Router-1.5B model to match user intents to specific models. Requires the arch-router service running on port 8011.
+  - **Intent-Based Router**: Uses the Qwen 1.75B model to match user intents to specific models. Requires the Qwen LLM service running on port 8011.
   - **Auto-Router**: Uses CLIP embeddings and a trained neural network to predict optimal models based on quality, latency, and cost metrics. Requires the CLIP service running and a trained neural network model.
 
 - **Demo Application** - An interactive Gradio web interface that demonstrates the router in action. After receiving a routing decision, the demo app calls the recommended model's API and displays results. Code is available in `demo/`.
@@ -203,9 +203,9 @@ The experimental LLM Router v2 has three main components:
 
 The experimental v2 router provides two distinct routing approaches:
 
-### 1. Intent-Based Routing (Arch-Router)
+### 1. Intent-Based Routing 
 
-Uses the [Arch-Router-1.5B](https://huggingface.co/katanemo/Arch-Router-1.5B) model to match user intents to specific models.
+Uses a small LLM like Qwen 1.7B to match user intents to specific models.
 
 **Advantages**:
 - No training required
@@ -277,7 +277,7 @@ docker-compose up -d --build
 
 This starts three services:
 - **router-backend** (port 8001): Main routing service using NVIDIA NeMo Agent Toolkit
-- **arch-router** (port 8011): Arch-Router-1.5B model server (for intent-based routing)
+- **qwen-router** (port 8011): Qwen 1.7B model server (for intent-based routing)
 - **demo-app** (port 7860): Interactive Gradio web interface
 
 Access the demo at: **http://localhost:7860**
@@ -325,7 +325,7 @@ workflow:
 
 The router backend can use one of two strategies, configured by setting the `objective_fn` parameter:
 
-1. **Intent-Based Routing (`hf_intent_objective_fn`)**: Uses the Arch-Router-1.5B model to classify user intents and map them to models. Intent mappings are defined in `src/nat_sfc_router/functions/hf_intent_objective_fn.py`. No training required.
+1. **Intent-Based Routing (`hf_intent_objective_fn`)**: Uses the Qwen 1.7B model to classify user intents and map them to models. Intent mappings are defined in `src/nat_sfc_router/functions/hf_intent_objective_fn.py`. No training required.
 
 2. **Auto-Routing (`nn_objective_fn`)**: Uses CLIP embeddings and a trained neural network to predict optimal models. Requires training on your data using the provided notebooks. Models are stored in `src/nat_sfc_router/training/router_artifacts/`.
 
@@ -392,7 +392,7 @@ curl -X POST http://localhost:8001/sfc_router/chat/completions \
 The experimental blueprint includes several resources to help you understand, evaluate, and customize the LLM Router v2:
 
 - **Explore the notebooks**: Three Jupyter notebooks demonstrate the routing methods and training pipeline:
-  - `1_ArchRouter_Example.ipynb` - Intent-based routing examples and configuration
+  - `1_IntentRouter_Example.ipynb` - Intent-based routing examples and configuration
   - `2_Embedding_NN_Training.ipynb` - Train custom neural network router on your data
   - `3_Embedding_NN_Usage.ipynb` - Use and evaluate trained routers
 

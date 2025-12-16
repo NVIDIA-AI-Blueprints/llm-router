@@ -18,8 +18,8 @@ from nat.data_models.function import FunctionBaseConfig
 logger = logging.getLogger(__name__)
 
 # Remote model configuration
-REMOTE_MODEL_URL = os.getenv("ARCH_ROUTER_ENDPOINT")
-MODEL_NAME = "katanemo/Arch-Router-1.5B"
+REMOTE_MODEL_URL = os.getenv("ROUTER_MODEL_URL")
+MODEL_NAME = os.getenv("ROUTER_MODEL_NAME")
 
 # Only need tokenizer for prompt encoding (model is remote)
 tokenizer = None
