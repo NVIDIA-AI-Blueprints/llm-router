@@ -14,8 +14,11 @@ services:
       - ./src/nat_sfc_router/configs/config.yml:/opt/dgxcbot/router/config.yml
     environment:
       - CUDA_VISIBLE_DEVICES=0
+      # Intent-based router configuration
       - ROUTER_MODEL_URL=http://qwen-router:8000
       - ROUTER_MODEL_NAME=Qwen/Qwen3-1.7B
+      # Neural network router configuration
+      - CLIP_SERVER=clip-server:51000
     runtime: nvidia
     deploy:
       resources:
@@ -25,6 +28,13 @@ services:
               count: 1
               capabilities: [gpu]
     ipc: host
+    depends_on:
+      qwen-router:
+        condition: service_healthy
+        required: false
+      clip-server:
+        condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 30s
@@ -34,10 +44,12 @@ services:
     networks:
       - router-network
 
-  # Qwen3 1.7B used for routing
+  # Qwen3 1.7B used for intent-based routing
   qwen-router:
     image: vllm/vllm-openai:latest
     container_name: qwen-router
+    profiles:
+      - intent  # Use 'intent' profile for intent-based routing
     ports:
       - "8011:8000"
     volumes:
@@ -56,6 +68,40 @@ services:
               capabilities: [gpu]
     ipc: host
     command: ["--model", "Qwen/Qwen3-1.7B", "--chat-template", "/app/qwen3_nonthinking.jinja"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+    networks:
+      - router-network
+
+  # CLIP Embedding Server used for neural network routing
+  clip-server:
+    image: jinaai/clip-as-service:latest
+    container_name: clip-server
+    profiles:
+      - nn  # Use 'nn' profile for neural network routing
+    ports:
+      - "51000:51000"
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ipc: host
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 51000 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
     networks:
       - router-network
 
@@ -75,7 +121,8 @@ services:
       - NVIDIA_API_KEY=${NVIDIA_API_KEY}
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
     depends_on:
-      - router-backend
+      router-backend:
+        condition: service_healthy
     networks:
       - router-network
     healthcheck:

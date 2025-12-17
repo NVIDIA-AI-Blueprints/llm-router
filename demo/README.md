@@ -4,164 +4,207 @@ A simple web application that showcases the functionality of a multimodal LLM ro
 
 ## Features
 
-- 💬 **Chat Interface**: Clean, intuitive chat UI built with Gradio
-- 🖼️ **Image Upload**: Support for multimodal conversations with image uploads
-- 🤖 **Intelligent Routing**: Automatic model selection based on request analysis
-- 📊 **Model Transparency**: See which model was selected for each request
-- 💾 **Session History**: Message history maintained during your session
+- **Chat Interface**: Clean, intuitive chat UI built with Gradio
+- **Image Upload**: Support for multimodal conversations with image uploads
+- **Intelligent Routing**: Automatic model selection based on request analysis
+- **Model Transparency**: See which model was selected for each request
+- **Session History**: Message history maintained during your session
 
-## Architecture
+## Routing Methods
 
-The demo follows a two-step process for each chat request:
+Two routing strategies are supported (only one can be active at a time due to GPU constraints):
 
-1. **Step 1 - Routing**: Send the request to the router backend which analyzes the message and selects the optimal model
-2. **Step 2 - Execution**: Send the request to the selected model and display the response
+| Method | Routing Backend | Best For |
+|--------|----------------|----------|
+| **Intent-Based** (default) | Qwen3-1.7B LLM | Fast, lightweight routing via text classification |
+| **Neural Network** | CLIP embeddings + trained NN | Complex multimodal routing with learned patterns |
 
-By default, this example uses the intent based router.
+**Configuration**: Edit `objective_fn` in `src/nat_sfc_router/configs/config.yml`:
+- Intent-based: `objective_fn: hf_intent_objective_fn`
+- Neural network: `objective_fn: nn_objective_fn`
 
 ## Supported Models
 
-The demo is configured to work with three models:
-
-- **GPT-5-chat** (Azure OpenAI API)
+- **GPT-5-chat** (Azure OpenAI)
 - **Nemotron Nano v2** (NVIDIA Build API)
-- **Nemotron Nano VLM 12B** (NVIDIA Build API) - Multimodal vision-language model
+- **Nemotron Nano VLM 12B** (NVIDIA Build API) - Multimodal
 
-## Getting Started
+## Quick Start with Docker Compose
 
-The easiest way to get started is using docker compose.
-
-1. **Configure environment variables**:
+1. **Configure environment**:
    ```bash
    cp demo/env_template.txt .env
-   # Edit .env and add your API keys
+   # Edit .env with your API keys (OPENAI_API_KEY, NVIDIA_API_KEY, AZURE_OPENAI_ENDPOINT)
    ```
 
-2. **Start all services**:
+2. **Choose and start your routing method**:
+   
+   **Intent-based router** (default):
    ```bash
-   docker compose -f docker-compose.yml up -d --build
+   docker compose --profile intent up -d --build
    ```
-
-3. **Check all services started**:
+   
+   **Neural network router**:
    ```bash
-   docker ps
+   # First, update config.yml objective_fn to nn_objective_fn
+   docker compose --profile nn up -d --build
    ```
 
-4. **Access the UI**: `http://localhost:7860`
+3. **Wait for services to be ready** (first time ~2-3 minutes):
+   
+   Services start in order with health checks:
+   - `qwen-router` or `clip-server` loads model (~2 min)
+   - `router-backend` waits for routing service to be healthy
+   - `demo-app` waits for router-backend to be healthy
+   
+   Check status: `docker compose ps`
 
+4. **Access the UI**: http://localhost:7860
 
-## Development
+## Switching Routing Methods
 
-1. **Set working directory**:
-   ```bash 
-   cd ./demo
-   ```
+To switch between routing methods:
 
-1. **Create a virtual environment** (recommended):
+1. **Stop current services**:
    ```bash
-   uv venv
-   source .venv/bin/activate  # On Windows: venv\Scripts\activate
+   docker compose down  # or: docker compose --profile <current-profile> down
    ```
 
-2. **Install dependencies**:
+2. **Update configuration** in `src/nat_sfc_router/configs/config.yml`:
+   
+   Change lines 63 and 68:
+   ```yaml
+   # For intent-based:
+   objective_fn: hf_intent_objective_fn
+   
+   # For neural network:
+   objective_fn: nn_objective_fn
+   ```
+
+3. **Start with new profile**:
    ```bash
-   pip install -r requirements.txt
+   docker compose --profile intent up -d --build   # or --profile nn
    ```
 
-3. **Configure environment variables**:
-   ```bash
-   cp env_template.txt .env
-   # Edit .env and add your API keys
-   ```
+## Local Development Setup
 
-## Configuration
-
-Edit the `.env` file with your configuration:
-
-```env
-# Router Configuration
-ROUTER_ENDPOINT=http://localhost:8001/sfc_router/chat/completions
-
-# Azure OpenAI Configuration
-AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
-OPENAI_API_KEY=your_azure_openai_api_key_here
-
-# NVIDIA Build API Configuration
-NVIDIA_API_KEY=nvapi-...
+### Prerequisites
+```bash
+cd demo
+uv venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp env_template.txt .env  # Edit with your API keys
 ```
 
-**Azure OpenAI Setup Notes:**
-- The `AZURE_OPENAI_ENDPOINT` should be your Azure OpenAI resource endpoint URL
-- The `OPENAI_API_KEY` is your Azure OpenAI API key (not regular OpenAI)
-- Ensure your Azure OpenAI deployment has the model `gpt-5-chat` configured
-- The API version used is `2025-01-01-preview`
+### Option A: Intent-Based Router
 
-## Running the Demo
+```bash
+# Terminal 1: Start Qwen router
+docker run -d --rm --name qwen-router --gpus all -p 8011:8000 \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  -v $(pwd)/qwen3_nonthinking.jinja:/app/qwen3_nonthinking.jinja \
+  vllm/vllm-openai:latest --model Qwen/Qwen3-1.7B \
+  --chat-template /app/qwen3_nonthinking.jinja
 
-1. **Start the router service** (in a separate terminal):
-   ```bash
-   cd llm-router
-   ./scripts/run_local.sh
-   ```
+# Terminal 2: Start router service
+cd llm-router && ./scripts/run_local.sh
 
-2. **Launch the demo**:
-   ```bash
-   cd demo
-   python app.py
-   ```
+# Terminal 3: Start demo
+cd demo && python app.py
+```
 
-3. **Access the web interface**:
-   Open your browser and navigate to:
-   ```
-   http://localhost:7860
-   ```
+Ensure `config.yml` has `objective_fn: hf_intent_objective_fn`
+
+### Option B: Neural Network Router
+
+```bash
+# Terminal 1: Start CLIP server
+docker run -d --rm --name clip-server --gpus all -p 51000:51000 \
+  jinaai/clip-as-service:latest
+
+# Terminal 2: Start router service (with CLIP_SERVER env var)
+export CLIP_SERVER=localhost:51000
+cd llm-router && ./scripts/run_local.sh
+
+# Terminal 3: Start demo
+cd demo && python app.py
+```
+
+Ensure `config.yml` has `objective_fn: nn_objective_fn`
+
+**Access**: http://localhost:7860
 
 ## Usage
 
-1. **Text-only queries**: Simply type your message and click "Send"
-2. **Multimodal queries**: Upload an image and optionally add text, then click "Send"
-4. **Chat history**: Scroll through your conversation history
-5. **Clear chat**: Click "Clear Chat" to start a new session
+- **Text queries**: Type and click "Send"
+- **Multimodal**: Upload image + optional text, then "Send"
+- **Clear**: Use "Clear Chat" to reset
 
-## Example Queries
-
+Example queries:
 - "Explain quantum computing in simple terms"
-- "Carefully a Python function to calculate fibonacci numbers"
-- "Describe what you see in this image" (with image upload)
+- "Write a Python function to calculate fibonacci numbers"
+- "Describe what you see in this image" (with image)
 
 ## Troubleshooting
 
-### Router Connection Issues
-```
-Router error: Connection refused
-```
-**Solution**: Ensure the router service is running on `http://localhost:8001`
+| Issue | Solution |
+|-------|----------|
+| Services taking long to start | **Normal on first start** (~2-3 min). Models must load before backend starts.<br>• Check status: `docker compose ps`<br>• Check health: `docker inspect <container> --format='{{.State.Health.Status}}'`<br>• View logs: `docker logs qwen-router` or `docker logs clip-server` |
+| Router connection refused | Verify router service is running on port 8001: `docker ps` |
+| API key errors | Check `.env` has correct keys. Azure OpenAI needs both `AZURE_OPENAI_ENDPOINT` and `OPENAI_API_KEY` |
+| Router fails or wrong routing | Ensure `objective_fn` in `config.yml` matches running service:<br>• `hf_intent_objective_fn` needs `qwen-router`<br>• `nn_objective_fn` needs `clip-server`<br>Check: `docker ps` |
+| CLIP server connection failed | 1. Verify running: `docker ps \| grep clip`<br>2. Check logs: `docker logs clip-server`<br>3. Check health: `docker inspect clip-server --format='{{.State.Health.Status}}'` |
+| Qwen router connection failed | 1. Verify running: `docker ps \| grep qwen`<br>2. Check logs: `docker logs qwen-router`<br>3. Check health: `curl http://localhost:8011/health` |
+| Image upload errors | Ensure image format is supported (JPEG, PNG, etc.) |
 
-### API Key Issues
-```
-API key not configured for [model]
-```
-**Solution**: Check that your `.env` file has the correct API keys. For Azure OpenAI, ensure both `AZURE_OPENAI_ENDPOINT` and `OPENAI_API_KEY` are set correctly.
+## Quick Command Reference
 
-### Image Upload Issues
-```
-Error encoding image
-```
-**Solution**: Ensure the image is in a supported format (JPEG, PNG, etc.)
+### Docker Compose
+```bash
+# Start with profile
+docker compose --profile intent up -d --build  # or: --profile nn
 
-## Development
+# Check service status and health
+docker compose ps
+docker inspect <container-name> --format='{{.State.Health.Status}}'
 
-### Project Structure
+# Stop
+docker compose down
+
+# View logs
+docker logs router-backend
+docker logs qwen-router      # for intent profile
+docker logs clip-server      # for nn profile
+docker logs router-demo
+
+# Follow logs in real-time
+docker logs -f qwen-router   # or clip-server
+
+# Restart specific service
+docker compose restart router-backend
+```
+
+
+## Configuration Files
+
+- **Router config**: `src/nat_sfc_router/configs/config.yml`
+- **Environment**: `demo/.env` or `.env` (project root)
+- **Docker Compose**: `docker-compose.yml`
+
+## Project Structure
+
 ```
 demo/
-├── app.py              # Main application file
+├── app.py              # Main Gradio application
 ├── requirements.txt    # Python dependencies
-├── env_template.txt    # Example environment configuration
+├── env_template.txt    # Environment template
+├── Dockerfile          # Demo app container
+└── README.md           # This file
 ```
 
-### Customization
+## Customization
 
-- **Change port**: Modify the `server_port` parameter in `app.py`
-- **Add models**: Update the `MODELS` dictionary in `app.py`
-- **Modify UI**: Adjust the Gradio components in the `create_demo()` function
-
+- **Port**: Modify `server_port` in `app.py`
+- **Models**: Update `MODELS` dictionary in `app.py`
+- **UI**: Adjust Gradio components in `create_demo()` function

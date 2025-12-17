@@ -155,14 +155,33 @@ NVIDIA_API_KEY=nvapi-your-nvidia-key-here
 
 #### 2. Launch Services with Docker Compose
 
+**Option A: Intent-Based Router (Default, Recommended for Getting Started)**
+
 ```bash
-docker-compose up -d --build
+docker compose --profile intent up -d --build
 ```
 
 This starts three services:
 - **router-backend** (port 8001): Main routing service using NVIDIA NeMo Agent Toolkit
 - **qwen-router** (port 8011): Qwen 1.7B model server for intent-based routing
 - **demo-app** (port 7860): Interactive web interface
+
+**Option B: Neural Network Router**
+
+```bash
+docker compose --profile nn up -d --build
+```
+
+This starts three services:
+- **router-backend** (port 8001): Main routing service using NVIDIA NeMo Agent Toolkit
+- **clip-server** (port 51000): CLIP embedding server for neural network routing
+- **demo-app** (port 7860): Interactive web interface
+
+> **Note**: You must also update the `objective_fn` in `src/nat_sfc_router/configs/config.yml` to match your chosen profile:
+> - For intent-based router: `objective_fn: hf_intent_objective_fn`
+> - For neural network router: `objective_fn: nn_objective_fn`
+>
+> See the [demo README](demo/README.md) for detailed instructions on switching between routing methods.
 
 #### 3. Access the Demo
 
