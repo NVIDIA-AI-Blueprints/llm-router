@@ -16,6 +16,7 @@ from nat.cli.register_workflow import register_function
 from nat.data_models.function import FunctionBaseConfig
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 # Remote model configuration
 REMOTE_MODEL_URL = os.getenv("ROUTER_MODEL_URL")
@@ -217,6 +218,7 @@ async def hf_intent_objective_fn(config: HFIntentObjectiveConfig,
     def get_route_from_conversation(conversation: List[Dict[str, Any]]) -> str:
         """Determine the best route for the conversation (using remote model)."""
         inference_start = time.perf_counter()
+        logger.info("Routing with Intent Router")
         
         # Redact images from messages because the router does not support them
         # But it can still determine if the text intent requires image understanding
@@ -327,7 +329,7 @@ async def hf_intent_objective_fn(config: HFIntentObjectiveConfig,
         
         total_response_time = time.perf_counter() - response_start
 
-        logger.info(f"User intent: {user_intent} (total response time: {total_response_time*1000:.2f}ms)")
+        logger.warn(f"User intent: {user_intent} (total response time: {total_response_time*1000:.2f}ms)")
         return MAP_INTENT_TO_PIPELINE[user_intent], ""
     
 

@@ -412,15 +412,15 @@ async def nn_objective_fn(config: NNObjectiveConfig, _builder: Builder):
     model_thresholds = config.model_thresholds or {}
     model_costs = config.model_costs or {}
     
-    logger.info("nn_objective_fn: Configuration loaded")
-    logger.info(f"  Thresholds: {model_thresholds}")
-    logger.info(f"  Costs: {model_costs}")
+    #logger.info("nn_objective_fn: Configuration loaded")
+    #logger.info(f"  Thresholds: {model_thresholds}")
+    #logger.info(f"  Costs: {model_costs}")
     
     # Load router on startup - this happens BEFORE _response_fn
     # so it only happens once when the service starts
-    logger.info("nn_objective_fn: Initializing router...")
+    #logger.info("nn_objective_fn: Initializing router...")
     router = _load_router()
-    logger.info("nn_objective_fn: Router ready")
+    #logger.info("nn_objective_fn: Router ready")
     
     async def _response_fn(chat_request: OpenAIChatRequest) -> Tuple[str, Dict[str, float]]:
         """
@@ -433,6 +433,7 @@ async def nn_objective_fn(config: NNObjectiveConfig, _builder: Builder):
             Target model name to route the request to
         """
         response_start = time.perf_counter()
+        logger.info("Routing with NN Router") 
         
         try:
             # ===== EXTRACT MESSAGES =====
@@ -473,7 +474,7 @@ async def nn_objective_fn(config: NNObjectiveConfig, _builder: Builder):
                 f"time: {parse_time*1000:.2f}ms"
             )
 
-            logger.info(f"Routing with full text: {full_text} and number of images: {len(images)}")
+            logger.debug(f"Routing with full text: {full_text} and number of images: {len(images)}")
             
             # ===== ROUTE USING NEURAL NETWORK =====
             route_start = time.perf_counter()
@@ -510,7 +511,7 @@ async def nn_objective_fn(config: NNObjectiveConfig, _builder: Builder):
             cost_select_time = time.perf_counter() - cost_select_start
             confidence = probabilities.get(router_model, 0.0)
             
-            logger.info(
+            logger.warn(
                 f"Routing decision | "
                 f"Model: {router_model} | "
                 f"Confidence: {confidence:.3f} | "

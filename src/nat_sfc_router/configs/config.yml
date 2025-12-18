@@ -48,9 +48,9 @@ functions:
     # Model confidence thresholds - only route to model if confidence exceeds threshold
     # If top choice doesn't meet threshold, falls back to next best option that does
     model_thresholds:
-      'gpt-5-chat': 0.70
-      'nvidia/nemotron-nano-12b-v2-vl': 0.75
-      'nvidia/nvidia-nemotron-nano-9b-v2': 0.4
+      'gpt-5-chat': 0.5
+      'nvidia/nemotron-nano-12b-v2-vl': 0.65
+      'nvidia/nvidia-nemotron-nano-9b-v2': 0.6
     # Model cost factors for cost-based routing
     # Among models meeting their threshold, select the one with lowest cost
     # Typical values: expensive models (1.0), mid-tier (0.5), efficient (0.2-0.3)

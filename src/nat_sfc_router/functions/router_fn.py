@@ -25,6 +25,7 @@ from nat.data_models.function import FunctionBaseConfig
 from nat.data_models.component_ref import FunctionRef
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
 class SfcRouterConfig(FunctionBaseConfig, name="sfc_router"):

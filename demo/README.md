@@ -77,6 +77,17 @@ Two routing strategies are supported (only one can be active at a time due to GP
 
 5. **Access the UI**: http://localhost:7860
 
+6. **Understanding Route Decisions**: The best way to undertand the routing decisions is to watch the `router-backend` logs while interacting with the application. Open a terminal and run `docker logs -f router-backend`. Interact with the demo application. The logs will contain information on the route selection per turn:
+
+```
+## intent routing log
+router-backend  | User intent: hard_question (total response time: 94.51ms)
+
+
+## NN routing log
+router-backend  | Routing decision | Model: nvidia/nvidia-nemotron-nano-9b-v2 | Confidence: 0.978 | Selection: cost_optimized | Probabilities: {gpt-5-chat: 0.957, nvidia/nvidia-nemotron-nano-9b-v2: 0.978, Qwen/Qwen3-VL-8B-Instruct: 0.821} | Route+Select time: 80.14ms
+```
+
 ## Switching Routing Methods
 
 To switch between routing methods:
