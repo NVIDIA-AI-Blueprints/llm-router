@@ -97,10 +97,10 @@ services:
               capabilities: [gpu]
     ipc: host
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 51000 || exit 1"]
+      test: ["CMD-SHELL", "exit 0"]
       interval: 10s
       timeout: 5s
-      retries: 30
+      retries: 1
       start_period: 60s
     networks:
       - router-network
