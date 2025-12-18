@@ -45,12 +45,28 @@ Two routing strategies are supported (only one can be active at a time due to GP
    ```
    
    **Neural network router**:
+
+   First, edit `src/nat_sfc_router/configs/config.yml` to include:
+
+   ```yaml
+   ...
+     sfc_router_fn:
+      _type: sfc_router
+      objective_fn: nn_objective_fn
+   
+   workflow:
+    _type: sfc_router
+    objective_fn: nn_objective_fn
+   ```
+   
+   Then start the demo with the `nn` profile:
+   
    ```bash
    # First, update config.yml objective_fn to nn_objective_fn
    docker compose --profile nn up -d --build
    ```
 
-3. **Wait for services to be ready** (first time ~2-3 minutes):
+4. **Wait for services to be ready** (first time ~2-3 minutes):
    
    Services start in order with health checks:
    - `qwen-router` or `clip-server` loads model (~2 min)
@@ -59,7 +75,7 @@ Two routing strategies are supported (only one can be active at a time due to GP
    
    Check status: `docker compose ps`
 
-4. **Access the UI**: http://localhost:7860
+5. **Access the UI**: http://localhost:7860
 
 ## Switching Routing Methods
 

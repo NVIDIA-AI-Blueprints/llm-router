@@ -18,7 +18,7 @@ services:
       - ROUTER_MODEL_URL=http://qwen-router:8000
       - ROUTER_MODEL_NAME=Qwen/Qwen3-1.7B
       # Neural network router configuration
-      - CLIP_SERVER=clip-server:51000
+      - CLIP_SERVER=grpc://clip-server:51000
     runtime: nvidia
     deploy:
       resources:
