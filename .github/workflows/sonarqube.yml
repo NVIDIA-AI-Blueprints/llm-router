@@ -9,12 +9,18 @@ on:
 jobs:
   build:
     name: Analyze (main only)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.SONAR_RUNNER_LABEL }}
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
+      - name: Generate sonar-project.properties
+        run: |
+          cat > sonar-project.properties <<'EOF'
+          sonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
+          sonar.qualitygate.wait=true
+          EOF
       - uses: SonarSource/sonarqube-scan-action@v4
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
