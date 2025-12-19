@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     name: Analyze (main only)
-    runs-on: sonarqube-workflows-bp-sre
+    runs-on: ${{ vars.SONAR_RUNNER_LABEL }}
 
     steps:
       - uses: actions/checkout@v4
