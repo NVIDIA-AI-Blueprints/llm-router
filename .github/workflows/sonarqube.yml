@@ -2,31 +2,28 @@ name: SonarQube Analysis
 
 on:
   push:
-    branches: [main, develop]
-  pull_request:
     branches: [main]
-  workflow_dispatch:
+  # Uncomment to allow manual runs
+  # workflow_dispatch:
 
 jobs:
-  sonarqube:
-    uses: NVIDIA-AI-Blueprints/sonarqube-workflows/.github/workflows/sonarqube-reusable-template.yml@main
-    with:
-      # Required: Project identification (used to create project key)
-      organization: TEGRASW # See valid options below
-      team: Blueprints-SRE # Your team name
-      product: NVIDIA-AI-Blueprints # Product/project name
-      scmRepoName: llm-router # Repository name
+  build:
+    name: Analyze (main only)
+    runs-on: ubuntu-latest
 
-      # Required: Language and testing
-      language: python # go, python, java, javascript, typescript
-      # testCommand: go test -v -coverprofile=coverage.out ./...
-
-      # Optional: Additional project metadata
-      # mailingList: user1,user2,my-dl  # Notification recipients
-      # scmRepoUrl: https://github.com/NVIDIA-AI-Blueprints/my-service-repo
-      # nspectId: NSPECT-GLCE-X007     # nSpect integration ID
-      projectTags: CreatedBy-automation,WorkflowContact-blueprintsSre # Tags (letters, digits, dashes only)
-
-      # Optional: Behavior flags
-      skipProjectCreation: true # Set true if project already exists
-    secrets: inherit
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
+      - uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      # If you wish to fail your job when the Quality Gate is red, uncomment the
+      # following lines. This would typically be used to fail a deployment.
+      # We do not recommend to use this in a pull request. Prefer using pull request
+      # decoration instead.
+      # - uses: SonarSource/sonarqube-quality-gate-action@v1
+      #   timeout-minutes: 5
+      #   env:
+      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
