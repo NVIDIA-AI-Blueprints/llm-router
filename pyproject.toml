@@ -6,26 +6,34 @@ requires = ["setuptools >= 64", "setuptools-scm>=8"]
 name = "nat_sfc_router"
 dynamic = ["version"]
 dependencies = [
-    "nvidia-nat[phoenix]",
+    "nvidia-nat==1.2.1",
     "torch",
-    "transformers==4.51.3",
-    "numpy<2.00",
+    "transformers==5.0.0rc1",
+    "numpy",
     "scikit-learn",
     "openai",
     "requests",
-    "clip-client",
+    "clip-client==0.8.3",
     "joblib",
     "tqdm",
-    "Pillow",
+    "Pillow>=10.1.0",
     "datasets",
     "gradio",
     "python-dotenv",
-    "docarray==0.21.0"
+    "docarray==0.21.1"
 ]
-requires-python = ">=3.11.0"
+requires-python = "==3.12.*"
 description = "NeMo Agent toolkit router"
 keywords = ["ai", "rag", "agents"]
 classifiers = ["Programming Language :: Python"]
+
+[tool.uv]
+override-dependencies = [
+    "uvicorn==0.23.1",
+    "pydantic>=2.0.0",
+    "jina==3.34.0",
+    "docarray==0.21.1"
+]
 
 [project.entry-points.'nat.components']
 nat_multimodal_agent = "nat_sfc_router.register"

@@ -95,7 +95,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    ipc: host
     healthcheck:
       test: ["CMD-SHELL", "exit 0"]
       interval: 10s

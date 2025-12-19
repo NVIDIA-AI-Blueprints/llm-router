@@ -24,7 +24,7 @@ RUN uv --version
 # Copy only dependency files first for better layer caching
 COPY pyproject.toml uv.lock ./
 
-RUN uv venv --seed .venv --python 3.12
+RUN uv venv --seed .venv --python 3.12.12
 
 RUN uv sync --prerelease=allow
 
