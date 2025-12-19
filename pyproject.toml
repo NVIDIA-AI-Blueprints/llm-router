@@ -40,3 +40,6 @@ nat_sfc_router = [
     "configs/*.yml",
     "training/router_artifacts/*"
 ]
+
+[tool.uv] 
+managed = true
