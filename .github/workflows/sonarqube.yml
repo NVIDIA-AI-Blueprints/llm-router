@@ -19,7 +19,7 @@ jobs:
       - name: Generate sonar-project.properties
         run: |
           cat > sonar-project.properties <<'EOF'
-          sonar.projectKey=${{ SONAR_PROJECT_KEY }}
+          sonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
           sonar.qualitygate.wait=true
           EOF
       - uses: SonarSource/sonarqube-scan-action@v4
