@@ -28,6 +28,7 @@ keywords = ["ai", "rag", "agents"]
 classifiers = ["Programming Language :: Python"]
 
 [tool.uv]
+managed = true
 override-dependencies = [
     "uvicorn==0.23.1",
     "pydantic>=2.0.0",
@@ -48,6 +49,3 @@ nat_sfc_router = [
     "configs/*.yml",
     "training/router_artifacts/*"
 ]
-
-[tool.uv] 
-managed = true
