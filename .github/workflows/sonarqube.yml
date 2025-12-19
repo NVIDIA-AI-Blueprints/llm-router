@@ -3,6 +3,7 @@ name: SonarQube Analysis
 on:
   push:
     branches: [main]
+
   # Uncomment to allow manual runs
   # workflow_dispatch:
 
