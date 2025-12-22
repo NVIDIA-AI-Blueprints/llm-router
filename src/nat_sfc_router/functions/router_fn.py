@@ -49,7 +49,7 @@ async def sfc_router(config: SfcRouterConfig, builder: Builder):
 
     from nat_sfc_router.schema.openai_chat_request import OpenAIChatRequest
 
-    objective_fn = builder.get_function(config.objective_fn)
+    objective_fn = await builder.get_function(config.objective_fn)
 
     async def _response_fn(chat_request: OpenAIChatRequest) -> ChatCompletion:
         """Process SFC router request."""
