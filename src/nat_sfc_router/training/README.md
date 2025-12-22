@@ -264,14 +264,7 @@ python nn_router.py \
 
 ### Python Dependencies
 
-See `requirements.txt`:
-- `torch` - Neural network training
-- `numpy` - Array operations
-- `scikit-learn` - Metrics and utilities
-- `clip-client` - CLIP embedding generation
-- `datasets` - HuggingFace datasets
-- `openai` - API clients for model evaluation
-- `tqdm` - Progress bars
+The Python scripts can be run using a virtual environment that installs the `nat_sfc_router` package. 
 
 ### External Services
 
