@@ -12,6 +12,8 @@ import requests
 from typing import List, Dict, Optional, Tuple
 from dotenv import load_dotenv
 from openai import AzureOpenAI, OpenAI
+from PIL import Image
+import io
 
 # Load environment variables
 load_dotenv()
@@ -57,10 +59,31 @@ MODELS = {
 }
 
 
-def encode_image_to_base64(image_path: str) -> str:
-    """Encode an image file to base64 string."""
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode('utf-8')
+def encode_image_to_base64(image_path: str, max_size: Tuple[int, int] = (800, 800)) -> str:
+    """
+    Resize and encode an image file to base64 string.
+    
+    Args:
+        image_path: Path to the image file
+        max_size: Maximum dimensions (width, height) to resize to
+        
+    Returns:
+        Base64 encoded string of the resized image
+    """
+    with Image.open(image_path) as img:
+        # Convert RGBA to RGB if necessary
+        if img.mode == 'RGBA':
+            img = img.convert('RGB')
+        
+        # Resize image while maintaining aspect ratio
+        img.thumbnail(max_size, Image.Resampling.LANCZOS)
+        
+        # Save to bytes buffer with compression
+        buffer = io.BytesIO()
+        img.save(buffer, format='JPEG', quality=85, optimize=True)
+        buffer.seek(0)
+        
+        return base64.b64encode(buffer.read()).decode('utf-8')
 
 
 def call_router(messages: List[Dict]) -> Tuple[Optional[str], Optional[str]]:
@@ -111,7 +134,8 @@ def call_model_azure_openai(model_config: Dict, messages: List[Dict]) -> Tuple[O
         
         response = client.chat.completions.create(
             model=model_config["name"],
-            messages=messages
+            messages=messages,
+            max_tokens=4096
         )
         
         return response.choices[0].message.content, None
@@ -136,7 +160,7 @@ def call_model_nvidia(model_config: Dict, messages: List[Dict]) -> Tuple[Optiona
         response = client.chat.completions.create(
             model=model_config["name"],
             messages=messages,
-            max_tokens=1024
+            max_tokens=4096
         )
         
         return response.choices[0].message.content, None
@@ -211,6 +235,25 @@ def format_user_message_for_display(text: str, image_path: Optional[str]) -> str
     return text
 
 
+def limit_conversation_history(messages: List[Dict], max_exchanges: int = 5) -> List[Dict]:
+    """
+    Limit conversation history to the most recent N user/assistant exchanges.
+    
+    Args:
+        messages: List of message dicts with 'role' and 'content'
+        max_exchanges: Maximum number of user/assistant exchanges to keep
+        
+    Returns:
+        Limited list of messages
+    """
+    if len(messages) <= max_exchanges * 2:
+        return messages
+    
+    # Keep the most recent messages (each exchange is 2 messages: user + assistant)
+    # Always include the last message which is the current user message
+    return messages[-(max_exchanges * 2):]
+
+
 def chat(message: str, image: Optional[str], history: List[List]) -> Tuple[List[List], str]:
     """
     Process a chat message through the router and model.
@@ -252,6 +295,9 @@ def chat(message: str, image: Optional[str], history: List[List]) -> Tuple[List[
     # Add current message
     current_message = format_message_with_image(message or "What's in this image?", image)
     messages.append(current_message)
+    
+    # Limit conversation history to most recent 5 exchanges to prevent token overflow
+    messages = limit_conversation_history(messages, max_exchanges=5)
     
     # Step 1: Call router to determine model
     status = "🔍 Routing request..."

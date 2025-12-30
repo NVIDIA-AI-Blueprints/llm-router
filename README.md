@@ -282,9 +282,11 @@ Uses CLIP embeddings to encode text/image pairs, then a trained neural network t
 
 **Use Case**: When you have historical data and want data-driven routing decisions
 
-**Training Required**: See notebooks for training pipeline:
+**Training Recommended**: See notebooks for training pipeline:
 - `2_Embedding_NN_Training.ipynb` - Training the neural network
 - `3_Embedding_NN_Usage.ipynb` - Using the trained router
+
+> Note: The GitHub repository includes a pre-trained neural network and the weights are stored in `llm-router/src/nat_sfc_router/training/router_artifacts`.  The notebook `2_Embedding_NN_Training.ipynb` re-trains the neural network and over-writes those weights. You can run the usage notebook or demo app without running the training notebook to use the existing neural network OR you can run the training notebook and then use this notebook or demo app with your neural network.
 
 ## Deployment Options
 
@@ -346,7 +348,7 @@ The router backend can use one of two strategies, configured by setting the `obj
 
 1. **Intent-Based Routing (`hf_intent_objective_fn`)**: Uses the Qwen 1.7B model to classify user intents and map them to models. Intent mappings are defined in `src/nat_sfc_router/functions/hf_intent_objective_fn.py`. No training required.
 
-2. **Auto-Routing (`nn_objective_fn`)**: Uses CLIP embeddings and a trained neural network to predict optimal models. Requires training on your data using the provided notebooks. Models are stored in `src/nat_sfc_router/training/router_artifacts/`.
+2. **Auto-Routing (`nn_objective_fn`)**: Uses CLIP embeddings and a trained neural network to predict optimal models. Models are stored in `src/nat_sfc_router/training/router_artifacts/` and can be retrained.
 
 ### Using the Router
 

@@ -1,6 +1,7 @@
+.dockerignore
 .gitattributes
 .gitignore
-1_ArchRouter_Example.ipynb
+1_IntentRouter_Example.ipynb
 2_Embedding_NN_Training.ipynb
 3_Embedding_NN_Usage.ipynb
 Dockerfile
@@ -11,6 +12,7 @@ SECURITY.md
 configs
 docker-compose.yml
 pyproject.toml
+qwen3_nonthinking.jinja
 uv.lock
 .github/CODEOWNERS
 .github/folder_README.md

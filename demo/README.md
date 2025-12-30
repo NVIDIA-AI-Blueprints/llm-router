@@ -66,6 +66,9 @@ Two routing strategies are supported (only one can be active at a time due to GP
    docker compose --profile nn up -d --build
    ```
 
+   The GitHub repository includes a pre-trained neural network and the weights are stored in `llm-router/src/nat_sfc_router/training/router_artifacts`.  The notebook `2_Embedding_NN_Training.ipynb` re-trains the neural network and over-writes those weights. You can run the demo app without running the training notebook to use the existing neural network OR you can run the training notebook and then use the demo app with your neural network.
+
+
 4. **Wait for services to be ready** (first time ~2-3 minutes):
    
    Services start in order with health checks:
