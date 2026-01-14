@@ -100,3 +100,18 @@ jobs:
           password: ${{ secrets.SMTP_PASSWORD }}
           convert_markdown: true
           
+          # Email details
+          subject: "QA Test Workflow Result for ${{ github.repository }}"
+          #to: Github-Action-Blueprint-QA@nvidia.com
+          to: ryanzh@nvidia.com
+          from: github-workflow-notification@gmail.com
+          html_body: |
+            <p>Hello,</p>
+            
+            <p>The workflow for repository: <strong>${{ github.repository }}</strong> has completed.<br>
+            <strong>Result:</strong> ${{ steps.set_result.outputs.RESULT }}</p>
+            
+            <p>You can review the details on GitHub:<br>
+            <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}</a></p>
+            
+            <p>Thanks!</p>      
