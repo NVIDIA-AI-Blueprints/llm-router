@@ -83,3 +83,20 @@ jobs:
              result.html
              /workspace/llm_router.html
           retention-days: 30
+
+      - name: Set result output
+        id: set_result
+        if: always()  
+        run: |
+          echo "RESULT=$(if [ ${{ job.status }} == 'success' ]; then echo 'PASS'; else echo 'FAIL'; fi)" >> $GITHUB_OUTPUT
+   
+      - name: Send mail
+        uses: dawidd6/action-send-mail@6e71c855c9a091d80a519621b9fd3e8d252ca40c
+        if: always()
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          convert_markdown: true
+          
