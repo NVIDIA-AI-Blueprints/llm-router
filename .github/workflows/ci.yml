@@ -83,8 +83,3 @@ jobs:
              result.html
              /workspace/llm_router.html
           retention-days: 30
-            
-            <p>You can review the details on GitHub:<br>
-            <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}</a></p>
-            
-            <p>Thanks!</p>      
