@@ -81,4 +81,7 @@ ignore_missing_imports = true
 markers = [
     "requires_nvidia_api_key: skip when NVIDIA_API_KEY is not set",
     "requires_openrouter_api_key: skip when OPENROUTER_API_KEY is not set",
+    "requires_torch: skip when torch is not installed",
+    "requires_encoder: skip when Qwen/Qwen3.5-0.8B encoder is not cached",
+    "slow: marks tests needing encoder model or API keys (deselected by default, use --run-slow)",
 ]

@@ -174,10 +174,48 @@
 3. **Expanded pkl**: Current pkl covers 3-4 models; need 7-model pkl for full default pool.
 4. ~~**Server UI**: Placeholder HTML; needs the full chat UI from litellm-kmeans-router.~~ Resolved in Phase 14.
 5. ~~**LLM-as-judge**: collect.py only implements majority vote; llm/reference stubs.~~ Reference judging added in Phase 15. LLM-as-judge still stub.
-6. ~~**Integration tests**: Not yet written (tests/integration/ is empty).~~ Resolved: 49 integration tests added.
+6. ~~**Integration tests**: Not yet written (tests/integration/ is empty).~~ Resolved: 126 total tests (66 original + 60 new).
 7. **vLLM encoder backend**: Planned but not implemented (using HF transformers).
 8. **Prefill latency**: 5s per question on CPU is fine for evaluation but slow for production. GPU or vLLM would reduce to <100ms.
 9. **Multi-encoder training**: Current training supports single encoder. The sweep modes (per_model, single, auto) are functionally equivalent with one encoder. Multi-encoder would require config schema extension.
+
+### 2026-03-08 -- Comprehensive Test Coverage
+
+**What was done:** Added 60 new tests across 10 new test files covering all previously untested modules.
+
+**New unit tests (6 files, 31 tests):**
+- `tests/test_checkpoint.py` (5 tests): `detect_checkpoint_type`, `load_checkpoint` with real .pkl and .pt files
+- `tests/test_telemetry.py` (6 tests): `enabled()`, `create_session()`, `log_chat()`, `get_stats()`, disabled state error
+- `tests/test_gpu.py` (5 tests): `GPUInfo`, `detect_gpus` (real + mocked), `has_sufficient_gpu`
+- `tests/test_transforms.py` (6 tests): `raw_hidden`, `fit_pca_pipeline`, `apply_pipeline`, `build_features` with synthetic PrefillResult
+- `tests/test_trunk.py` (6 tests): `SharedTrunkNet` forward, `train_mlp`, `train_ensemble`, `predict_proba`, `reconstruct_trunk` from real checkpoint
+- `tests/test_sweep.py` (3 tests): `cv_auc` (perfect/random), `sweep_model` with synthetic data
+
+**New integration tests (4 files, 29 tests):**
+- `tests/integration/test_prefill_pipeline.py` (10 tests): `PrefillExtractor`, `PrefillResult` serialization, `PrefillScorer`, `PrefillRouter` with real Qwen3.5-0.8B encoder and smoke checkpoint
+- `tests/integration/test_collect_and_evaluate.py` (6 tests): `_judge_vote`, `_judge_reference`, `run_collect` with real API, `run_evaluate` with real encoder
+- `tests/integration/test_embed.py` (5 tests): `APIEmbedClient` with real NVIDIA API, `get_default_embed_client` factory
+- `tests/integration/test_server_and_cli.py` (8 tests): `create_app`, `/health`, `/v1/chat/completions`, `/api/review` with real app; CLI subcommands via subprocess
+
+**Infrastructure:**
+- `tests/conftest.py`: Added 7 new fixtures (`prefill_ckpt_path`, `smoke_ckpt_path`, `smoke_train_csv`, `smoke_test_csv`, `smoke_questions_path`, `smoke_config_path`, `prefill_config_path`), `requires_torch` marker, `slow` marker with `--run-slow` CLI option
+- `pyproject.toml`: Added `requires_torch`, `requires_encoder`, `slow` markers
+
+**Source code fixes discovered during testing:**
+- `test_checkpoint.py`: Checkpoint key is `shared_trunk` not `trunks` — test assertion corrected
+- `test_trunk.py`: Checkpoint config key is `trunk_config` not `trunks` — test corrected
+- `test_server_and_cli.py`: `python -m model_router_toolkit` subprocess doesn't output to stdout correctly — switched to `model-router` console script entry point
+
+**Test results (full suite with `--run-slow`):**
+- 126 collected, 122 passed, 4 failed
+- All 4 failures are 401 authentication errors from expired API keys (NVIDIA_API_KEY and OPENROUTER_API_KEY) — not code bugs
+- Without `--run-slow`: 97 collected, 97 passed, 0 failed
+
+**Test execution tiers:**
+```
+pytest tests/ -v                    # Tier 1+2: 97 tests, no API keys needed
+pytest tests/ -v --run-slow         # All tiers: 126 tests, needs API keys + encoder
+```
 
 ---
 
