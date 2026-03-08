@@ -26,3 +26,8 @@ configs/generated.yaml
 data/*.csv
 data/*.txt
 checkpoints/
+
+# Development / AI-assistant artifacts (not distributed)
+AGENTS.md
+CLAUDE.md
+IMPLEMENTATION-LOG.md

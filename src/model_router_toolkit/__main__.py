@@ -186,9 +186,13 @@ def main():
 
     # ── serve-config ───────────────────────────────────────────────────
     sc_p = subparsers.add_parser(
-        "serve-config", help="Generate serve config from checkpoint",
+        "serve-config", help="Generate serve config from checkpoint (coming soon)",
     )
-    sc_p.set_defaults(func=lambda _: print("Not yet implemented"))
+    sc_p.set_defaults(func=lambda _: print(
+        "serve-config is not yet available.\n"
+        "Use 'model-router setup' to generate a config interactively, or\n"
+        "copy and edit one of the example configs in configs/."
+    ))
 
     args = parser.parse_args()
     try:

@@ -174,7 +174,34 @@
 3. **Expanded pkl**: Current pkl covers 3-4 models; need 7-model pkl for full default pool.
 4. ~~**Server UI**: Placeholder HTML; needs the full chat UI from litellm-kmeans-router.~~ Resolved in Phase 14.
 5. ~~**LLM-as-judge**: collect.py only implements majority vote; llm/reference stubs.~~ Reference judging added in Phase 15. LLM-as-judge still stub.
-6. **Integration tests**: Not yet written (tests/integration/ is empty).
+6. ~~**Integration tests**: Not yet written (tests/integration/ is empty).~~ Resolved: 49 integration tests added.
 7. **vLLM encoder backend**: Planned but not implemented (using HF transformers).
 8. **Prefill latency**: 5s per question on CPU is fine for evaluation but slow for production. GPU or vLLM would reduce to <100ms.
 9. **Multi-encoder training**: Current training supports single encoder. The sweep modes (per_model, single, auto) are functionally equivalent with one encoder. Multi-encoder would require config schema extension.
+
+---
+
+## TODO — Remaining Work for Customer Shipping
+
+### Not Implemented (Requires Custom Implementation)
+
+These items are referenced in docs or configs but require net-new implementation work beyond what's in this project:
+
+- [ ] **KMeans training pipeline** (`kmeans/train.py`) — Currently raises `NotImplementedError`. Planned pipeline: embed all questions, fit KMeans (n_clusters=100), compute per-cluster per-model accuracy, fit Platt calibrators, save pkl. Blocked at CLI with a clear message.
+- [ ] **Encoder server** (`scripts/serve-encoder.py`) — Stub that exits immediately. Needed for production prefill routing where the encoder runs on a separate GPU server (e.g., Qwen3.5-35B-A3B). Requires FastAPI + transformers server implementation. Config `local-prefill.yaml` was removed since it depended on this.
+- [ ] **LLM-as-judge** (`collect.py`, `--judge llm`) — Not implemented. Would use a frontier model to evaluate answer correctness instead of majority vote. Requires prompt engineering and model selection logic.
+- [ ] **vLLM encoder backend** — Using HF transformers for extraction. vLLM integration would reduce prefill latency from ~5s (CPU) to <100ms (GPU). Requires vLLM client implementation in `prefill/extract.py`.
+- [ ] **Multi-encoder training** — Current training uses a single encoder. Supporting multiple encoders per model (e.g., different chat templates) would require config schema extension and changes to `prefill/train.py`.
+- [ ] **Expanded 7-model default checkpoint** — Current bundled pkl covers 3-4 models. A full default pool (nem-think, nem-nothink, nem-super, gptoss-20b, gptoss-120b, qwen-122b, gpt-5.2, claude-opus) requires collecting data and training a new checkpoint.
+- [ ] **Pydantic request validation** for `/v1/chat/completions` — Currently uses raw `request.json()`. Should add a Pydantic model for proper 422 responses on malformed input. Requires understanding of OpenAI request schema + litellm extensions.
+- [ ] **Safetensors migration** — Multiple files use `pickle.load()` and `torch.load(weights_only=False)` which can execute arbitrary code. Migrating to safetensors requires changes to the checkpoint format and all save/load paths. Security warnings have been added in the interim.
+
+### Polish Items (Can Be Done Incrementally)
+
+- [ ] **Replace `print()` with `logging`** throughout `evaluate.py`, `__main__.py`, `collect.py`, `setup_wizard.py`
+- [ ] **Add `__init__.py` exports** in `kmeans/` and `prefill/` (currently just docstrings, no `__all__` or re-exports)
+- [ ] **API reference docs** — Public Python API (`BaseRouter`, `RoutingResult`, `ModelRoutingStrategy`, `PoolConfig`) has no reference documentation
+- [ ] **Deployment / performance guide** — No docs on recommended hardware, GPU vs CPU latency, scaling, cold start times
+- [ ] **Troubleshooting / FAQ** — Common issues (encoder download hangs, OpenRouter rate limits, checkpoint compatibility)
+- [ ] **GPU service in Docker** — Dockerfile has `proxy-gpu` stage but no compose service or GPU resource configuration
+- [ ] **Deprecated FastAPI `on_event`** in `proxy/startup.py` — Should migrate to `lifespan` pattern

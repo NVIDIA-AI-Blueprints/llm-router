@@ -1,3 +1,5 @@
+# Smoke test config: 2-model pool for quick testing.
+# Uses the same encoder as production but with a lightweight checkpoint.
 routing:
   method: prefill
   checkpoint: checkpoints/smoke/prefill_router.pt

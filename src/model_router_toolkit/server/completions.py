@@ -22,7 +22,7 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
     max_tokens = body.get("max_tokens", 4096)
 
     if "tolerance" in body:
-        strategy.tolerance = body.get("tolerance", 0.20)
+        strategy.set_request_tolerance(float(body.get("tolerance", 0.20)))
 
     # Use the first model name from config as the LiteLLM model group.
     # The routing strategy intercepts the call and picks the actual deployment.

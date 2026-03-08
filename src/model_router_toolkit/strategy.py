@@ -12,10 +12,15 @@ This is the primary integration point. Usage:
 
 from __future__ import annotations
 
-import threading
+import asyncio
+import contextvars
 from typing import Any
 
 from model_router_toolkit.router import BaseRouter, RoutingResult
+
+_request_tolerance: contextvars.ContextVar[float | None] = contextvars.ContextVar(
+    "request_tolerance", default=None,
+)
 
 
 class ModelRoutingStrategy:
@@ -23,6 +28,9 @@ class ModelRoutingStrategy:
 
     Implements async_get_available_deployment() and get_available_deployment()
     as required by litellm.router.CustomRoutingStrategyBase.
+
+    Tolerance can be overridden per-request via set_request_tolerance() which
+    uses contextvars for async-safe, per-request scoping.
     """
 
     def __init__(
@@ -34,7 +42,7 @@ class ModelRoutingStrategy:
         self._router = router
         self._tolerance = tolerance
         self._litellm_router: Any = None
-        self._local = threading.local()
+        self._last_result: RoutingResult | None = None
 
     @classmethod
     def from_config(cls, config_path: str, **kwargs: Any) -> ModelRoutingStrategy:
@@ -53,9 +61,18 @@ class ModelRoutingStrategy:
     def tolerance(self, value: float) -> None:
         self._tolerance = max(0.0, min(1.0, value))
 
+    def set_request_tolerance(self, value: float) -> None:
+        """Set tolerance for the current async request context only."""
+        _request_tolerance.set(max(0.0, min(1.0, value)))
+
+    @property
+    def effective_tolerance(self) -> float:
+        """Tolerance for the current request: per-request override or default."""
+        return _request_tolerance.get() or self._tolerance
+
     @property
     def last_result(self) -> RoutingResult | None:
-        return getattr(self._local, "last_result", None)
+        return self._last_result
 
     @property
     def router(self) -> BaseRouter:
@@ -94,13 +111,13 @@ class ModelRoutingStrategy:
             text = input
 
         if not text:
-            self._local.last_result = None
+            self._last_result = None
             if self._litellm_router:
                 return self._litellm_router.model_list[0]
             return {}
 
-        result = self._router.route(text, tolerance=self._tolerance)
-        self._local.last_result = result
+        result = self._router.route(text, tolerance=self.effective_tolerance)
+        self._last_result = result
 
         dep = self._find_deployment(result.selected_model)
         if dep:
@@ -118,7 +135,7 @@ class ModelRoutingStrategy:
         specific_deployment: bool | None = False,
         request_kwargs: dict | None = None,
     ) -> dict:
-        return self._route_and_select(model, messages, input)
+        return await asyncio.to_thread(self._route_and_select, model, messages, input)
 
     def get_available_deployment(
         self,

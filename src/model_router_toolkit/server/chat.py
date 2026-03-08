@@ -30,12 +30,12 @@ async def _chat_stream(request: Request, req: ChatRequest):
     config = request.app.state.config
 
     enabled = set(req.enabled_models) if req.enabled_models else {m.name for m in config.models}
-    strategy.tolerance = req.tolerance
+    tolerance = max(0.0, min(1.0, req.tolerance))
 
     messages = [{"role": "user", "content": req.message}]
 
     t0 = time.perf_counter()
-    result = strategy.router.route(req.message, tolerance=req.tolerance)
+    result = strategy.router.route(req.message, tolerance=tolerance)
     route_ms = (time.perf_counter() - t0) * 1000
 
     filtered = [
@@ -47,7 +47,7 @@ async def _chat_stream(request: Request, req: ChatRequest):
         filtered = list(zip(result.model_names, result.confidences, result.costs))
 
     p_max = max(c for _, c, _ in filtered)
-    threshold = p_max - req.tolerance
+    threshold = p_max - tolerance
     cost_sorted = sorted(filtered, key=lambda x: x[2].estimated_total_cost)
     selected = cost_sorted[-1][0]
     for name, conf, _ in cost_sorted:

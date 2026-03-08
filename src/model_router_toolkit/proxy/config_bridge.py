@@ -6,12 +6,15 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from model_router_toolkit.config import PoolConfig, load_config
+
+logger = logging.getLogger(__name__)
 
 
 def generate_litellm_config(
@@ -114,4 +117,9 @@ def _api_key_env_var(litellm_model: str, api_base: str) -> str:
     if "openrouter" in api_base:
         return "OPENROUTER_API_KEY"
 
+    logger.warning(
+        "Could not determine API key env var for model %r (api_base=%r); "
+        "falling back to OPENAI_API_KEY",
+        litellm_model, api_base,
+    )
     return "OPENAI_API_KEY"

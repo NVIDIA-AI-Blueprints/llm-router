@@ -31,9 +31,11 @@ def run_train(
 
     method = config.routing.method.lower()
     if method == "kmeans":
-        from model_router_toolkit.kmeans.train import train_kmeans
-
-        checkpoint_path = train_kmeans(config, data_path, output_dir)
+        raise ValueError(
+            "KMeans training is not yet available. Use method: prefill in your config.\n"
+            "KMeans routing supports inference with pre-trained checkpoints (.pkl) only.\n"
+            "See IMPLEMENTATION-LOG.md for the planned pipeline."
+        )
     elif method == "prefill":
         from model_router_toolkit.prefill.train import train_prefill
 

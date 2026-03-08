@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import csv
+import logging
 import re
 from collections import Counter
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize(text: str) -> str:
@@ -125,6 +128,10 @@ def run_collect(
                 )
                 outputs_by_model[model_spec.name] = (content, out_tokens)
             except Exception:
+                logger.warning(
+                    "Model %s failed on question: %.80s...",
+                    model_spec.name, q, exc_info=True,
+                )
                 outputs_by_model[model_spec.name] = ("", 0)
 
         if judge_method == "vote":

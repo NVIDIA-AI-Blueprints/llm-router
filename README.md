@@ -109,21 +109,44 @@ models:
     cost_per_m_output_tokens: 0.16
 ```
 
-See `configs/` for full examples. See `docs/` for the [training guide](docs/training-guide.md), [evaluation guide](docs/evaluation-guide.md), [architecture](docs/architecture.md), and [integration guide](docs/integration.md).
+See `configs/` for full examples and `configs/schema.md` for the config reference. See `docs/` for the [training guide](docs/training-guide.md), [evaluation guide](docs/evaluation-guide.md), [architecture](docs/architecture.md), [integration guide](docs/integration.md), and [model pool reference](docs/model-pool-reference.md).
 
 ## LiteLLM SDK Integration
 
 ```python
+from litellm import Router
 from model_router_toolkit import ModelRoutingStrategy
 
+router = Router(model_list=my_models)
 strategy = ModelRoutingStrategy.from_config("configs/prefill-qwen08b.yaml")
-litellm.set_custom_routing_strategy(strategy)
-response = litellm.completion(model="model-router/default", messages=[...])
+router.set_custom_routing_strategy(strategy)
+
+response = await router.acompletion(
+    model="nem-think",
+    messages=[{"role": "user", "content": "Hello"}],
+)
 ```
 
 ## Development
 
 ```bash
 pip install -e '.[dev,prefill]'
-pytest tests/ --ignore=tests/integration/ -v
 ```
+
+### Running Tests
+
+```bash
+# Unit tests (no API keys or checkpoints needed)
+pytest tests/ --ignore=tests/integration/ -v
+
+# Integration tests (no API keys needed; tests use mocks)
+pytest tests/integration/ -v
+
+# All tests
+pytest tests/ -v
+
+# With coverage
+pytest tests/ --cov=model_router_toolkit --cov-report=term-missing
+```
+
+Note: Some KMeans unit tests are skipped if `checkpoints/kmeans_c100_db.pkl` is not present.

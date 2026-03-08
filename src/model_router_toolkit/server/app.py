@@ -104,10 +104,11 @@ def create_app(config_path: str) -> FastAPI:
 
     app = FastAPI(title="Model Router Toolkit", lifespan=lifespan)
 
+    cors_origins = os.environ.get("CORS_ORIGINS", "*").split(",")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
+        allow_origins=[o.strip() for o in cors_origins],
+        allow_credentials=cors_origins != ["*"],
         allow_methods=["*"],
         allow_headers=["*"],
     )

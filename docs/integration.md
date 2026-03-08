@@ -39,7 +39,7 @@ response = client.chat.completions.create(
 print(response.choices[0].message.content)
 ```
 
-### Environment Variable (OpenClaw, OpenCode, etc.)
+### Environment Variable (LLM-powered tools, coding assistants, etc.)
 
 ```bash
 export OPENAI_API_BASE=http://localhost:8000/v1
@@ -67,14 +67,20 @@ Open `http://localhost:8000/` in a browser for the interactive playground with r
 For applications already using LiteLLM, add routing without running a separate server:
 
 ```python
-import litellm
+from litellm import Router
 from model_router_toolkit import ModelRoutingStrategy
 
-strategy = ModelRoutingStrategy.from_config("configs/prefill-qwen08b.yaml")
-litellm.set_custom_routing_strategy(strategy)
+model_list = [
+    {"model_name": "nem-think", "litellm_params": {"model": "openrouter/nvidia/nemotron-3-nano-30b-a3b"}},
+    {"model_name": "nem-nothink", "litellm_params": {"model": "openrouter/nvidia/nemotron-3-nano-30b-a3b"}},
+]
 
-response = litellm.completion(
-    model="model-router/default",
+router = Router(model_list=model_list)
+strategy = ModelRoutingStrategy.from_config("configs/prefill-qwen08b.yaml")
+router.set_custom_routing_strategy(strategy)
+
+response = await router.acompletion(
+    model="nem-think",
     messages=[{"role": "user", "content": "Prove sqrt(2) is irrational"}],
 )
 ```

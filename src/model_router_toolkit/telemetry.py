@@ -1,18 +1,35 @@
-"""SQLite telemetry for router sessions and chat events."""
+"""SQLite telemetry for router sessions and chat events.
+
+Disabled by default. Set ROUTER_TELEMETRY_DB to a file path to enable.
+"""
 
 from __future__ import annotations
 
+import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_DB_PATH = Path("router_telemetry.db")
+_DB_PATH: Path | None = (
+    Path(os.environ["ROUTER_TELEMETRY_DB"])
+    if os.environ.get("ROUTER_TELEMETRY_DB")
+    else None
+)
 _conn: sqlite3.Connection | None = None
+
+
+def enabled() -> bool:
+    """Return True if telemetry is configured."""
+    return _DB_PATH is not None
 
 
 def _get_conn() -> sqlite3.Connection:
     global _conn
+    if _DB_PATH is None:
+        raise RuntimeError(
+            "Telemetry not enabled. Set ROUTER_TELEMETRY_DB env var to a file path."
+        )
     if _conn is None:
         _conn = sqlite3.connect(str(_DB_PATH))
         _conn.execute("""
@@ -41,7 +58,7 @@ def create_session() -> int:
     conn = _get_conn()
     cur = conn.execute(
         "INSERT INTO sessions (created_at) VALUES (?)",
-        (datetime.utcnow().isoformat(),),
+        (datetime.now(timezone.utc).isoformat(),),
     )
     conn.commit()
     return cur.lastrowid
@@ -57,7 +74,7 @@ def log_chat(
     conn = _get_conn()
     cur = conn.execute(
         "INSERT INTO chat_events (session_id, question, selected_model, latency_ms, created_at) VALUES (?, ?, ?, ?, ?)",
-        (session_id, question, selected_model, latency_ms, datetime.utcnow().isoformat()),
+        (session_id, question, selected_model, latency_ms, datetime.now(timezone.utc).isoformat()),
     )
     conn.commit()
     return cur.lastrowid

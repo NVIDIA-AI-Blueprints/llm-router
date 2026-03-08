@@ -53,14 +53,21 @@ class APIEmbedClient:
 class LocalEmbedClient:
     """Embed via sentence-transformers in-process."""
 
-    def __init__(self, model_name: str = "nvidia/llama-nemotron-embed-1b-v2"):
+    def __init__(
+        self,
+        model_name: str = "nvidia/llama-nemotron-embed-1b-v2",
+        trust_remote_code: bool = True,
+    ):
         self._model_name = model_name
+        self._trust_remote_code = trust_remote_code
         self._model = None
 
     def _ensure_model(self):
         if self._model is None:
             from sentence_transformers import SentenceTransformer
-            self._model = SentenceTransformer(self._model_name, trust_remote_code=True)
+            self._model = SentenceTransformer(
+                self._model_name, trust_remote_code=self._trust_remote_code,
+            )
 
     def embed(self, text: str) -> np.ndarray:
         self._ensure_model()
