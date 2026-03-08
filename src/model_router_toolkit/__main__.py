@@ -68,6 +68,34 @@ def _cmd_collect(args):
     run_collect(args.config, args.questions, args.output, args.judge, **kwargs)
 
 
+def _cmd_proxy(args):
+    from model_router_toolkit.proxy.config_bridge import validate_model_alignment
+    from model_router_toolkit.proxy.startup import start_proxy
+
+    warnings = validate_model_alignment(args.litellm_config, args.router_config)
+    for w in warnings:
+        print(f"  Warning: {w}")
+
+    start_proxy(
+        args.litellm_config,
+        args.router_config,
+        host=args.host,
+        port=args.port,
+    )
+
+
+def _cmd_proxy_config(args):
+    from model_router_toolkit.proxy.config_bridge import generate_litellm_config
+
+    config = generate_litellm_config(args.config, output=args.output)
+    if args.output:
+        print(f"  Generated litellm config: {args.output}")
+    else:
+        import yaml
+
+        print(yaml.dump(config, default_flow_style=False, sort_keys=False))
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="model-router",
@@ -129,6 +157,32 @@ def main():
     )
     collect_p.add_argument("--references", default=None, help="Reference CSV for reference judging")
     collect_p.set_defaults(func=_cmd_collect)
+
+    # ── proxy ──────────────────────────────────────────────────────────
+    proxy_p = subparsers.add_parser(
+        "proxy",
+        help="Start LiteLLM Proxy with intelligent routing",
+    )
+    proxy_p.add_argument(
+        "--litellm-config", required=True,
+        help="LiteLLM proxy config.yaml (model_list, router_settings)",
+    )
+    proxy_p.add_argument(
+        "--router-config", required=True,
+        help="Pool config YAML (routing method, checkpoint, models)",
+    )
+    proxy_p.add_argument("--host", default="0.0.0.0")
+    proxy_p.add_argument("--port", type=int, default=4000)
+    proxy_p.set_defaults(func=_cmd_proxy)
+
+    # ── proxy-config ──────────────────────────────────────────────────
+    pc_p = subparsers.add_parser(
+        "proxy-config",
+        help="Generate a litellm proxy config.yaml from a pool config",
+    )
+    pc_p.add_argument("--config", required=True, help="Pool config YAML")
+    pc_p.add_argument("--output", default=None, help="Output path (prints to stdout if omitted)")
+    pc_p.set_defaults(func=_cmd_proxy_config)
 
     # ── serve-config ───────────────────────────────────────────────────
     sc_p = subparsers.add_parser(

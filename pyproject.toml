@@ -36,6 +36,10 @@ prefill = [
 litellm = [
     "litellm>=1.0",
 ]
+proxy = [
+    "litellm[proxy]>=1.50,<2.0",
+    "packaging>=20.0",
+]
 
 [project.scripts]
 model-router = "model_router_toolkit.__main__:main"
