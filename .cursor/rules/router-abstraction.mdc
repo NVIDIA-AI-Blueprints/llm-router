@@ -1,0 +1,20 @@
+# Router Abstraction
+
+## BaseRouter Contract
+Every router MUST implement:
+- `route(question: str, *, tolerance: float) -> RoutingResult`
+- `load(checkpoint_path: str | Path) -> None`
+- `unload() -> None` (optional, has default no-op)
+
+## RoutingResult
+Always return a full RoutingResult with:
+- model_names: list of all models scored
+- confidences: P(correct) per model
+- costs: CostEstimate per model
+- selected_model: the chosen model name
+- metadata: dict with method-specific info
+
+## Never bypass the abstraction
+- Don't call KMeansRouter or PrefillRouter directly in server/CLI code
+- Always go through config.build_router_from_config() or ModelRoutingStrategy.from_config()
+- The config determines which router runs, never hardcode it

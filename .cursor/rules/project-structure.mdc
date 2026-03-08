@@ -1,0 +1,18 @@
+# Project Structure
+
+## Package Layout
+- All source code lives in `src/model_router_toolkit/`
+- Use `src/` layout for proper packaging (setuptools finds packages in `src/`)
+- Tests live in `tests/` at project root, NOT inside `src/`
+- Config files in `configs/`, notebooks in `notebooks/`, docs in `docs/`
+
+## Naming Conventions
+- Python files: snake_case
+- Classes: PascalCase
+- All router implementations go in their method subpackage: `kmeans/`, `prefill/`
+- Server endpoints go in `server/`
+
+## Import Rules
+- Public API imports from `model_router_toolkit` (the __init__.py)
+- Internal imports use full paths: `from model_router_toolkit.kmeans.router import KMeansRouter`
+- Never import from `kmeans/` or `prefill/` directly in user-facing code — use the config-driven factory
