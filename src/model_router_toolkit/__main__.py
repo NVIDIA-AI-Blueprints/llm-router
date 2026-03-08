@@ -2,11 +2,6 @@ import argparse
 import sys
 
 
-def _cmd_setup(args):
-    from model_router_toolkit.setup_wizard import run_setup
-    run_setup()
-
-
 def _cmd_serve(args):
     import uvicorn
     from model_router_toolkit.server.app import create_app
@@ -68,6 +63,14 @@ def _cmd_collect(args):
     run_collect(args.config, args.questions, args.output, args.judge, **kwargs)
 
 
+def _cmd_serve_router(args):
+    import uvicorn
+    from model_router_toolkit.server.app import create_app
+
+    app = create_app(args.config, router_only=True)
+    uvicorn.run(app, host="0.0.0.0", port=args.port)
+
+
 def _cmd_proxy(args):
     from model_router_toolkit.proxy.config_bridge import validate_model_alignment
     from model_router_toolkit.proxy.startup import start_proxy
@@ -103,15 +106,20 @@ def main():
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # ── setup ──────────────────────────────────────────────────────────
-    setup_p = subparsers.add_parser("setup", help="Interactive setup wizard")
-    setup_p.set_defaults(func=_cmd_setup)
-
     # ── serve ──────────────────────────────────────────────────────────
     serve_p = subparsers.add_parser("serve", help="Start the router server")
-    serve_p.add_argument("--config", default="configs/generated.yaml")
+    serve_p.add_argument("--config", default="configs/prefill-qwen08b.yaml")
     serve_p.add_argument("--port", type=int, default=8000)
     serve_p.set_defaults(func=_cmd_serve)
+
+    # ── serve-router ───────────────────────────────────────────────────
+    sr_p = subparsers.add_parser(
+        "serve-router",
+        help="Start a router-only server (routing decisions, no LLM inference)",
+    )
+    sr_p.add_argument("--config", default="configs/prefill-qwen08b.yaml")
+    sr_p.add_argument("--port", type=int, default=8080)
+    sr_p.set_defaults(func=_cmd_serve_router)
 
     # ── train ──────────────────────────────────────────────────────────
     train_p = subparsers.add_parser(
@@ -190,8 +198,8 @@ def main():
     )
     sc_p.set_defaults(func=lambda _: print(
         "serve-config is not yet available.\n"
-        "Use 'model-router setup' to generate a config interactively, or\n"
-        "copy and edit one of the example configs in configs/."
+        "Copy and edit one of the example configs in configs/.\n"
+        "See configs/prefill-qwen08b.yaml (prefill) or configs/cloud-only.yaml (kmeans)."
     ))
 
     args = parser.parse_args()

@@ -16,7 +16,7 @@ import asyncio
 import contextvars
 from typing import Any
 
-from model_router_toolkit.router import BaseRouter, RoutingResult
+from model_router_toolkit.router import BaseRouter, RoutingResult, extract_user_text
 
 _request_tolerance: contextvars.ContextVar[float | None] = contextvars.ContextVar(
     "request_tolerance", default=None,
@@ -79,17 +79,7 @@ class ModelRoutingStrategy:
         return self._router
 
     def _extract_user_text(self, messages: list[dict[str, str]] | None) -> str:
-        if not messages:
-            return ""
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                content = msg.get("content", "")
-                if isinstance(content, str):
-                    return content
-                if isinstance(content, list):
-                    texts = [p.get("text", "") for p in content if p.get("type") == "text"]
-                    return " ".join(texts)
-        return ""
+        return extract_user_text(messages)
 
     def _find_deployment(self, model_name: str) -> dict | None:
         if self._litellm_router is None:

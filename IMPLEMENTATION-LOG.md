@@ -217,6 +217,33 @@ pytest tests/ -v                    # Tier 1+2: 97 tests, no API keys needed
 pytest tests/ -v --run-slow         # All tiers: 126 tests, needs API keys + encoder
 ```
 
+### 2026-03-08 -- Router-Only Server (serve-encoder) + Refactor
+
+**What was done:** Implemented the router-only deployment mode and refactored shared server code to eliminate duplication.
+
+**Router-only server:**
+- `src/model_router_toolkit/server/router_app.py`: FastAPI app factory (`create_router_app()`) serving `POST /v1/route` for routing decisions without LLM inference. Pydantic request/response models (`RouteRequest`, `RouteResponse`). Accepts both `{"question": "..."}` and `{"messages": [...]}` with per-request tolerance override.
+- `scripts/serve-encoder.py`: Standalone script wrapping `create_router_app()` with argparse CLI.
+- `__main__.py`: Added `serve-router` CLI subcommand: `model-router serve-router --config ... --port 8080`.
+
+**Shared code refactor (eliminated 3 duplication clusters):**
+- `router.py`: Added `extract_user_text()` as a standalone module-level function. Previously duplicated in `strategy.py._extract_user_text()` (method) and `router_app.py._extract_question()` (function). The canonical implementation handles both plain string and multipart content arrays. `strategy.py` now delegates to this function.
+- `server/_shared.py`: Extracted `warmup_router()`, `health_dict()`, and `models_list()`. Previously copy-pasted across `app.py` and `router_app.py`. Both app factories now import from `_shared`.
+- `app.py`: Removed `_warmup()`, inline `/health` dict, inline `/api/models` list — replaced with imports from `_shared`. Health response now includes `mode: "full"` (non-breaking addition).
+- `router_app.py`: Removed `_warmup()`, inline `/health` dict, inline `/api/models` list, full `_extract_question()` body — replaced with shared imports. `_extract_question()` now delegates to `extract_user_text()` for the messages case.
+
+**New tests:**
+- `tests/test_router_app.py` (20 tests): Unit tests with FakeRouter mock — `_extract_question` (6 cases), `_result_to_response`, health/models/route endpoints, negative tests (no inference endpoints).
+- `tests/integration/test_router_app.py` (9 tests, marked slow): Integration tests with real encoder and smoke checkpoint.
+
+**Tests passing:** 68/68 unit tests (48 existing + 20 new), all green after refactor.
+
+**Doc updates (same session):**
+- `docs/architecture.md`: Full "Deployment Modes" section with serve vs proxy vs Docker and decision guide.
+- `docs/integration.md`: Restructured into 4 integration paths with serve-vs-proxy decision table.
+- `README.md`: Both server and proxy modes documented under "4. Serve".
+- `docs/user-journeys.md`: Marked proxy-mode and deployment-mode gaps as resolved.
+
 ---
 
 ## TODO — Remaining Work for Customer Shipping
@@ -226,7 +253,7 @@ pytest tests/ -v --run-slow         # All tiers: 126 tests, needs API keys + enc
 These items are referenced in docs or configs but require net-new implementation work beyond what's in this project:
 
 - [ ] **KMeans training pipeline** (`kmeans/train.py`) — Currently raises `NotImplementedError`. Planned pipeline: embed all questions, fit KMeans (n_clusters=100), compute per-cluster per-model accuracy, fit Platt calibrators, save pkl. Blocked at CLI with a clear message.
-- [ ] **Encoder server** (`scripts/serve-encoder.py`) — Stub that exits immediately. Needed for production prefill routing where the encoder runs on a separate GPU server (e.g., Qwen3.5-35B-A3B). Requires FastAPI + transformers server implementation. Config `local-prefill.yaml` was removed since it depended on this.
+- [x] ~~**Encoder server** (`scripts/serve-encoder.py`) — Stub that exits immediately.~~ Resolved: `server/router_app.py` + `model-router serve-router` CLI. Serves routing decisions only (no LLM inference) via `POST /v1/route`. Standalone script removed in favor of CLI subcommand.
 - [ ] **LLM-as-judge** (`collect.py`, `--judge llm`) — Not implemented. Would use a frontier model to evaluate answer correctness instead of majority vote. Requires prompt engineering and model selection logic.
 - [ ] **vLLM encoder backend** — Using HF transformers for extraction. vLLM integration would reduce prefill latency from ~5s (CPU) to <100ms (GPU). Requires vLLM client implementation in `prefill/extract.py`.
 - [ ] **Multi-encoder training** — Current training uses a single encoder. Supporting multiple encoders per model (e.g., different chat templates) would require config schema extension and changes to `prefill/train.py`.
@@ -236,7 +263,7 @@ These items are referenced in docs or configs but require net-new implementation
 
 ### Polish Items (Can Be Done Incrementally)
 
-- [ ] **Replace `print()` with `logging`** throughout `evaluate.py`, `__main__.py`, `collect.py`, `setup_wizard.py`
+- [ ] **Replace `print()` with `logging`** throughout `evaluate.py`, `__main__.py`, `collect.py`
 - [ ] **Add `__init__.py` exports** in `kmeans/` and `prefill/` (currently just docstrings, no `__all__` or re-exports)
 - [ ] **API reference docs** — Public Python API (`BaseRouter`, `RoutingResult`, `ModelRoutingStrategy`, `PoolConfig`) has no reference documentation
 - [ ] **Deployment / performance guide** — No docs on recommended hardware, GPU vs CPU latency, scaling, cold start times

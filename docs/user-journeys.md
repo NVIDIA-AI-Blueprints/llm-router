@@ -1,6 +1,6 @@
 # Model Router Toolkit — User Journeys & Jobs to Be Done
 
-> **Version:** 1.0 | **Last Updated:** March 8, 2026
+> **Version:** 1.1 | **Last Updated:** March 8, 2026
 
 This document maps every user journey and job-to-be-done (JTBD) for the Model Router Toolkit, from first-touch exploration through production deployment and ongoing optimization. It also covers broader journeys where the toolkit is one component in a larger workflow.
 
@@ -27,7 +27,7 @@ This document maps every user journey and job-to-be-done (JTBD) for the Model Ro
 | Persona | Role | Primary Goal | Entry Point | Key Metric |
 |---------|------|-------------|-------------|------------|
 | **Evaluator** | AI team lead, PM, developer | Prove routing works in 5 min | Quickstart notebook | Time to first routing decision |
-| **Integrator** | Backend/ML engineer | Running router accepting requests | `model-router setup` + `serve` | Time to first routed API call |
+| **Integrator** | Backend/ML engineer | Running router accepting requests | `configs/` + `model-router serve` | Time to first routed API call |
 | **Optimizer** | ML engineer | Domain-tuned routing | `collect` + `train` + `evaluate` | AUC improvement, cost savings |
 | **Platform Engineer** | DevOps/infra engineer | Production-grade deployment | Docker + `model-router proxy` | Uptime, container health |
 | **LiteLLM User** | Developer with existing LiteLLM setup | Add routing to current stack | `ModelRoutingStrategy` SDK | Lines of code to integrate |
@@ -47,42 +47,84 @@ AI team leads, PMs, or developers evaluating whether intelligent model routing b
 
 ### Journey Steps
 
+The Evaluator tries **both** routing methods via two companion notebooks, understanding the tradeoffs between lightweight cloud-only routing and SOTA prefill-based routing.
+
+#### Track A: KMeans Routing (Cloud-Only, No GPU)
+
 | Step | Action | Asset | Success Criteria |
 |------|--------|-------|-----------------|
-| 1.1 | Open quickstart notebook | `notebooks/quickstart.ipynb` | Notebook loads without errors |
-| 1.2 | Enter API key | NVIDIA build.nvidia.com API key | Key validates successfully |
-| 1.3 | Load pre-trained router | `checkpoints/kmeans_c100_db.pkl` | Pickle loads, 100 clusters visible |
+| 1.1 | Open KMeans quickstart | `notebooks/quickstart.ipynb` | Notebook loads without errors |
+| 1.2 | Enter NVIDIA API key | build.nvidia.com API key | Key validates successfully |
+| 1.3 | Load pre-trained KMeans router | `checkpoints/kmeans_c100_db.pkl` | Pickle loads, 100 clusters visible |
 | 1.4 | Embed a question via API | NVIDIA embeddings API | 4096-dim vector returned |
-| 1.5 | See routing decision | Route function output | Model selected, probabilities displayed |
+| 1.5 | See KMeans routing decision | Cluster → Platt → select | Model selected, per-model probabilities displayed |
 | 1.6 | Call selected model | NVIDIA chat completions API | Streamed response returned |
 | 1.7 | Compare easy vs. hard question | Side-by-side routing | Different models selected for different complexity |
 | 1.8 | Review cost savings | Cost comparison output | Quantified savings percentage |
-| 1.9 | Decide next step | "What's Next" cell | Clear path to Journey 2 or Journey 3 |
+
+#### Track B: Prefill Routing (Encoder-Based, SOTA Accuracy)
+
+| Step | Action | Asset | Success Criteria |
+|------|--------|-------|-----------------|
+| 1.9 | Open prefill quickstart | `notebooks/quickstart-prefill.ipynb` | Notebook loads without errors |
+| 1.10 | Enter API key(s) | NVIDIA and/or OpenRouter API key | Key validates successfully |
+| 1.11 | Load encoder model | Qwen3.5-0.8B via transformers | Encoder loads (CPU or GPU) |
+| 1.12 | Extract hidden states for a question | Encoder forward pass | Hidden state tensor returned |
+| 1.13 | See prefill routing decision | Hidden states → PCA → MLP → select | Model selected, per-model P(correct) displayed |
+| 1.14 | Call selected model | API chat completion | Streamed response returned |
+| 1.15 | Compare easy vs. hard question | Side-by-side routing | Different models, different confidence profiles |
+| 1.16 | Review cost savings | Cost comparison output | Quantified savings percentage |
+
+#### Cross-Method Comparison
+
+| Step | Action | Asset | Success Criteria |
+|------|--------|-------|-----------------|
+| 1.17 | Compare both methods | Summary across both notebooks | Understand when KMeans vs. prefill is appropriate |
+| 1.18 | Understand tradeoffs | Method comparison table | Clear on accuracy, latency, infrastructure requirements |
+| 1.19 | Decide next step | "What's Next" sections | Clear path to Journey 2 or Journey 3, method chosen |
+
+### Method Comparison (What the Evaluator Learns)
+
+| Dimension | KMeans (Track A) | Prefill (Track B) |
+|-----------|-------------------|-------------------|
+| **Dependencies** | `requests`, `numpy`, `scikit-learn` | `torch`, `transformers` + API client |
+| **Infrastructure** | Cloud API calls only, no GPU | Encoder model (CPU ok, GPU preferred) |
+| **Routing latency** | ~100ms (embed API call) | ~1-5s (encoder forward pass, CPU) |
+| **Accuracy** | Good (embedding similarity) | SOTA (hidden state complexity analysis) |
+| **Checkpoint format** | `.pkl` (small, portable) | `.pt` (larger, requires torch) |
+| **Best for** | Quick evaluation, cloud-only, low latency | Production accuracy, domain-specific tuning |
 
 ### Assets Touched
 
-- `notebooks/quickstart.ipynb` — the entire journey lives here
+- `notebooks/quickstart.ipynb` — KMeans routing exploration (Track A)
+- `notebooks/quickstart-prefill.ipynb` — Prefill routing exploration (Track B)
 - `checkpoints/kmeans_c100_db.pkl` — bundled pre-trained KMeans router
-- External: `build.nvidia.com` embeddings + chat completions APIs
+- Prefill checkpoint (`.pt`) — pre-trained prefill router (if available)
+- External: `build.nvidia.com` embeddings + chat completions APIs, OpenRouter API
 
 ### Jobs-to-Be-Done Breakdown
 
 | JTBD | Current State | Completeness |
 |------|--------------|-------------|
-| Understand what routing does | Notebook cells explain concept | Partial — no visual diagram in notebook |
-| See a live routing decision | embed → cluster → Platt → select | Complete |
-| Verify cost savings | Cost comparison in output | Complete |
-| Compare routing methods | Only KMeans shown | Incomplete — no prefill quickstart linked |
-| Understand accuracy tradeoffs | Tolerance parameter present | Partial — tolerance impact not visualized |
+| Understand what routing does | Both notebooks explain concept | Partial — no visual diagram in notebooks |
+| See a live KMeans routing decision | embed → cluster → Platt → select | Complete |
+| See a live prefill routing decision | encode → hidden states → MLP → select | Complete (notebook exists) |
+| Compare both routing methods | Two separate notebooks | Partial — no cross-comparison summary cell |
+| Verify cost savings | Cost comparison in both notebooks | Complete |
+| Understand accuracy tradeoffs | Tolerance parameter in both | Partial — tolerance impact not visualized |
+| Understand infrastructure tradeoffs | Implicit from running both | Partial — no explicit comparison table in notebooks |
 | Share results with team | Notebook output | Partial — no export/share mechanism |
 
 ### Gaps & Friction Points
 
-1. **Checkpoint availability**: Notebook assumes `../checkpoints/kmeans_c100_db.pkl` exists — no download instructions
-2. **Model pool mismatch**: Notebook uses 3 models (nem-nothink, nem-think, gptoss-high); default configs use 4+
-3. **No prefill path**: Quickstart is KMeans-only; `notebooks/quickstart-prefill.ipynb` exists but diverges from the primary flow
-4. **API key guidance**: Link to build.nvidia.com but no step-by-step account creation guide
-5. **No "convinced" moment**: Missing a summary cell that quantifies "this saved X% cost with Y% accuracy retention"
+1. **Checkpoint availability**: KMeans notebook assumes `../checkpoints/kmeans_c100_db.pkl` exists — no download instructions. Prefill checkpoint availability unclear.
+2. **Model pool mismatch**: KMeans notebook uses 3 models (nem-nothink, nem-think, gptoss-high); prefill and default configs may use different pools
+3. **No cross-notebook comparison**: The two notebooks are standalone — no shared summary or comparison cell linking them
+4. **Prefill notebook dependencies**: Heavier install (`torch`, `transformers`) may surprise evaluators expecting the same 5-minute experience as KMeans
+5. **API key guidance**: Link to build.nvidia.com but no step-by-step account creation guide
+6. **No "convinced" moment**: Missing a summary cell in each notebook that quantifies "this saved X% cost with Y% accuracy retention"
+7. **Navigation between notebooks**: No clear "start here, then try the other" flow linking the two notebooks
+8. **Prefill on CPU timing**: If evaluator has no GPU, prefill may take 5+ seconds per question — expectations not set
 
 ---
 
@@ -101,50 +143,100 @@ Backend or ML engineers building LLM-powered applications who need a running rou
 | Step | Action | CLI/Asset | Success Criteria |
 |------|--------|-----------|-----------------|
 | 2.1 | Install toolkit | `pip install -e .` or `pip install -e '.[prefill]'` | Package installs without errors |
-| 2.2 | Run setup wizard | `model-router setup` | GPU detected, API keys validated, config generated |
-| 2.3 | Review generated config | `configs/generated.yaml` | Routing method, models, endpoints all correct |
-| 2.4 | Start server | `model-router serve --config configs/generated.yaml` | Server starts on port 8000, `/health` returns OK |
-| 2.5 | Open playground | Browser → `http://localhost:8000` | UI loads, model list appears |
-| 2.6 | Send test message via UI | Type question in playground | Routing card shows selection, response streams |
-| 2.7 | Adjust tolerance slider | Move slider in UI | Different model selected at different tolerances |
-| 2.8 | Connect downstream app | Set `OPENAI_API_BASE=http://localhost:8000/v1` | App's LLM calls route through the toolkit |
-| 2.9 | Verify routed traffic | Check server logs / telemetry | Requests flowing, models being selected |
-| 2.10 | Test with cURL | `curl -X POST http://localhost:8000/v1/chat/completions` | Valid OpenAI-compatible response |
+| 2.2 | Copy and customize a config | Copy from `configs/` (see Sub-Journeys 2a/2b), edit checkpoint, tolerance, model pool | Valid config YAML with correct endpoints and API key set |
+| 2.3 | Start server | `model-router serve --config configs/prefill-qwen08b.yaml` | Server starts on port 8000, `/health` returns OK |
+| 2.4 | Open playground | Browser → `http://localhost:8000` | UI loads, model list appears |
+| 2.5 | Send test message via UI | Type question in playground | Routing card shows selection, response streams |
+| 2.6 | Adjust tolerance slider | Move slider in UI | Different model selected at different tolerances |
+| 2.7 | Connect downstream app | Set `OPENAI_API_BASE=http://localhost:8000/v1` | App's LLM calls route through the toolkit |
+| 2.8 | Verify routed traffic | Check server logs / telemetry | Requests flowing, models being selected |
+| 2.9 | Test with cURL | `curl -X POST http://localhost:8000/v1/chat/completions` | Valid OpenAI-compatible response |
 
 ### Assets Touched
 
-- `src/model_router_toolkit/setup_wizard.py` — interactive wizard
 - `src/model_router_toolkit/server/` — FastAPI app, chat, completions
 - `server/static/index.html` — playground UI
 - `docs/integration.md` — downstream app configuration
-- `configs/*.yaml` — example and generated configs
+- `configs/*.yaml` — example configs (prefill-qwen08b, cloud-only, smoke-test, etc.)
 - `.env.example` — environment variable reference
 
 ### Sub-Journey 2a: KMeans Path (No GPU)
 
+Start from `configs/cloud-only.yaml`.
+
 | Step | Detail |
 |------|--------|
-| Setup wizard auto-selects KMeans | No NVIDIA GPU >= 16GB detected |
+| No GPU required | KMeans routing uses cloud embeddings |
 | Embeddings via API | NVIDIA or OpenRouter embedding endpoint |
 | Single process | Router server only, no encoder server |
 | Checkpoint | `.pkl` file (pre-trained or custom) |
 
 ### Sub-Journey 2b: Prefill Path (GPU Available)
 
+Start from `configs/prefill-qwen08b.yaml`.
+
 | Step | Detail |
 |------|--------|
-| Setup wizard recommends prefill | GPU >= 16GB detected |
+| GPU >= 16GB recommended | Prefill routing offers higher accuracy |
 | Encoder model loaded | Qwen3.5-0.8B via transformers (default) |
 | Hidden state extraction | Local GPU inference for routing features |
 | Checkpoint | `.pt` file (SharedTrunkNet ensemble) |
+
+### Sub-Journey 2c: Router-Only Mode (No LLM Inference)
+
+Deploy just the routing engine — returns which model to call, without actually calling it. Your application handles the LLM call itself.
+
+Start from `configs/prefill-qwen08b.yaml` (or any pool config). No API keys needed.
+
+| Step | Action | CLI/Asset | Success Criteria |
+|------|--------|-----------|-----------------|
+| 2c.1 | Install toolkit with prefill | `pip install -e '.[prefill]'` | Package installs without errors |
+| 2c.2 | Start router-only server | `model-router serve-router --config configs/prefill-qwen08b.yaml --port 8080` | Server starts, `/health` returns `mode: router-only` |
+| 2c.3 | Send a routing request | `curl -X POST http://localhost:8080/v1/route -d '{"question": "..."}'` | Returns `selected_model`, `confidences`, `costs` |
+| 2c.4 | Use messages format | POST with `{"messages": [{"role": "user", "content": "..."}]}` | Same routing response |
+| 2c.5 | Adjust tolerance per request | POST with `{"question": "...", "tolerance": 0.05}` | Tolerance affects model selection |
+| 2c.6 | Integrate with your app | App calls `/v1/route`, gets model name, dispatches LLM call itself | Routing decoupled from inference |
+
+**When to use this mode:**
+- You have your own LLM dispatch layer (custom gateway, existing LiteLLM, vLLM, etc.)
+- You want the router as a sidecar microservice
+- You don't want to give the toolkit your API keys
+- You want to log/audit routing decisions before acting on them
+
+**What you get vs. full `serve` mode:**
+
+| | `serve` (full) | `serve-router` (router-only) |
+|---|---|---|
+| Routing decisions | Yes | Yes |
+| LLM inference | Yes (via LiteLLM) | No |
+| Playground UI | Yes | No |
+| API keys required | Yes (model provider) | No |
+| Endpoint | `POST /v1/chat/completions` | `POST /v1/route` |
+| Response | LLM-generated text + routing metadata | Routing decision only (model, confidences, costs) |
+
+**Example response from `POST /v1/route`:**
+
+```json
+{
+  "selected_model": "nem-nothink",
+  "model_names": ["nem-think", "nem-nothink", "gptoss-high", "gpt-5.2"],
+  "confidences": {"nem-think": 0.92, "nem-nothink": 0.89, "gptoss-high": 0.85, "gpt-5.2": 0.81},
+  "costs": [
+    {"model": "nem-think", "estimated_total_cost": 0.0003, "cost_per_m_input_tokens": 0.20},
+    {"model": "nem-nothink", "estimated_total_cost": 0.0001, "cost_per_m_input_tokens": 0.04}
+  ],
+  "metadata": {"p_max": 0.92, "threshold": 0.72, "tolerance": 0.20, "route_ms": 4800}
+}
+```
 
 ### Jobs-to-Be-Done Breakdown
 
 | JTBD | Current State | Completeness |
 |------|--------------|-------------|
-| Install and run in < 10 min | Setup wizard + serve | Complete |
+| Install and run in < 10 min | Copy config + serve | Complete |
 | Get an OpenAI-compatible endpoint | `/v1/chat/completions` | Complete |
-| See what the router is doing | Playground UI with routing card | Complete |
+| Deploy routing without LLM inference | `model-router serve-router` | Complete |
+| See what the router is doing | Playground UI with routing card | Complete (full mode only) |
 | Connect my existing app | docs/integration.md with copy-paste configs | Complete |
 | Configure model pool | YAML config with schema docs | Complete |
 | Add/remove models | Edit YAML, restart server | Complete but manual |
@@ -281,12 +373,13 @@ DevOps and infrastructure engineers who need to deploy the router in a container
 
 ### Deployment Modes
 
-| Mode | Command | Port | Use Case |
-|------|---------|------|----------|
-| **Standalone server** | `model-router serve` | 8000 | Quick deployment, includes playground UI |
-| **LiteLLM Proxy** | `model-router proxy` | 4000 | Drop-in replacement for existing LiteLLM proxy |
-| **Docker (Proxy)** | `docker compose up` | 4000 | Containerized LiteLLM proxy with routing |
-| **Docker (GPU)** | Build `proxy-gpu` target | 4000 | Prefill routing in container |
+| Mode | Command | Port | Routing | Inference | Use Case |
+|------|---------|------|---------|-----------|----------|
+| **Standalone server** | `model-router serve` | 8000 | Yes | Yes | Quick deployment, includes playground UI |
+| **Router-only** | `model-router serve-router` | 8080 | Yes | No | Routing decisions as a microservice, no API keys needed |
+| **LiteLLM Proxy** | `model-router proxy` | 4000 | Yes | Yes | Drop-in replacement for existing LiteLLM proxy |
+| **Docker (Proxy)** | `docker compose up` | 4000 | Yes | Yes | Containerized LiteLLM proxy with routing |
+| **Docker (GPU)** | Build `proxy-gpu` target | 4000 | Yes | Yes | Prefill routing in container |
 
 ### Jobs-to-Be-Done Breakdown
 
@@ -380,7 +473,7 @@ Developers who already run LiteLLM (SDK or Proxy) and want to add intelligent ro
 
 ### Gaps & Friction Points
 
-1. **Proxy mode not documented in integration.md**: `model-router proxy` exists but integration.md only covers server mode and SDK
+1. ~~**Proxy mode not documented in integration.md**: `model-router proxy` exists but integration.md only covers server mode and SDK~~ Resolved: integration.md now covers all four paths (serve, proxy, SDK, direct library) with a decision guide
 2. **Config bridge edge cases**: What happens with model names that don't match between pool and LiteLLM config
 3. **No callback/logger integration**: Can't use ModelRoutingStrategy as a LiteLLM callback for scoring-only mode
 4. **Thread safety**: `last_result` uses thread-local storage but async safety across concurrent requests is unclear
@@ -529,22 +622,23 @@ Complete JTBD inventory across all personas.
 
 | # | Job | Persona | Asset | Status |
 |---|-----|---------|-------|--------|
-| D1 | Understand what model routing is | Evaluator | Quickstart notebook, README | Partial |
-| D2 | See a live routing decision | Evaluator | Quickstart notebook | Complete |
-| D3 | Quantify cost savings potential | Evaluator, QA Lead | Evaluation metrics | Complete |
-| D4 | Compare routing methods (KMeans vs. prefill) | Evaluator | Architecture docs | Documented, not demo'd |
-| D5 | Understand accuracy/cost tradeoff | All | Tolerance parameter, eval guide | Complete |
+| D1 | Understand what model routing is | Evaluator | Both quickstart notebooks, README | Partial |
+| D2 | See a live KMeans routing decision | Evaluator | `notebooks/quickstart.ipynb` | Complete |
+| D3 | See a live prefill routing decision | Evaluator | `notebooks/quickstart-prefill.ipynb` | Complete |
+| D4 | Quantify cost savings potential | Evaluator, QA Lead | Evaluation metrics, notebook outputs | Complete |
+| D5 | Compare routing methods (KMeans vs. prefill) | Evaluator | Both notebooks | Partial — no cross-comparison |
+| D6 | Understand accuracy/cost tradeoff | All | Tolerance parameter, eval guide | Complete |
 
 ### Setup & Configuration
 
 | # | Job | Persona | Asset | Status |
 |---|-----|---------|-------|--------|
-| S1 | Detect and configure hardware | Integrator | Setup wizard (GPU detection) | Complete |
-| S2 | Configure API keys and providers | Integrator | Setup wizard, `.env.example` | Complete |
-| S3 | Generate a valid config file | Integrator | Setup wizard → `generated.yaml` | Complete |
+| S1 | Choose routing method for hardware | Integrator | README, config decision table in `configs/` | Complete |
+| S2 | Configure API keys and providers | Integrator | Config comments, `.env.example` | Complete |
+| S3 | Create a valid config file | Integrator | Copy example config from `configs/` and customize | Complete |
 | S4 | Validate config before serving | Integrator | Pydantic validation in `config.py` | Complete |
 | S5 | Understand config schema | All | `configs/schema.md` | Complete |
-| S6 | Choose between deployment modes | Platform Eng. | Docs (scattered) | Incomplete — no decision guide |
+| S6 | Choose between deployment modes | Platform Eng. | `docs/architecture.md`, `docs/integration.md` | Complete — decision guide in both docs |
 
 ### Deployment & Integration
 
@@ -552,13 +646,14 @@ Complete JTBD inventory across all personas.
 |---|-----|---------|-------|--------|
 | I1 | Start a router server | Integrator | `model-router serve` | Complete |
 | I2 | Get an OpenAI-compatible endpoint | Integrator | `/v1/chat/completions` | Complete |
-| I3 | Connect downstream apps | Integrator | `docs/integration.md` | Complete |
-| I4 | Add routing to existing LiteLLM SDK | LiteLLM User | `ModelRoutingStrategy` | Complete |
-| I5 | Add routing to existing LiteLLM Proxy | LiteLLM User | `model-router proxy` | Complete |
-| I6 | Deploy in Docker | Platform Eng. | `docker/`, compose | Complete |
-| I7 | Deploy to Kubernetes | Platform Eng. | — | Missing |
-| I8 | Run as system service/daemon | Platform Eng. | — | Missing |
-| I9 | Configure health checks | Platform Eng. | `/health`, Dockerfile HEALTHCHECK | Complete |
+| I3 | Deploy routing without inference | Integrator | `model-router serve-router` → `POST /v1/route` | Complete |
+| I4 | Connect downstream apps | Integrator | `docs/integration.md` | Complete |
+| I5 | Add routing to existing LiteLLM SDK | LiteLLM User | `ModelRoutingStrategy` | Complete |
+| I6 | Add routing to existing LiteLLM Proxy | LiteLLM User | `model-router proxy` | Complete |
+| I7 | Deploy in Docker | Platform Eng. | `docker/`, compose | Complete |
+| I8 | Deploy to Kubernetes | Platform Eng. | — | Missing |
+| I9 | Run as system service/daemon | Platform Eng. | — | Missing |
+| I10 | Configure health checks | Platform Eng. | `/health`, Dockerfile HEALTHCHECK | Complete |
 
 ### Training & Customization
 
@@ -605,15 +700,21 @@ Journey 1 (Evaluate)
     │
     ├──► Journey 2 (Deploy)
     │        │
-    │        ├──► Journey 4 (Production)
+    │        ├──► 2a/2b: Full mode (routing + inference)
     │        │        │
-    │        │        └──► Broader E (Multi-Tenant Platform)
-    │        │
-    │        ├──► Journey 6 (QA)
+    │        │        ├──► Journey 4 (Production)
+    │        │        │        │
+    │        │        │        └──► Broader E (Multi-Tenant Platform)
     │        │        │
-    │        │        └──► Broader A (Cost Optimization)
+    │        │        ├──► Journey 6 (QA)
+    │        │        │        │
+    │        │        │        └──► Broader A (Cost Optimization)
+    │        │        │
+    │        │        └──► Broader D (Coding Assistant)
     │        │
-    │        └──► Broader D (Coding Assistant)
+    │        └──► 2c: Router-only mode (routing decisions, no inference)
+    │                 │
+    │                 └──► Broader B (AI Product — your app dispatches LLM calls)
     │
     ├──► Journey 5 (LiteLLM Integration)
     │        │
@@ -627,10 +728,11 @@ Journey 1 (Evaluate)
 ```
 
 **Natural progression paths:**
-1. **Evaluator → Integrator → Platform Engineer**: Try → deploy → productionize
-2. **Evaluator → Optimizer → QA Lead**: Try → customize → validate
-3. **LiteLLM User → Optimizer → Platform Engineer**: Integrate → tune → operate
-4. **Any → Broader Journey**: Toolkit is the routing component in larger initiatives
+1. **Evaluator → Integrator (full) → Platform Engineer**: Try → deploy with inference → productionize
+2. **Evaluator → Integrator (router-only) → AI Product**: Try → deploy routing as microservice → build your own dispatch
+3. **Evaluator → Optimizer → QA Lead**: Try → customize → validate
+4. **LiteLLM User → Optimizer → Platform Engineer**: Integrate → tune → operate
+5. **Any → Broader Journey**: Toolkit is the routing component in larger initiatives
 
 ---
 
@@ -706,27 +808,32 @@ Synthesize findings into actionable improvements:
 
 | Phase | Specific Actions |
 |-------|-----------------|
-| Doc Audit | Read `notebooks/quickstart.ipynb` cell-by-cell, README "Quick Start" section, `checkpoints/` directory contents |
-| Execution | Verify pickle loads with expected structure (100 clusters, 3+ models), confirm NVIDIA API endpoint URLs, validate embedding dimension, check model names match build.nvidia.com catalog |
-| Gaps | Evaluate time-to-first-routing-decision, assess "convinced moment" quality, check "What's Next" section |
+| Doc Audit | Read `notebooks/quickstart.ipynb` (KMeans) and `notebooks/quickstart-prefill.ipynb` (prefill) cell-by-cell, README "Quick Start" section, `checkpoints/` directory contents |
+| Execution (KMeans) | Verify pickle loads with expected structure (100 clusters, 3+ models), confirm NVIDIA API endpoint URLs, validate embedding dimension, check model names match build.nvidia.com catalog |
+| Execution (Prefill) | Verify encoder model loading (Qwen3.5-0.8B), check hidden state extraction, verify prefill checkpoint availability and loading, check API endpoints for model calls |
+| Cross-comparison | Verify both notebooks cover the same example questions, check whether results are comparable, evaluate if tradeoffs between methods are clearly communicated |
+| Gaps | Evaluate time-to-first-routing-decision for each notebook, assess "convinced moment" quality, check "What's Next" sections, verify navigation between the two notebooks |
 
 **Key questions to answer:**
-- Can a new user complete this in under 5 minutes?
-- Does the notebook work without `model_router_toolkit` installed?
-- Is the checkpoint file available and loadable?
+- Can a new user complete the KMeans notebook in under 5 minutes?
+- Can a new user complete the prefill notebook in under 10 minutes (accounting for encoder load time)?
+- Do both notebooks work without `model_router_toolkit` installed?
+- Are checkpoints available for both methods (`.pkl` and `.pt`)?
 - Are API endpoints currently active and returning expected formats?
+- Is there a clear narrative linking the two notebooks (e.g., "try KMeans first, then prefill for higher accuracy")?
+- Does the evaluator understand when to choose each method after completing both?
 
 #### Review J2: Deploy a Router (The Integrator)
 
 | Phase | Specific Actions |
 |-------|-----------------|
 | Doc Audit | Read README install section, `docs/integration.md`, `.env.example`, all example config YAMLs, `configs/schema.md` |
-| Execution | Validate `pyproject.toml` install extras, parse setup wizard code flow, verify server startup sequence, check all endpoint routes exist, test playground HTML/JS loads |
+| Execution | Validate `pyproject.toml` install extras, verify config copy-and-customize flow, verify server startup sequence, check all endpoint routes exist, test playground HTML/JS loads |
 | Gaps | Measure steps from install to first routed request, check error messages for common failures (wrong key, missing checkpoint, port conflict) |
 
 **Key questions to answer:**
 - Does `pip install -e .` succeed cleanly?
-- Does the setup wizard handle all hardware configurations?
+- Do the example configs cover all hardware configurations (GPU, no GPU, local-only)?
 - Does the playground UI load and function with both routing methods?
 - Can I connect a standard OpenAI client in under 2 minutes?
 
@@ -863,7 +970,7 @@ The review agent should follow this protocol:
 
 | Journey | Estimated Asset Count | Review Complexity |
 |---------|----------------------|-------------------|
-| J1: Evaluate | 3 files | Low (notebook-focused) |
+| J1: Evaluate | 5 files (2 notebooks + README + 2 checkpoints) | Medium (two notebooks, cross-comparison) |
 | J2: Deploy | 12+ files | High (multi-module) |
 | J3: Train | 8+ files | High (pipeline complexity) |
 | J4: Production | 5 files | Medium (Docker + config) |

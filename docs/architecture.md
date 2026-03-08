@@ -106,12 +106,99 @@ models:
 
 `routing.method` determines which BaseRouter is instantiated. The model pool, costs, and endpoints are all in the config. No code changes needed to add or remove models.
 
-## Server
+## Deployment Modes
 
-The FastAPI server (`model-router serve`) creates a `litellm.Router` internally and registers the `ModelRoutingStrategy` via `set_custom_routing_strategy()`. Endpoints:
+The toolkit offers three deployment modes. All three perform routing **and** LLM inference — the routing decision determines which model handles the request, then LiteLLM dispatches it.
 
-- `POST /v1/chat/completions` -- OpenAI-compatible (streaming + non-streaming)
-- `POST /api/chat` -- SSE chat endpoint for the playground UI
-- `GET /api/models` -- Pool info with costs
-- `GET /health` -- Health check
-- `GET /` -- Interactive playground UI
+### Standalone Server (`model-router serve`)
+
+A custom FastAPI application built into the toolkit. Creates a `litellm.Router` internally and registers `ModelRoutingStrategy` via `set_custom_routing_strategy()`.
+
+```
+Client --> FastAPI app (port 8000)
+               |
+               +-- /v1/chat/completions  (OpenAI-compatible)
+               +-- /api/chat             (SSE for playground UI)
+               +-- /api/models           (pool info + costs)
+               +-- /api/config           (routing method, features)
+               +-- /api/review           (answer quality judging)
+               +-- /health
+               +-- /                     (interactive playground UI)
+               |
+               v
+         ModelRoutingStrategy --> BaseRouter.route()
+               |
+               v
+         litellm.Router.acompletion() --> provider API
+```
+
+**Config**: Single pool config YAML (e.g., `configs/prefill-qwen08b.yaml`).
+
+```bash
+model-router serve --config configs/prefill-qwen08b.yaml --port 8000
+```
+
+### LiteLLM Proxy (`model-router proxy`)
+
+Starts the full **LiteLLM Proxy server** and injects `ModelRoutingStrategy` at startup. The proxy is LiteLLM's production-grade API gateway with built-in auth, rate limiting, spend tracking, caching, virtual keys, and load balancing.
+
+```
+Client --> LiteLLM Proxy (port 4000)
+               |
+               +-- /v1/chat/completions   (OpenAI-compatible)
+               +-- /v1/completions        (legacy completions)
+               +-- /v1/embeddings         (embedding passthrough)
+               +-- /health
+               +-- LiteLLM's full endpoint set (auth, spend, etc.)
+               |
+               v
+         ModelRoutingStrategy injected at startup
+               |
+               v
+         litellm.proxy.Router --> provider API
+```
+
+**Config**: Two config files — a LiteLLM proxy config (`model_list` + `router_settings`) and a pool config (routing method + checkpoint).
+
+```bash
+# Generate the LiteLLM proxy config from your pool config
+model-router proxy-config --config configs/prefill-qwen08b.yaml --output configs/litellm-proxy.yaml
+
+# Start the proxy
+model-router proxy \
+    --litellm-config configs/litellm-proxy.yaml \
+    --router-config configs/prefill-qwen08b.yaml \
+    --port 4000
+```
+
+### Docker
+
+The Dockerfile provides multi-stage builds for containerized deployment:
+
+| Target | Extras installed | Use case |
+|--------|-----------------|----------|
+| `proxy` | `.[proxy]` (CPU only) | KMeans routing or prefill with remote encoder |
+| `proxy-gpu` | `.[proxy,prefill]` (torch + transformers) | Prefill routing with local encoder on GPU |
+
+Both targets run `model-router proxy` via `docker/entrypoint.sh`.
+
+```bash
+# CPU (KMeans or remote encoder)
+docker build -f docker/Dockerfile --target proxy -t model-router:proxy ..
+
+# GPU (local prefill encoder)
+docker build -f docker/Dockerfile --target proxy-gpu -t model-router:gpu ..
+
+# Or via compose (proxy target)
+docker compose -f docker/docker-compose.yaml up
+```
+
+### Which Mode Should I Use?
+
+| Scenario | Recommended mode | Why |
+|----------|-----------------|-----|
+| Demos, local development, exploring routing | `serve` | Includes playground UI, single config file, fast to start |
+| Already using LiteLLM Proxy in your stack | `proxy` | Drop-in replacement — keeps your existing LiteLLM auth, rate limiting, and spend tracking |
+| Production deployment without existing LiteLLM | `proxy` | LiteLLM Proxy provides auth, rate limiting, caching, and virtual keys out of the box |
+| Containerized / Kubernetes deployment | Docker (`proxy` or `proxy-gpu`) | Standard container with health checks, non-root user |
+| Adding routing to an existing LiteLLM SDK setup | Neither — use SDK integration | 3 lines of Python, no server needed (see [integration guide](integration.md)) |

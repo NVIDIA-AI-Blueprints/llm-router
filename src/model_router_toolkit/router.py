@@ -50,6 +50,25 @@ class RoutingResult:
         }
 
 
+def extract_user_text(messages: list[dict[str, str]] | None) -> str:
+    """Extract the last user message text from an OpenAI-format message list.
+
+    Handles both plain string content and multipart content arrays.
+    Returns empty string if no user message is found.
+    """
+    if not messages:
+        return ""
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                texts = [p.get("text", "") for p in content if p.get("type") == "text"]
+                return " ".join(texts)
+    return ""
+
+
 class BaseRouter(ABC):
     """Abstract base for all routing methods."""
 

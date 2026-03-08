@@ -1,20 +1,23 @@
-"""FastAPI application factory for model-router-toolkit."""
+"""FastAPI application factory for model-router-toolkit.
+
+Supports two modes:
+- Full mode (default): routing + LLM inference via LiteLLM, playground UI
+- Router-only mode: routing decisions only, no inference, no API keys needed
+"""
 
 from __future__ import annotations
 
 import logging
 import os
-import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from litellm import Router
 
-from model_router_toolkit.config import PoolConfig, load_config
-from model_router_toolkit.strategy import ModelRoutingStrategy
+from model_router_toolkit.config import PoolConfig, build_router_from_config, load_config
+from model_router_toolkit.server._shared import health_dict, models_list, warmup_router
 
 logger = logging.getLogger(__name__)
 
@@ -66,43 +69,48 @@ def _build_model_list(config: PoolConfig) -> list[dict]:
     return model_list
 
 
-def _warmup(strategy: ModelRoutingStrategy, config: PoolConfig) -> None:
-    """Pre-load all models and run a dummy route so first real request is fast."""
-    method = config.routing.method
-    print(f"Warming up {method} router...")
-    t0 = time.time()
+def create_app(
+    config_path: str,
+    *,
+    router_only: bool = False,
+    warmup: bool = True,
+) -> FastAPI:
+    """Create and configure the FastAPI application.
 
-    try:
-        result = strategy.router.route("warmup test query", tolerance=0.5)
-        elapsed = time.time() - t0
-        print(f"  Warmup complete in {elapsed:.1f}s")
-        print(f"  Models: {result.model_names}")
-        print(f"  Test route -> {result.selected_model} "
-              f"(confidences: {', '.join(f'{c:.3f}' for c in result.confidences)})")
-    except Exception as e:
-        elapsed = time.time() - t0
-        print(f"  Warmup failed after {elapsed:.1f}s: {e}")
-        logger.warning("Router warmup failed: %s", e)
-
-
-def create_app(config_path: str) -> FastAPI:
-    """Create and configure the FastAPI application."""
+    Args:
+        config_path: Path to pool config YAML.
+        router_only: If True, serve only ``POST /v1/route`` for routing
+            decisions — no LiteLLM, no inference, no API keys needed.
+        warmup: If True, run a warmup route on startup.
+    """
     config = load_config(config_path)
-    model_list = _build_model_list(config)
 
-    litellm_router = Router(model_list=model_list)
-    strategy = ModelRoutingStrategy.from_config(config_path)
-    strategy.set_litellm_router(litellm_router)
-    litellm_router.set_custom_routing_strategy(strategy)
+    if router_only:
+        base_router = build_router_from_config(config)
+        strategy = None
+    else:
+        from litellm import Router
 
-    _warmup(strategy, config)
+        from model_router_toolkit.strategy import ModelRoutingStrategy
+
+        model_list = _build_model_list(config)
+        litellm_router = Router(model_list=model_list)
+        strategy = ModelRoutingStrategy.from_config(config_path)
+        strategy.set_litellm_router(litellm_router)
+        litellm_router.set_custom_routing_strategy(strategy)
+        base_router = strategy.router
+
+    if warmup:
+        warmup_router(base_router, config)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         yield
-        strategy.router.unload()
+        base_router.unload()
 
-    app = FastAPI(title="Model Router Toolkit", lifespan=lifespan)
+    mode = "router-only" if router_only else "full"
+    title = "Model Router Toolkit" + (" — Router Only" if router_only else "")
+    app = FastAPI(title=title, lifespan=lifespan)
 
     cors_origins = os.environ.get("CORS_ORIGINS", "*").split(",")
     app.add_middleware(
@@ -113,53 +121,48 @@ def create_app(config_path: str) -> FastAPI:
         allow_headers=["*"],
     )
 
-    app.state.litellm_router = litellm_router
-    app.state.strategy = strategy
+    app.state.router = base_router
     app.state.config = config
 
     @app.get("/health")
     async def health():
-        return {
-            "status": "ok",
-            "method": config.routing.method,
-            "models": config.model_names,
-        }
+        return health_dict(config, mode=mode)
 
     @app.get("/api/models")
     async def get_models():
-        return [
-            {
-                "name": m.name,
-                "display_name": m.display_name or m.name,
-                "cost_per_m_input_tokens": m.cost_per_m_input_tokens,
-                "cost_per_m_output_tokens": m.cost_per_m_output_tokens,
+        return models_list(config)
+
+    if router_only:
+        from model_router_toolkit.server.route import router as route_router
+
+        app.include_router(route_router, prefix="/v1", tags=["route"])
+    else:
+        app.state.litellm_router = litellm_router
+        app.state.strategy = strategy
+
+        review_available = bool(os.environ.get("OPENROUTER_API_KEY"))
+        judge_model = max(config.models, key=lambda m: m.cost_per_m_output_tokens).display_name if config.models else None
+
+        @app.get("/api/config")
+        async def get_config():
+            return {
+                "routing_method": config.routing.method,
+                "review_available": review_available,
+                "judge_model": judge_model,
+                "model_count": len(config.models),
+                "tolerance": config.routing.tolerance,
             }
-            for m in config.models
-        ]
 
-    review_available = bool(os.environ.get("OPENROUTER_API_KEY"))
-    judge_model = max(config.models, key=lambda m: m.cost_per_m_output_tokens).display_name if config.models else None
+        from model_router_toolkit.server.chat import router as chat_router
+        from model_router_toolkit.server.completions import router as completions_router
+        from model_router_toolkit.server.review import router as review_router
 
-    @app.get("/api/config")
-    async def get_config():
-        return {
-            "routing_method": config.routing.method,
-            "review_available": review_available,
-            "judge_model": judge_model,
-            "model_count": len(config.models),
-            "tolerance": config.routing.tolerance,
-        }
+        app.include_router(chat_router, prefix="/api", tags=["chat"])
+        app.include_router(completions_router, prefix="/v1", tags=["completions"])
+        app.include_router(review_router, prefix="/api", tags=["review"])
 
-    from model_router_toolkit.server.chat import router as chat_router
-    from model_router_toolkit.server.completions import router as completions_router
-    from model_router_toolkit.server.review import router as review_router
-
-    app.include_router(chat_router, prefix="/api", tags=["chat"])
-    app.include_router(completions_router, prefix="/v1", tags=["completions"])
-    app.include_router(review_router, prefix="/api", tags=["review"])
-
-    static_dir = Path(__file__).parent / "static"
-    if static_dir.exists():
-        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+        static_dir = Path(__file__).parent / "static"
+        if static_dir.exists():
+            app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 
     return app

@@ -83,11 +83,27 @@ Prints per-model AUC, oracle vs router accuracy, routing distribution, agreement
 
 Requires an API key for the model provider (see API Keys above).
 
+**Standalone server** (includes playground UI — best for demos and development):
+
 ```bash
 model-router serve --config configs/prefill-qwen08b.yaml --port 8000
 ```
 
 OpenAI-compatible API at `http://localhost:8000/v1/chat/completions`. Interactive playground at `http://localhost:8000/`.
+
+**LiteLLM Proxy** (production-grade — includes auth, rate limiting, spend tracking, caching):
+
+```bash
+model-router proxy-config --config configs/prefill-qwen08b.yaml --output configs/litellm-proxy.yaml
+model-router proxy \
+    --litellm-config configs/litellm-proxy.yaml \
+    --router-config configs/prefill-qwen08b.yaml \
+    --port 4000
+```
+
+OpenAI-compatible API at `http://localhost:4000/v1/chat/completions`.
+
+See the [architecture docs](docs/architecture.md#which-mode-should-i-use) for guidance on which mode to use, and the [integration guide](docs/integration.md) for connecting your application.
 
 ## Config
 
