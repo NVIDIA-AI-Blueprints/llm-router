@@ -2,11 +2,37 @@
 
 LLM routing toolkit that learns which model handles which queries best, then routes each query to the cheapest model above an accuracy threshold. Prefill complexity-based routing (primary) and KMeans embedding-based routing behind a unified `BaseRouter` interface.
 
-## Install
+## Quickstart
 
 ```bash
-pip install -e '.[prefill]'   # Prefill routing (torch + transformers)
-pip install -e .               # Core only (kmeans routing)
+pip install -e '.[prefill]'
+export OPENROUTER_API_KEY=your-key    # needed for serving and data collection
+model-router serve --config configs/prefill-qwen08b.yaml --port 8000
+```
+
+Open `http://localhost:8000/` for the interactive playground UI, or call the API:
+
+```bash
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "routed", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+For notebooks, open `notebooks/quickstart.ipynb` (KMeans) or `notebooks/quickstart-prefill.ipynb` (prefill). These are standalone -- no package install required, just an `NVIDIA_API_KEY`.
+
+## API Keys
+
+| Variable | When needed | What for |
+|----------|-------------|----------|
+| `OPENROUTER_API_KEY` | Serving, collecting | Calls models via OpenRouter (default provider in configs) |
+| `NVIDIA_API_KEY` | Notebooks, NVIDIA NIM configs | Calls models and embeddings via build.nvidia.com |
+
+Set before running `serve`, `collect`, or the notebooks. **Not needed** for `train` or `evaluate` (these work offline with a local encoder + pre-collected CSV data).
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+# or
+export NVIDIA_API_KEY=nvapi-...
 ```
 
 ## Workflow: Collect, Train, Evaluate, Serve
@@ -27,6 +53,8 @@ Output CSV has columns: `question, model, isCorrect, output_tokens`. Split into 
 
 ### 2. Train a router
 
+No API key needed -- training uses a local encoder model (Qwen3.5-0.8B, downloaded from HuggingFace on first run).
+
 ```bash
 model-router train \
   --config configs/prefill-qwen08b.yaml \
@@ -34,11 +62,13 @@ model-router train \
   --output-dir checkpoints/
 ```
 
-The pipeline: loads labels, extracts prefill hidden states via the encoder model (Qwen3.5-0.8B), sweeps layer/mode/PCA per target, trains a SharedTrunkNet MLP ensemble, saves a `.pt` checkpoint.
+The pipeline: loads labels, extracts prefill hidden states via the encoder, sweeps layer/mode/PCA per target, trains a SharedTrunkNet MLP ensemble, saves a `.pt` checkpoint.
 
 Key options: `--device cpu|cuda|mps`, `--n-seeds 10`, `--n-keep 5`, `--prefill-dir cache/` (cache extracted features), `--pca-dims 50,100,200`.
 
 ### 3. Evaluate
+
+No API key needed -- evaluation works offline with the checkpoint and test CSV.
 
 ```bash
 model-router evaluate \
@@ -50,6 +80,8 @@ model-router evaluate \
 Prints per-model AUC, oracle vs router accuracy, routing distribution, agreement zone analysis, near-miss diagnostics, and pairwise win rates.
 
 ### 4. Serve
+
+Requires an API key for the model provider (see API Keys above).
 
 ```bash
 model-router serve --config configs/prefill-qwen08b.yaml --port 8000
@@ -77,7 +109,7 @@ models:
     cost_per_m_output_tokens: 0.16
 ```
 
-See `configs/` for full examples.
+See `configs/` for full examples. See `docs/` for the [training guide](docs/training-guide.md), [evaluation guide](docs/evaluation-guide.md), [architecture](docs/architecture.md), and [integration guide](docs/integration.md).
 
 ## LiteLLM SDK Integration
 

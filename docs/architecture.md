@@ -1,6 +1,6 @@
 # Architecture
 
-The Model Router Toolkit is built around a **BaseRouter** abstraction and the **ModelRoutingStrategy** pattern. All routing implementations (KMeans embedding-based and prefill complexity-based) inherit from BaseRouter and produce a model selection plus score. The ModelRoutingStrategy wraps a BaseRouter instance and implements LiteLLM's `CustomRoutingStrategyBase`, enabling drop-in integration with any LiteLLM proxy or application.
+The Model Router Toolkit is built around a **BaseRouter** abstraction. All routing methods inherit from BaseRouter and produce a model selection with confidence scores. **ModelRoutingStrategy** wraps any BaseRouter and implements LiteLLM's `CustomRoutingStrategyBase` for drop-in integration.
 
 ## Class Hierarchy
 
@@ -9,62 +9,109 @@ BaseRouter (abstract)
     |
     +-- KMeansRouter      # Embedding-based clustering; no GPU required
     |
-    +-- PrefillRouter     # Prefill complexity scoring; requires GPU + encoder server
+    +-- PrefillRouter     # Prefill complexity scoring; CPU or GPU
 
 ModelRoutingStrategy
-    |
     +-- wraps BaseRouter
     +-- implements CustomRoutingStrategyBase (LiteLLM)
 ```
 
-## Data Flow
+## Inference Flow
 
-1. **Question** - The user query or prompt arrives at the router.
-2. **Embed/Prefill** - Depending on strategy:
-   - KMeans: question is embedded via API (e.g., `nvidia/llama-nemotron-embed-1b-v2`).
-   - Prefill: question is sent to a local encoder server for a single forward pass; hidden states are extracted.
-3. **Score** - The router computes a score per model in the pool:
-   - KMeans: distance to cluster centroids or nearest-neighbor scoring.
-   - Prefill: MLP head predicts P(correct) per target model from encoder hidden states.
-4. **Select** - The router selects the best model (e.g., argmax over score, or cost-aware selection above a tolerance threshold).
-5. **LiteLLM dispatch** - The selected model identifier is passed to LiteLLM, which dispatches the request to the appropriate provider (NVIDIA NIM, OpenRouter, etc.).
-
-## Architecture Diagrams
-
-### KMeans Path (no GPU)
+### KMeans Path
 
 ```
-+----------+     +------------------+     +----------------+     +------------------+
-| Question | --> | Embed API        | --> | KMeansRouter   | --> | LiteLLM          |
-|          |     | (build.nvidia.com|     | (score/select) |     | (dispatch)        |
-|          |     |  or OpenRouter)  |     |                |     |                  |
-+----------+     +------------------+     +----------------+     +------------------+
-                        |                          |
-                        v                          v
-                 nvidia/llama-              checkpoint.pkl
-                 nemotron-embed-1b-v2        (centroids, model map)
+Question --> Embed API (build.nvidia.com) --> KMeansRouter --> LiteLLM dispatch
+                  |                              |
+                  v                              v
+          nvidia/llama-nemotron-         checkpoint.pkl
+          embed-1b-v2                  (centroids, Platt calibrators)
 ```
 
-### Prefill Path (with GPU + vLLM encoder server)
+1. Question is embedded via API
+2. KMeansRouter assigns to nearest cluster, applies Platt calibration for P(correct) per model
+3. Selects cheapest model above tolerance threshold
+4. LiteLLM dispatches to selected provider
+
+### Prefill Path
 
 ```
-+----------+     +----------------------+     +----------------+     +------------------+
-| Question | --> | Encoder Server       | --> | PrefillRouter  | --> | LiteLLM          |
-|          |     | (vLLM, GPU, local)   |     | (score/select) |     | (dispatch)        |
-|          |     | Qwen3.5-35B-A3B     |     |                |     |                  |
-+----------+     +----------------------+     +----------------+     +------------------+
-                        |                              |
-                        v                              v
-                 prefill hidden states          checkpoint (MLP heads,
-                 (single forward pass)           layer, pooling config)
+Question --> Encoder (Qwen3.5-0.8B) --> PrefillRouter --> LiteLLM dispatch
+                  |                          |
+                  v                          v
+          hidden states               checkpoint.pt
+          (single forward pass)       (PCA + MLP ensemble)
 ```
+
+1. Question is run through the encoder model (single forward pass, `output_hidden_states=True`)
+2. Hidden states at the best layer are extracted (last-token or mean-pooled)
+3. Per-model StandardScaler + PCA reduces dimensions
+4. Concatenated features go through SharedTrunkNet MLP ensemble
+5. Sigmoid outputs give P(correct) per target model
+6. Cheapest model with P(correct) within `tolerance` of the best is selected
+
+The encoder (Qwen3.5-0.8B, 0.8B parameters) runs on CPU in ~5s per question. GPU reduces this to <100ms.
+
+## Training Pipeline
+
+Training bypasses the BaseRouter interface and works directly with prefill components for batch efficiency.
+
+```
+train.csv --> Load Labels --> Batch Extract Prefill
+                                    |
+                              Sweep (layer/mode/PCA per target)
+                                    |
+                              Fit Transforms (StandardScaler + PCA)
+                                    |
+                              Train SharedTrunkNet Ensemble
+                                    |
+                              Save .pt Checkpoint + serve.yaml
+```
+
+**Sweep**: For each target model, grid-searches over hidden state mode (last-token vs mean-pooled) and PCA dimension, with ternary search over encoder layers. Uses 5-fold CV AUC with logistic regression as the quality metric.
+
+**Trunk training**: BCEWithLogitsLoss with Adam optimizer, early stopping on validation split. Trains N seeds (default 10), keeps the top K by validation loss (default 5). Final ensemble averages sigmoid outputs.
+
+**Checkpoint**: Self-contained `.pt` file with pool config, per-model transforms (scaler, PCA, layer, mode), trunk state dicts, trunk architecture config, and cost table. The same checkpoint is used for both training evaluation and serving inference.
+
+## Evaluation Pipeline
+
+Evaluation also bypasses BaseRouter for batch extraction:
+
+```
+test.csv + checkpoint.pt --> Batch Extract --> Apply Transforms --> Run Trunk
+                                                                       |
+                                                                  Rich Metrics Report
+```
+
+Reports per-model AUC, oracle vs router accuracy, lift, headroom captured, routing distribution, agreement zone analysis, near-miss diagnostics, and pairwise confidence win rates.
 
 ## Config-Driven Dispatch
 
-Routing behavior is fully config-driven. A YAML config specifies:
+All behavior is config-driven:
 
-- **routing.method** - `kmeans` or `prefill`; determines which BaseRouter implementation is used.
-- **routing.checkpoint** - Path to the trained checkpoint (centroids for KMeans, MLP weights for Prefill).
-- **models** - The model pool: name, display name, LiteLLM model ID, cost per M tokens, and optional chat template kwargs.
+```yaml
+routing:
+  method: prefill          # or kmeans
+  checkpoint: path/to.pt   # trained checkpoint
+  tolerance: 0.20          # accuracy-cost tradeoff
+  encoder: Qwen/Qwen3.5-0.8B  # HF encoder for prefill
 
-At startup, the toolkit loads the config, instantiates the appropriate router with the checkpoint, and registers it with LiteLLM. All model selection logic is derived from the config and checkpoint; no code changes are required to add or remove models from the pool.
+models:
+  - name: nem-think
+    litellm_model: openrouter/nvidia/nemotron-3-nano-30b-a3b
+    cost_per_m_input_tokens: 0.20
+    cost_per_m_output_tokens: 0.20
+```
+
+`routing.method` determines which BaseRouter is instantiated. The model pool, costs, and endpoints are all in the config. No code changes needed to add or remove models.
+
+## Server
+
+The FastAPI server (`model-router serve`) creates a `litellm.Router` internally and registers the `ModelRoutingStrategy` via `set_custom_routing_strategy()`. Endpoints:
+
+- `POST /v1/chat/completions` -- OpenAI-compatible (streaming + non-streaming)
+- `POST /api/chat` -- SSE chat endpoint for the playground UI
+- `GET /api/models` -- Pool info with costs
+- `GET /health` -- Health check
+- `GET /` -- Interactive playground UI

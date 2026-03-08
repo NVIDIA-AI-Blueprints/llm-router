@@ -1,15 +1,28 @@
 # Application Integration
 
-The Model Router Toolkit exposes an OpenAI-compatible API at `/v1/chat/completions`. Any application that speaks the OpenAI protocol can use it as a drop-in replacement.
+The Model Router Toolkit exposes an OpenAI-compatible API. Any application that speaks the OpenAI protocol can use it as a drop-in replacement.
 
-## Quick Setup
+## API Keys
 
-Start the server:
+The server and LiteLLM SDK integration call model providers at inference time, so an API key is required:
+
 ```bash
-model-router serve --config configs/cloud-only.yaml --port 8000
+export OPENROUTER_API_KEY=sk-or-...   # for OpenRouter-based configs
+# or
+export NVIDIA_API_KEY=nvapi-...       # for NVIDIA NIM-based configs
 ```
 
-## OpenAI Python SDK
+Set before starting the server or initializing the strategy.
+
+## Server Mode
+
+Start the server:
+
+```bash
+model-router serve --config configs/prefill-qwen08b.yaml --port 8000
+```
+
+### OpenAI Python SDK
 
 ```python
 from openai import OpenAI
@@ -26,23 +39,15 @@ response = client.chat.completions.create(
 print(response.choices[0].message.content)
 ```
 
-## OpenClaw
+### Environment Variable (OpenClaw, OpenCode, etc.)
 
-Set the environment variable before starting OpenClaw:
 ```bash
 export OPENAI_API_BASE=http://localhost:8000/v1
 ```
 
-## OpenCode
+Any tool that reads `OPENAI_API_BASE` or `OPENAI_BASE_URL` will route through the toolkit.
 
-Set the environment variable:
-```bash
-export OPENAI_BASE_URL=http://localhost:8000/v1
-```
-
-Then configure OpenCode to use the "routed" model.
-
-## cURL
+### cURL
 
 ```bash
 curl http://localhost:8000/v1/chat/completions \
@@ -53,35 +58,73 @@ curl http://localhost:8000/v1/chat/completions \
   }'
 ```
 
-## LiteLLM SDK Integration
+### Playground UI
 
-For applications already using LiteLLM's Router, you can add routing without running a separate server:
+Open `http://localhost:8000/` in a browser for the interactive playground with routing cards, probability bars, tolerance slider, and model toggles.
+
+## LiteLLM SDK Integration (No Server)
+
+For applications already using LiteLLM, add routing without running a separate server:
+
+```python
+import litellm
+from model_router_toolkit import ModelRoutingStrategy
+
+strategy = ModelRoutingStrategy.from_config("configs/prefill-qwen08b.yaml")
+litellm.set_custom_routing_strategy(strategy)
+
+response = litellm.completion(
+    model="model-router/default",
+    messages=[{"role": "user", "content": "Prove sqrt(2) is irrational"}],
+)
+```
+
+Or with an existing LiteLLM Router:
 
 ```python
 from litellm import Router
 from model_router_toolkit import ModelRoutingStrategy
 
-# Your existing model list
 model_list = [
-    {"model_name": "nem-think", "litellm_params": {"model": "nvidia_nim/nvidia/nvidia/Nemotron-3-Nano-30B-A3B"}},
-    {"model_name": "gpt-5.2", "litellm_params": {"model": "nvidia_nim/openai/openai/gpt-5.2"}},
+    {"model_name": "nem-think", "litellm_params": {"model": "openrouter/nvidia/nemotron-3-nano-30b-a3b"}},
+    {"model_name": "nem-nothink", "litellm_params": {"model": "openrouter/nvidia/nemotron-3-nano-30b-a3b"}},
 ]
 
 router = Router(model_list=model_list)
-strategy = ModelRoutingStrategy.from_config("configs/cloud-only.yaml")
+strategy = ModelRoutingStrategy.from_config("configs/prefill-qwen08b.yaml")
 router.set_custom_routing_strategy(strategy)
 
-# Now every call is intelligently routed
 response = await router.acompletion(
     model="nem-think",
-    messages=[{"role": "user", "content": "Prove sqrt(2) is irrational"}],
+    messages=[{"role": "user", "content": "Hello"}],
 )
-
-# Access routing metadata
-print(strategy.last_result.selected_model)
-print(strategy.last_result.confidences)
 ```
 
-## LiteLLM Proxy
+## Direct Python Library
 
-For existing LiteLLM proxy deployments, the ModelRoutingStrategy can be registered as a custom routing strategy. This feature is planned but not yet available via YAML config. Use the SDK integration above in the meantime.
+Use the router directly without LiteLLM or a server:
+
+```python
+from model_router_toolkit.config import load_config, build_router_from_config
+
+config = load_config("configs/prefill-qwen08b.yaml")
+router = build_router_from_config(config)
+
+result = router.route("What is the capital of France?", tolerance=0.20)
+print(result.selected_model)       # cheapest model above threshold
+print(result.confidences)          # P(correct) per model
+print(result.selected_cost)        # estimated cost
+print(result.metadata)             # routing metadata (p_max, threshold)
+```
+
+## Server Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/chat/completions` | POST | OpenAI-compatible chat (streaming + non-streaming) |
+| `/api/chat` | POST | SSE chat endpoint for the playground UI |
+| `/api/models` | GET | Model pool with cost data |
+| `/api/config` | GET | Server config (routing method, available features) |
+| `/api/review` | POST | Auto-review: judges answer correctness (when API key available) |
+| `/health` | GET | Health check |
+| `/` | GET | Interactive playground UI |
