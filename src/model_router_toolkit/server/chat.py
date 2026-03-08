@@ -71,6 +71,7 @@ async def _chat_stream(request: Request, req: ChatRequest):
     })
 
     t0 = time.perf_counter()
+    tokens_sent = False
     try:
         stream = await litellm_router.acompletion(
             model=selected,
@@ -83,9 +84,11 @@ async def _chat_stream(request: Request, req: ChatRequest):
                 content = getattr(delta, "content", None) or ""
                 if content:
                     yield _sse_event("token", {"text": content})
+                    tokens_sent = True
     except Exception as e:
-        yield _sse_event("error", {"message": str(e)[:300]})
-        return
+        if not tokens_sent:
+            yield _sse_event("error", {"message": str(e)[:300]})
+            return
 
     latency_ms = (time.perf_counter() - t0) * 1000
     yield _sse_event("done", {"latency_ms": round(latency_ms, 2)})

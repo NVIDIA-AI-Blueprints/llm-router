@@ -12,7 +12,9 @@
 - [x] Phase 9: Agent docs (AGENTS.md, rules, skills)
 - [x] Phase 10: Integration docs
 - [x] Phase 11: Prefill router inference (Qwen3.5-0.8B encoder on CPU)
-- [ ] Phase 12: Expanded model pool pkl (7-model default)
+- [x] Phase 12: Prefill quickstart notebook
+- [ ] Phase 13: Expanded model pool pkl (7-model default)
+- [x] Phase 14: Server Playground UI
 
 ## Log
 
@@ -66,11 +68,54 @@
 - Prefill per question: ~5s
 - Total first-call latency: ~36s (load + prefill + trunk)
 
+### 2026-03-08 -- Phase 11 addendum: Prefill router details
+**What was added to Phase 11:**
+- Created configs/prefill-qwen08b.yaml: 4-model pool (nem-think, nem-nothink, gptoss-high, gpt-5.2) with build.nvidia.com-compatible names
+- Checkpoint scores 4 models simultaneously from a single Qwen3.5-0.8B forward pass via SharedTrunkNet ensemble (5 nets)
+- Per-model feature pipeline: extract hidden states at specific layer -> StandardScaler -> PCA -> concatenate -> MLP
+- Extraction caches by (encoder, chat_template_kwargs) key to avoid redundant forward passes for models sharing the same template
+
+### 2026-03-08 -- Phase 12: Prefill Quickstart Notebook
+**What was done:** Created notebooks/quickstart-prefill.ipynb -- standalone notebook (zero model_router_toolkit imports) demonstrating the prefill-based router. Uses torch, transformers, numpy, scikit-learn, requests only.
+- Loads prefill_qwen08b.pt checkpoint directly via torch.load()
+- Defines SharedTrunkNet MLP class inline and reconstructs ensemble from checkpoint state dicts
+- Loads Qwen3.5-0.8B encoder via AutoModelForCausalLM on CPU
+- Extracts hidden states, applies per-model PCA+scaler transforms, runs MLP ensemble for P(correct)
+- Routes to cheapest model above tolerance, calls build.nvidia.com API for responses
+- 3-model pool on build.nvidia.com (nem-nothink, nem-think, gptoss-high); GPT-5.2 excluded (not on NVIDIA endpoint) but features still computed for MLP input
+- Same cell-for-cell structure as KMeans quickstart.ipynb
+
+**Tests passing:** All cells execute successfully via `jupyter nbconvert --execute` (~49s total).
+- Prefill router correctly routes easy question to Nemotron 3 Nano (P=0.999, $0.04/1k)
+- Hard question also routes to Nemotron 3 Nano (P=0.885 within tolerance of best P=0.981)
+- 90% cost savings vs always using GPT-OSS 20B
+
+**Challenges:**
+- `torch_dtype` parameter deprecated in newer transformers -- changed to `dtype`
+- Notebook must compute features for all 4 checkpoint models (including gpt-5.2) since MLP expects full feature vector, then filter routing to only the 3 available on build.nvidia.com
+
+### 2026-03-07 -- Phase 14: Server Playground UI
+**What was done:** Replaced the placeholder server UI with a full interactive playground.
+- Rewrote server/static/index.html as HTML shell loading separate CSS/JS files
+- Created server/static/playground.css (379 lines): NVIDIA dark theme, chat bubbles, routing card with probability bars, pipeline visualization, sidebar controls (tolerance slider, model toggles, session stats), review card styling
+- Created server/static/playground.js (648 lines): chat SSE handler, routing card renderer with pipeline visualization and probability bars, tolerance/toggle state management, client-side session stats with cost estimation, auto-review SSE handler, prompt example chips, markdown rendering via marked CDN, copy-to-clipboard
+- Created server/review.py (227 lines): POST /api/review SSE endpoint that judges answer correctness using the most expensive model in the pool as judge (via litellm direct call, bypassing routing strategy); if incorrect, tests other enabled models and streams comparison results
+- Enhanced server/app.py: added GET /api/config endpoint (returns routing_method, review_available, judge_model), enhanced GET /api/models to include cost data, mounted review router
+- Auto-review conditionally available when OPENROUTER_API_KEY is set
+- Fixed chat.py stream error handling: late-stream exceptions from OpenRouter no longer show a red error box when content was already delivered successfully (tracks `tokens_sent` flag)
+- Fixed TTFT measurement: now measures from `routing` SSE event (LLM call start) to first `token` event, not from request start (which included prefill routing time)
+
+**Tests passing:** 17/17 existing unit tests unaffected.
+**Challenges:**
+- The litellm.Router's custom routing strategy intercepts all acompletion calls, so review.py calls litellm directly with extracted model params to target specific models for judging/comparison.
+- OpenRouter streams occasionally throw `list index out of range` on EOF -- fixed by swallowing late-stream errors when tokens were already sent.
+- TTFT was initially measuring end-to-end (including 4-5s prefill routing), fixed to start timer at the routing event instead of the request start.
+
 ## Known Gaps
 1. **KMeans training**: Stub only (train_kmeans raises NotImplementedError). Pipeline defined but not coded.
 2. **Prefill training**: Stub only. Use experiments/prefill-complexity-router/ directly for training.
 3. **Expanded pkl**: Current pkl covers 3-4 models; need 7-model pkl for full default pool.
-4. **Server UI**: Placeholder HTML; needs the full chat UI from litellm-kmeans-router.
+4. ~~**Server UI**: Placeholder HTML; needs the full chat UI from litellm-kmeans-router.~~ Resolved in Phase 14.
 5. **LLM-as-judge**: collect.py only implements majority vote; llm/reference stubs.
 6. **Integration tests**: Not yet written (tests/integration/ is empty).
 7. **vLLM encoder backend**: Planned but not implemented (using HF transformers).

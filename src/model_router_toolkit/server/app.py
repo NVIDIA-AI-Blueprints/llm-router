@@ -127,15 +127,35 @@ def create_app(config_path: str) -> FastAPI:
     @app.get("/api/models")
     async def get_models():
         return [
-            {"name": m.name, "display_name": m.display_name or m.name}
+            {
+                "name": m.name,
+                "display_name": m.display_name or m.name,
+                "cost_per_m_input_tokens": m.cost_per_m_input_tokens,
+                "cost_per_m_output_tokens": m.cost_per_m_output_tokens,
+            }
             for m in config.models
         ]
 
+    review_available = bool(os.environ.get("OPENROUTER_API_KEY"))
+    judge_model = max(config.models, key=lambda m: m.cost_per_m_output_tokens).display_name if config.models else None
+
+    @app.get("/api/config")
+    async def get_config():
+        return {
+            "routing_method": config.routing.method,
+            "review_available": review_available,
+            "judge_model": judge_model,
+            "model_count": len(config.models),
+            "tolerance": config.routing.tolerance,
+        }
+
     from model_router_toolkit.server.chat import router as chat_router
     from model_router_toolkit.server.completions import router as completions_router
+    from model_router_toolkit.server.review import router as review_router
 
     app.include_router(chat_router, prefix="/api", tags=["chat"])
     app.include_router(completions_router, prefix="/v1", tags=["completions"])
+    app.include_router(review_router, prefix="/api", tags=["review"])
 
     static_dir = Path(__file__).parent / "static"
     if static_dir.exists():
