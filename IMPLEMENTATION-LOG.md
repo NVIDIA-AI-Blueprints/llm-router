@@ -15,6 +15,7 @@
 - [x] Phase 12: Prefill quickstart notebook
 - [ ] Phase 13: Expanded model pool pkl (7-model default)
 - [x] Phase 14: Server Playground UI
+- [x] Phase 15: Prefill training, evaluation, and collection pipeline
 
 ## Log
 
@@ -111,12 +112,69 @@
 - OpenRouter streams occasionally throw `list index out of range` on EOF -- fixed by swallowing late-stream errors when tokens were already sent.
 - TTFT was initially measuring end-to-end (including 4-5s prefill routing), fixed to start timer at the routing event instead of the request start.
 
+### 2026-03-07 -- Phase 15: Prefill Training, Evaluation, and Collection Pipeline
+**What was done:** Full end-to-end training and evaluation pipeline for the prefill router, ported from experiments/prefill-complexity-router/.
+
+**Training pipeline** (`prefill/train.py`):
+- Label loading with question normalization and output token statistics
+- Batch prefill extraction with on-disk caching (`extract.py` rewrite: PrefillResult with torch tensors, save/load serialization, `run_extraction()` orchestrator)
+- Layer/mode/PCA grid search with ternary layer search (`sweep.py`: SweepResult, cv_auc with logistic regression, sweep_model)
+- SharedTrunkNet ensemble training (`trunk.py`: train_mlp with BCEWithLogitsLoss + early stopping, train_ensemble with seed selection)
+- PCA transform fitting (`transforms.py`: fit_pca_pipeline)
+- Self-contained .pt checkpoint saving (compatible with existing scorer/router for inference)
+- Serve config generation (serve.yaml)
+
+**Evaluation pipeline** (`evaluate.py`):
+- Batch prefill extraction from checkpoint transforms (deduplicates by encoder)
+- Rich metrics: per-model AUC/accuracy, oracle/best-single/router accuracy, lift, headroom captured
+- Agreement zone analysis (all correct / disagree / all wrong)
+- Deep routing analysis: near-miss (confidence gap), pairwise win rates
+
+**Collection enhancements** (`collect.py`):
+- Reference-based judging (--references CSV)
+- tqdm progress bar
+- Per-model accuracy summary
+
+**CLI updates** (`__main__.py`):
+- Train: --mode, --device, --batch-size, --n-seeds, --n-keep, --prefill-dir, --epochs, --patience, --pca-dims
+- Evaluate: --device, --batch-size, --prefill-dir
+- Collect: --references
+- Clean error handling (actionable messages, exit code 1)
+
+**Smoke test verified:** 2-model pool (nem-think, nem-nothink), 50 train / 20 test questions, Qwen3.5-0.8B encoder on CPU:
+- Training: extract ~4m, sweep ~1s, trunk ~1s, total ~5m (with cache: ~10s)
+- Evaluation: extract ~2m (with cache: instant), full report in 14s
+- Inference: trained checkpoint loads and routes via PrefillRouter (backward compatible)
+
+**Tests passing:** 17/17 unit tests. Full train→eval→inference cycle verified.
+
+**Files created/modified:**
+- NEW: `prefill/sweep.py` (sweep grid search)
+- REWRITTEN: `prefill/extract.py` (batch extraction, caching, PrefillResult with torch tensors)
+- REWRITTEN: `prefill/transforms.py` (added fit_pca_pipeline)
+- REWRITTEN: `prefill/trunk.py` (added train_mlp, train_ensemble)
+- REWRITTEN: `prefill/train.py` (full training pipeline)
+- REWRITTEN: `evaluate.py` (prefill-specific rich evaluation)
+- MODIFIED: `train.py` (pass-through kwargs)
+- REWRITTEN: `__main__.py` (clean CLI with all args)
+- REWRITTEN: `collect.py` (reference judging, progress)
+- NEW: `configs/smoke-test.yaml` (2-model test config)
+- NEW: `data/smoke-train.csv`, `data/smoke-test.csv`, `data/smoke-questions.txt`
+
+**Doc updates** (Phase 15 addendum):
+- REWRITTEN: `README.md` (lean workflow-focused: collect, train, evaluate, serve)
+- REWRITTEN: `AGENTS.md` (updated project structure, full CLI reference with all options, config format, data format)
+- REWRITTEN: `.cursor/skills/train-router/SKILL.md` (end-to-end workflow with smoke test recipe)
+- REWRITTEN: `.cursor/skills/setup-router/SKILL.md` (quick start, manual config, app connection)
+- REWRITTEN: `.cursor/skills/integrate-app/SKILL.md` (4 integration paths: OpenAI SDK, env var, LiteLLM SDK, direct Python)
+
 ## Known Gaps
 1. **KMeans training**: Stub only (train_kmeans raises NotImplementedError). Pipeline defined but not coded.
-2. **Prefill training**: Stub only. Use experiments/prefill-complexity-router/ directly for training.
+2. ~~**Prefill training**: Stub only. Use experiments/prefill-complexity-router/ directly for training.~~ Resolved in Phase 15.
 3. **Expanded pkl**: Current pkl covers 3-4 models; need 7-model pkl for full default pool.
 4. ~~**Server UI**: Placeholder HTML; needs the full chat UI from litellm-kmeans-router.~~ Resolved in Phase 14.
-5. **LLM-as-judge**: collect.py only implements majority vote; llm/reference stubs.
+5. ~~**LLM-as-judge**: collect.py only implements majority vote; llm/reference stubs.~~ Reference judging added in Phase 15. LLM-as-judge still stub.
 6. **Integration tests**: Not yet written (tests/integration/ is empty).
 7. **vLLM encoder backend**: Planned but not implemented (using HF transformers).
 8. **Prefill latency**: 5s per question on CPU is fine for evaluation but slow for production. GPU or vLLM would reduce to <100ms.
+9. **Multi-encoder training**: Current training supports single encoder. The sweep modes (per_model, single, auto) are functionally equivalent with one encoder. Multi-encoder would require config schema extension.

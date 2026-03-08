@@ -1,0 +1,23 @@
+routing:
+  method: prefill
+  checkpoint: checkpoints/smoke/prefill_router.pt
+  tolerance: 0.20
+  encoder: Qwen/Qwen3.5-0.8B
+  encoder_backend: transformers
+
+models:
+  - name: nem-think
+    display_name: Nemotron 3 Nano Think
+    litellm_model: openrouter/nvidia/nemotron-3-nano-30b-a3b
+    cost_per_m_input_tokens: 0.20
+    cost_per_m_output_tokens: 0.20
+    system_prompt: Think step-by-step before answering.
+    chat_template_kwargs:
+      enable_thinking: true
+
+  - name: nem-nothink
+    display_name: Nemotron 3 Nano
+    litellm_model: openrouter/nvidia/nemotron-3-nano-30b-a3b
+    cost_per_m_input_tokens: 0.04
+    cost_per_m_output_tokens: 0.16
+    system_prompt: Answer directly and concisely.

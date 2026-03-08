@@ -1,6 +1,6 @@
-# AGENTS.md — Model Router Toolkit
+# AGENTS.md -- Model Router Toolkit
 
-Model Router Toolkit is a Python library for intelligent LLM routing. It learns which model handles which types of queries best, then routes each query to the most cost-efficient model above an accuracy threshold. Two routing methods (KMeans embedding-based and prefill complexity-based) behind a unified BaseRouter interface. Primary integration via LiteLLM's set_custom_routing_strategy(). Includes a CLI, FastAPI server with UI, and training/evaluation pipeline.
+LLM routing toolkit. Learns which model handles which queries best, routes to the cheapest model above an accuracy threshold. Prefill complexity-based routing (primary, via Qwen3.5-0.8B encoder) and KMeans embedding-based routing behind a unified BaseRouter interface. Full collect/train/evaluate/serve pipeline via CLI.
 
 ## Project Structure
 
@@ -8,71 +8,141 @@ Model Router Toolkit is a Python library for intelligent LLM routing. It learns 
 src/model_router_toolkit/
 ├── __init__.py                # Public API exports
 ├── __main__.py                # CLI entry point (model-router)
-├── config.py                  # PoolConfig, ModelSpec, pydantic validation
+├── config.py                  # PoolConfig, ModelSpec, RoutingConfig (pydantic)
 ├── router.py                  # BaseRouter ABC, RoutingResult, CostEstimate
 ├── strategy.py                # ModelRoutingStrategy (LiteLLM integration)
 ├── checkpoint.py              # Checkpoint load/save (pkl + pt)
 ├── gpu.py                     # GPU detection + VRAM checks
 ├── train.py                   # Unified training dispatcher
-├── evaluate.py                # Unified evaluation + metrics
-├── collect.py                 # Data collection (run models + judge)
+├── evaluate.py                # Unified evaluation (prefill: rich metrics, kmeans: basic)
+├── collect.py                 # Data collection (run models + judge correctness)
 ├── setup_wizard.py            # Interactive setup CLI
 ├── telemetry.py               # SQLite session/chat logging
 ├── kmeans/
 │   ├── router.py              # KMeansRouter(BaseRouter)
 │   ├── embed.py               # Embedding client (API + local)
-│   └── train.py               # KMeans training pipeline
+│   └── train.py               # KMeans training (NotImplementedError stub)
 ├── prefill/
-│   ├── router.py              # PrefillRouter(BaseRouter)
-│   ├── scorer.py              # Prefill scoring wrapper
-│   └── train.py               # Prefill training pipeline
+│   ├── router.py              # PrefillRouter(BaseRouter) -- inference path
+│   ├── scorer.py              # Prefill scoring wrapper (loads checkpoint, runs MLP)
+│   ├── extract.py             # Batch prefill extraction, PrefillResult, caching
+│   ├── transforms.py          # StandardScaler + PCA pipelines (fit + apply)
+│   ├── trunk.py               # SharedTrunkNet MLP, train_mlp, train_ensemble
+│   ├── sweep.py               # Layer/mode/PCA grid search with ternary layer search
+│   └── train.py               # Full prefill training pipeline
 └── server/
     ├── app.py                 # FastAPI app factory
     ├── chat.py                # /api/chat SSE endpoint
     ├── completions.py         # /v1/chat/completions (OpenAI-compat)
-    └── static/                # UI assets
+    └── static/                # Playground UI assets
 ```
 
 Key directories outside the package:
-- `configs/` — Example pool_config.yaml files
-- `notebooks/` — Quickstart + advanced walkthrough
-- `checkpoints/` — Pre-trained routing models
-- `tests/` — Unit tests; `tests/integration/` — API integration tests
-- `docs/` — Architecture, training guide, evaluation guide, model reference
+- `configs/` -- Pool config YAMLs (prefill-qwen08b, smoke-test, cloud-only, etc.)
+- `data/` -- Training/test CSVs (gitignored, not tracked)
+- `checkpoints/` -- Trained routing checkpoints (gitignored)
+- `notebooks/` -- Quickstart notebooks (kmeans + prefill)
+- `tests/` -- Unit tests; `tests/integration/` -- API integration tests
+- `docs/` -- Architecture, training guide, evaluation guide
 
 ## Tech Stack
 
 - **Python 3.10+**, pydantic, numpy, scikit-learn, requests, litellm, FastAPI + uvicorn, PyYAML
 - **Dev**: pytest, ruff, mypy
-- **Prefill extra**: torch, transformers, accelerate
+- **Prefill extra**: torch, transformers, accelerate, tqdm
 
 ## Setup
 
 ```bash
-pip install -e .           # Core (kmeans routing)
-pip install -e '.[dev]'    # + testing tools
-pip install -e '.[prefill]' # + GPU prefill routing
+pip install -e '.[prefill]'   # Prefill routing (recommended)
+pip install -e '.[dev]'       # + testing tools
 ```
 
 ## CLI Reference
 
+### Collect training data
 ```bash
-model-router setup                    # Interactive environment setup
-model-router serve --config X --port 8000  # Start server
-model-router train --config X --data Y --output-dir Z  # Train router
-model-router evaluate --config X --checkpoint Y --data Z  # Evaluate
-model-router collect --config X --questions Y --output Z --judge vote  # Collect data
+model-router collect \
+  --config configs/prefill-qwen08b.yaml \
+  --questions questions.txt \
+  --output data/train.csv \
+  --judge vote                    # or: reference --references refs.csv
 ```
+Runs every model in the pool on each question, judges correctness. Output CSV: `question, model, isCorrect, output_tokens`.
+
+### Train a router
+```bash
+model-router train \
+  --config configs/prefill-qwen08b.yaml \
+  --data data/train.csv \
+  --output-dir checkpoints/
+```
+Pipeline: load labels -> extract prefill features (Qwen3.5-0.8B) -> sweep layer/mode/PCA -> train SharedTrunkNet ensemble -> save .pt checkpoint.
+
+Key options:
+- `--device cpu|cuda|mps` -- compute device (auto-detected if omitted)
+- `--n-seeds 10 --n-keep 5` -- ensemble size
+- `--prefill-dir cache/` -- cache extracted features to disk
+- `--pca-dims 50,100,200` -- PCA dimensions to sweep
+- `--epochs 150 --patience 15` -- MLP training
+
+### Evaluate a checkpoint
+```bash
+model-router evaluate \
+  --config configs/prefill-qwen08b.yaml \
+  --checkpoint checkpoints/prefill_router.pt \
+  --data data/test.csv
+```
+Reports: per-model AUC/accuracy, oracle vs router accuracy, lift, headroom captured, routing distribution, agreement zones, near-miss analysis, pairwise confidence win rates.
+
+Options: `--device`, `--batch-size`, `--prefill-dir` (same as train).
+
+### Serve
+```bash
+model-router serve --config configs/prefill-qwen08b.yaml --port 8000
+```
+OpenAI-compatible API at `/v1/chat/completions`. Playground UI at `/`.
+
+### Setup wizard
+```bash
+model-router setup
+```
+Interactive: detects GPU, asks for routing method and API keys, generates config YAML.
 
 ## Architecture
 
-BaseRouter abstraction. Two implementations: KMeansRouter (embed -> cluster -> Platt -> select) and PrefillRouter (prefill -> MLP -> P(correct) -> select). ModelRoutingStrategy wraps any BaseRouter and implements LiteLLM's CustomRoutingStrategyBase. Config determines which method runs. The server creates a litellm.Router internally and calls set_custom_routing_strategy().
+Two routing methods behind `BaseRouter`:
+- **PrefillRouter**: encoder forward pass -> per-layer hidden states -> PCA -> SharedTrunkNet MLP -> P(correct) per model -> cheapest above tolerance
+- **KMeansRouter**: embed question -> cluster assignment -> Platt calibration -> P(correct) per model -> cheapest above tolerance
+
+Training and evaluation bypass BaseRouter (batch extraction + direct trunk inference). Inference/serving uses BaseRouter.
+
+`ModelRoutingStrategy` wraps any BaseRouter and implements LiteLLM's `CustomRoutingStrategyBase`. Config determines which method runs.
+
+## Config Format
+
+```yaml
+routing:
+  method: prefill              # or kmeans
+  checkpoint: checkpoints/prefill_router.pt
+  tolerance: 0.20              # accuracy-cost tradeoff
+  encoder: Qwen/Qwen3.5-0.8B  # HF model for prefill extraction
+
+models:
+  - name: nem-think
+    litellm_model: openrouter/nvidia/nemotron-3-nano-30b-a3b
+    cost_per_m_input_tokens: 0.20
+    cost_per_m_output_tokens: 0.20
+    system_prompt: Think step-by-step before answering.
+```
+
+Training data CSV format: `question, model, isCorrect, output_tokens`.
 
 ## Code Style
 
 - **ruff** for linting, **mypy** for type checking
 - **Line length**: 100
-- **Target**: Python 3.10 — use `X | Y` union syntax
+- **Target**: Python 3.10 -- use `X | Y` union syntax
 - **Imports**: sorted via ruff `I` rules
 
 ## Environment Variables
@@ -86,8 +156,8 @@ BaseRouter abstraction. Two implementations: KMeansRouter (embed -> cluster -> P
 
 ### Always do
 - Run tests before considering work complete
-- Follow BaseRouter abstraction
-- Config-driven dispatch
+- Follow BaseRouter abstraction for inference paths
+- Config-driven dispatch (method in YAML determines behavior)
 
 ### Ask first
 - Changing pyproject.toml deps
@@ -96,7 +166,7 @@ BaseRouter abstraction. Two implementations: KMeansRouter (embed -> cluster -> P
 
 ### Never do
 - Commit API keys
-- Bypass the BaseRouter abstraction
+- Bypass the BaseRouter abstraction for inference
 - Hardcode routing method selection
 
 ## Testing

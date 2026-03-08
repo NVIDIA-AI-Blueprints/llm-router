@@ -1,20 +1,391 @@
-"""Unified evaluation for routing checkpoints."""
+"""Unified evaluation for routing checkpoints.
+
+For prefill routers, runs batch extraction and produces rich diagnostics:
+per-model AUC, oracle/router accuracy, agreement zones, near-miss
+analysis, and pairwise win rates.
+
+For kmeans routers, falls back to the per-question BaseRouter evaluation.
+"""
 
 from __future__ import annotations
 
 import csv
+import logging
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
+import numpy as np
 from sklearn.metrics import roc_auc_score
 
 from model_router_toolkit.config import load_config
-from model_router_toolkit.router import BaseRouter
+
+logger = logging.getLogger(__name__)
 
 
-def _load_data(data_path: str | Path) -> tuple[list[str], dict[str, dict[str, tuple[bool, int]]]]:
-    questions = []
-    seen = set()
+# ---------------------------------------------------------------------------
+# Shared data loading
+# ---------------------------------------------------------------------------
+
+def _load_labels(
+    data_path: str | Path,
+) -> tuple[list[str], dict[str, dict[str, Any]]]:
+    """Load CSV -> (unique raw questions, {norm_q: {model: isCorrect, _raw: q}})."""
+    from model_router_toolkit.prefill.extract import normalize_question
+
+    label_map: dict[str, dict[str, Any]] = {}
+    with open(data_path) as f:
+        reader = csv.DictReader(f)
+        fields = set(reader.fieldnames or [])
+        required = {"question", "model", "isCorrect"}
+        if not required.issubset(fields):
+            missing = required - fields
+            raise ValueError(f"CSV missing required columns: {missing}")
+
+        for row in reader:
+            q_norm = normalize_question(row["question"])
+            model = row["model"].strip()
+            is_correct = int(row["isCorrect"])
+            if q_norm not in label_map:
+                label_map[q_norm] = {"_raw": row["question"]}
+            label_map[q_norm][model] = is_correct
+
+    questions_raw = [d["_raw"] for d in label_map.values()]
+    return questions_raw, label_map
+
+
+# ---------------------------------------------------------------------------
+# Prefill evaluation (batch extraction + trunk)
+# ---------------------------------------------------------------------------
+
+def _build_shared_features(
+    ckpt: dict[str, Any],
+    prefill_results: dict,
+    model_names: list[str],
+) -> np.ndarray:
+    """Apply checkpoint transforms and stack into the shared feature matrix."""
+    from model_router_toolkit.prefill.transforms import apply_pipeline
+
+    feat: dict[str, np.ndarray] = {}
+    for mname in model_names:
+        t = ckpt["transforms"][mname]
+        pr = prefill_results.get(mname)
+        if pr is None:
+            raise RuntimeError(
+                f"No prefill result for target '{mname}' "
+                f"(encoder='{t.get('encoder', '?')}')"
+            )
+        if t["mode"] == "mean":
+            import torch
+            raw = pr.hidden_mean[t["layer"]]
+            raw = raw.numpy() if isinstance(raw, torch.Tensor) else raw
+        else:
+            import torch
+            raw = pr.hidden_last[t["layer"]]
+            raw = raw.numpy() if isinstance(raw, torch.Tensor) else raw
+        feat[mname] = apply_pipeline(raw, t["scaler"], t["pca"])
+
+    return np.hstack([feat[m] for m in model_names])
+
+
+def _print_eval_report(
+    model_names: list[str],
+    Y: np.ndarray,
+    probs: np.ndarray,
+    ckpt: dict[str, Any],
+) -> dict[str, Any]:
+    """Compute and print the full evaluation report."""
+    N, n_models = Y.shape
+    choices = np.argmax(probs, axis=1)
+    n_correct = Y.sum(axis=1)
+
+    # Per-model AUC
+    per_model_auc: dict[str, float] = {}
+    for mi, mname in enumerate(model_names):
+        try:
+            per_model_auc[mname] = float(roc_auc_score(Y[:, mi], probs[:, mi]))
+        except ValueError:
+            per_model_auc[mname] = float("nan")
+
+    # Accuracy metrics
+    oracle_acc = float(Y.max(axis=1).mean())
+    best_mi = int(np.argmax([Y[:, mi].mean() for mi in range(n_models)]))
+    best_acc = float(Y[:, best_mi].mean())
+    best_name = model_names[best_mi]
+    headroom = oracle_acc - best_acc
+
+    router_acc = float(np.mean([Y[i, choices[i]] for i in range(N)]))
+    lift = router_acc - best_acc
+    pct_headroom = (lift / headroom * 100) if headroom > 0 else 0.0
+
+    # Routing distribution
+    dist = np.bincount(choices, minlength=n_models)
+
+    # ── Print ─────────────────────────────────────────────────────────
+    print()
+    print("=" * 60)
+    print("  EVALUATION REPORT")
+    print("=" * 60)
+
+    ckpt_path = ckpt.get("_path", "")
+    if ckpt_path:
+        print(f"  Checkpoint: {ckpt_path}")
+    print(f"  Questions:  {N}")
+
+    if "trunk_config" in ckpt:
+        tc = ckpt["trunk_config"]
+        trunk_size = len(ckpt.get("shared_trunk", []))
+        print(
+            f"  Trunk:      d_in={tc['d_in']}, "
+            f"hidden={tc['hidden']}, ensemble={trunk_size}",
+        )
+
+    # Transforms summary
+    if "transforms" in ckpt:
+        print()
+        print("  Transforms:")
+        for mname in model_names:
+            t = ckpt["transforms"][mname]
+            enc = t.get("encoder", "")
+            enc_short = enc.split("/")[-1] if enc else ""
+            print(
+                f"    {mname:20s}: L{t['layer']} {t['mode']} "
+                f"PCA{t['pca_dim']} ({enc_short})",
+            )
+
+    # Per-model metrics
+    print()
+    print(f"  {'Model':20s}  {'Accuracy':>8s}  {'AUC':>7s}")
+    print(f"  {'-' * 20}  {'-' * 8}  {'-' * 7}")
+    for mi, mname in enumerate(model_names):
+        print(
+            f"  {mname:20s}  {Y[:, mi].mean():8.4f}  "
+            f"{per_model_auc[mname]:7.4f}",
+        )
+
+    # Summary
+    print()
+    print(f"  Oracle:       {oracle_acc:.4f}")
+    print(f"  Best single:  {best_acc:.4f} ({best_name})")
+    print(f"  Headroom:     {(oracle_acc - best_acc) * 100:.1f}pp")
+    print()
+    print(f"  Router (argmax):")
+    print(
+        f"    Accuracy:     {router_acc:.4f} ({lift * 100:+.2f}pp, "
+        f"{pct_headroom:.1f}% headroom captured)",
+    )
+
+    # Distribution
+    print("    Distribution:")
+    for mi, mname in enumerate(model_names):
+        n_routed = dist[mi]
+        pct = n_routed / N * 100
+        local_acc = Y[choices == mi, mi].mean() if n_routed > 0 else 0
+        print(
+            f"      {mname:20s}: {n_routed:4d} ({pct:5.1f}%)  "
+            f"acc_when_chosen={local_acc:.4f}",
+        )
+
+    # Agreement zones
+    zones = [
+        ("All correct", n_correct == n_models),
+        ("Disagree", (n_correct > 0) & (n_correct < n_models)),
+        ("All wrong", n_correct == 0),
+    ]
+    print()
+    print("  By agreement zone:")
+    for zone_name, mask in zones:
+        zn = int(mask.sum())
+        if zn == 0:
+            continue
+        zone_choices = choices[mask]
+        zone_Y = Y[mask]
+        zone_acc = float(
+            np.mean([zone_Y[i, zone_choices[i]] for i in range(zn)]),
+        )
+        zone_dist = np.bincount(zone_choices, minlength=n_models)
+        dist_str = "  ".join(
+            f"{m}={zone_dist[mi]}" for mi, m in enumerate(model_names)
+        )
+        print(
+            f"    {zone_name:15s} ({zn:4d}, {zn / N * 100:5.1f}%): "
+            f"acc={zone_acc:.4f}  [{dist_str}]",
+        )
+
+    # Deep analysis
+    _print_deep_analysis(model_names, Y, probs, choices, n_correct)
+
+    print()
+
+    return {
+        "n_questions": N,
+        "model_names": model_names,
+        "per_model_auc": per_model_auc,
+        "oracle_accuracy": oracle_acc,
+        "best_single_accuracy": best_acc,
+        "best_single_model": best_name,
+        "router_accuracy": router_acc,
+        "lift_pp": lift * 100,
+        "headroom_pct": pct_headroom,
+    }
+
+
+def _print_deep_analysis(
+    model_names: list[str],
+    Y: np.ndarray,
+    probs: np.ndarray,
+    choices: np.ndarray,
+    n_correct: np.ndarray,
+) -> None:
+    """Deep routing diagnostics: near-miss and pairwise analysis."""
+    N, n_models = Y.shape
+    disagree = (n_correct > 0) & (n_correct < n_models)
+
+    if disagree.sum() == 0:
+        return
+
+    print()
+    print("=" * 60)
+    print("  DEEP ROUTING ANALYSIS")
+    print("=" * 60)
+
+    # Near-miss analysis
+    dz_Y = Y[disagree]
+    dz_probs = probs[disagree]
+    dz_choices = choices[disagree]
+    dz_n = int(disagree.sum())
+
+    gaps = []
+    for i in range(dz_n):
+        chosen = dz_choices[i]
+        if dz_Y[i, chosen] == 1:
+            continue
+        correct_models = np.where(dz_Y[i] == 1)[0]
+        if len(correct_models) == 0:
+            continue
+        best_correct_conf = dz_probs[i, correct_models].max()
+        chosen_conf = dz_probs[i, chosen]
+        gaps.append(chosen_conf - best_correct_conf)
+
+    if gaps:
+        gaps_arr = np.array(gaps)
+        n_wrong = len(gaps_arr)
+        n_flippable = int((gaps_arr < 0.05).sum())
+        n_tiny = int((gaps_arr < 0.02).sum())
+        print()
+        print(f"  Near-miss (disagree zone, wrong routing):")
+        print(
+            f"    Wrong decisions: {n_wrong}/{dz_n} "
+            f"({n_wrong / dz_n * 100:.1f}%)",
+        )
+        print(
+            f"    Confidence gap (chosen_wrong - best_correct): "
+            f"mean={gaps_arr.mean():.4f}  median={np.median(gaps_arr):.4f}",
+        )
+        print(
+            f"    Flippable (gap < 0.05): {n_flippable} "
+            f"({n_flippable / n_wrong * 100:.1f}%)",
+        )
+        print(
+            f"    Tiny gap   (gap < 0.02): {n_tiny} "
+            f"({n_tiny / n_wrong * 100:.1f}%)",
+        )
+
+    # Pairwise win rates (only for small model pools)
+    if n_models <= 6:
+        print()
+        print("  Pairwise confidence win rates (disagree zone):")
+        print(
+            f"  When A correct & B wrong, P(conf_A > conf_B):",
+        )
+        header = f"    {'':20s}"
+        for mname in model_names:
+            header += f"  {mname[:8]:>8s}"
+        print(header + "  (B wrong)")
+        for ai, aname in enumerate(model_names):
+            line = f"    {aname:20s}"
+            for bi, bname in enumerate(model_names):
+                if ai == bi:
+                    line += f"  {'---':>8s}"
+                    continue
+                mask = disagree & (Y[:, ai] == 1) & (Y[:, bi] == 0)
+                if mask.sum() == 0:
+                    line += f"  {'N/A':>8s}"
+                    continue
+                win_rate = float(
+                    (probs[mask, ai] > probs[mask, bi]).mean(),
+                )
+                line += f"  {win_rate:8.3f}"
+            print(line + "  (A correct)")
+
+
+def _run_prefill_evaluate(
+    checkpoint_path: str | Path,
+    data_path: str | Path,
+    *,
+    device: str = "cpu",
+    batch_size: int = 4,
+    prefill_dir: str | Path | None = None,
+    hf_cache_dir: str | None = None,
+) -> dict[str, Any]:
+    """Rich prefill evaluation: batch extraction + trunk + full metrics."""
+    import torch
+
+    from model_router_toolkit.prefill.extract import extract_from_checkpoint
+    from model_router_toolkit.prefill.trunk import predict_proba, reconstruct_trunk
+
+    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    ckpt["_path"] = str(checkpoint_path)
+    model_names = ckpt["model_names"]
+    n_models = len(model_names)
+
+    # Load labels
+    questions_raw, label_map = _load_labels(data_path)
+    N = len(questions_raw)
+    Y = np.zeros((N, n_models), dtype=int)
+    for qi, (_, d) in enumerate(label_map.items()):
+        for mi, mname in enumerate(model_names):
+            Y[qi, mi] = d.get(mname, 0)
+
+    # Filter to only questions with labels for models in checkpoint
+    print(f"  Loaded {N} questions for {n_models} targets")
+
+    # Extract prefill features
+    print("  Extracting prefill features...")
+    prefill_results = extract_from_checkpoint(
+        ckpt, questions_raw,
+        device=device, batch_size=batch_size,
+        cache_dir=prefill_dir, hf_cache_dir=hf_cache_dir,
+    )
+
+    # Build features & run trunk
+    print("  Running trunk inference...")
+    shared_feats = _build_shared_features(ckpt, prefill_results, model_names)
+    trunk_nets = reconstruct_trunk(ckpt, device=device)
+    probs = predict_proba(trunk_nets, shared_feats, device=device)
+
+    return _print_eval_report(model_names, Y, probs, ckpt)
+
+
+# ---------------------------------------------------------------------------
+# Fallback: BaseRouter evaluation (for kmeans or generic)
+# ---------------------------------------------------------------------------
+
+def _run_baserouter_evaluate(
+    config_path: str | Path,
+    checkpoint_path: str | Path,
+    data_path: str | Path,
+) -> None:
+    """Per-question evaluation through the BaseRouter interface."""
+    config = load_config(config_path)
+    config.routing.checkpoint = str(checkpoint_path)
+
+    from model_router_toolkit.config import build_router_from_config
+
+    router = build_router_from_config(config)
+
+    questions: list[str] = []
+    seen: set[str] = set()
     by_question: dict[str, dict[str, tuple[bool, int]]] = defaultdict(dict)
 
     with open(data_path) as f:
@@ -22,52 +393,54 @@ def _load_data(data_path: str | Path) -> tuple[list[str], dict[str, dict[str, tu
         for row in reader:
             q = row.get("question", "").strip()
             model = row.get("model", "").strip()
-            is_correct = str(row.get("isCorrect", "0")).lower() in ("1", "true", "yes")
+            is_correct = str(row.get("isCorrect", "0")).lower() in (
+                "1", "true", "yes",
+            )
+            out_tokens = 0
             try:
                 out_tokens = int(row.get("output_tokens", 0))
             except ValueError:
-                out_tokens = 0
-
+                pass
             if q and model:
                 by_question[q][model] = (is_correct, out_tokens)
                 if q not in seen:
                     seen.add(q)
                     questions.append(q)
 
-    return questions, dict(by_question)
+    if not questions:
+        print("No test data found.")
+        return
+
+    model_names = config.model_names
+    router_correct = 0
+    routing_counts: dict[str, int] = defaultdict(int)
+
+    for q in questions:
+        result = router.route(q, tolerance=config.routing.tolerance)
+        selected = result.selected_model
+        routing_counts[selected] += 1
+        qdata = by_question[q]
+        if qdata.get(selected, (False, 0))[0]:
+            router_correct += 1
+
+    n = len(questions)
+    print()
+    print("=" * 60)
+    print("  EVALUATION REPORT (BaseRouter)")
+    print("=" * 60)
+    print(f"  Test samples: {n}")
+    print(f"  Router accuracy: {router_correct / n:.2%}")
+    print()
+    print("  Routing distribution:")
+    for m in model_names:
+        pct = routing_counts[m] / n * 100 if n else 0
+        print(f"    {m}: {pct:.1f}%")
+    print()
 
 
-def _build_cost_table(config, by_question: dict) -> dict[str, dict]:
-    model_output_tokens: dict[str, list[int]] = defaultdict(list)
-    for qdata in by_question.values():
-        for model, (_, out_tokens) in qdata.items():
-            model_output_tokens[model].append(out_tokens)
-
-    table = {}
-    for m in config.models:
-        tokens = model_output_tokens.get(m.name, [500])
-        median = sorted(tokens)[len(tokens) // 2] if tokens else 500
-        input_est = 100
-        cost = (input_est / 1e6) * m.cost_per_m_input_tokens + (median / 1e6) * m.cost_per_m_output_tokens
-        table[m.name] = {
-            "median_output_tokens": median,
-            "cost_per_m_input_tokens": m.cost_per_m_input_tokens,
-            "cost_per_m_output_tokens": m.cost_per_m_output_tokens,
-            "cost": cost,
-        }
-    return table
-
-
-def _compute_cost(question: str, model: str, qdata: dict, config) -> float:
-    if model not in qdata:
-        return 0.0
-    _, out_tokens = qdata[model]
-    spec = config.get_model(model)
-    if not spec:
-        return 0.0
-    input_est = max(100, len(question.split()) * 2)
-    return (input_est / 1e6) * spec.cost_per_m_input_tokens + (out_tokens / 1e6) * spec.cost_per_m_output_tokens
-
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
 
 def run_evaluate(
     config_path: str | Path,
@@ -75,111 +448,11 @@ def run_evaluate(
     data_path: str | Path,
     **kwargs,
 ) -> None:
+    """Evaluate a routing checkpoint. Dispatches by method."""
     config = load_config(config_path)
-    config.routing.checkpoint = str(checkpoint_path)
+    method = config.routing.method.lower()
 
-    from model_router_toolkit.config import build_router_from_config
-
-    router: BaseRouter = build_router_from_config(config)
-    questions, by_question = _load_data(data_path)
-    if not questions:
-        print("No test data found.")
-        return
-
-    cost_table = _build_cost_table(config, by_question)
-    if hasattr(router, "set_cost_table"):
-        router.set_cost_table(cost_table)
-
-    model_names = config.model_names
-    confidences_by_model: dict[str, list[float]] = {m: [] for m in model_names}
-    labels_by_model: dict[str, list[int]] = {m: [] for m in model_names}
-    router_correct = 0
-    best_single_correct = 0
-    routing_counts: dict[str, int] = defaultdict(int)
-    cost_by_tolerance: dict[float, float] = {t: 0.0 for t in [0.0, 0.05, 0.10, 0.15, 0.20]}
-
-    model_acc = {m: 0 for m in model_names}
-    for qdata in by_question.values():
-        for m, (correct, _) in qdata.items():
-            if m in model_acc:
-                model_acc[m] += int(correct)
-    best_single_model = max(model_names, key=lambda m: model_acc.get(m, 0))
-
-    for q in questions:
-        qdata = by_question[q]
-        result = router.route(q, tolerance=config.routing.tolerance)
-        selected = result.selected_model
-        routing_counts[selected] += 1
-
-        sel_correct = qdata.get(selected, (False, 0))[0]
-        if sel_correct:
-            router_correct += 1
-        if qdata.get(best_single_model, (False, 0))[0]:
-            best_single_correct += 1
-
-        for m in model_names:
-            conf = result.confidences[result.model_names.index(m)] if m in result.model_names else 0.0
-            confidences_by_model[m].append(conf)
-            labels_by_model[m].append(int(qdata.get(m, (False, 0))[0]))
-
-        for tol in cost_by_tolerance:
-            res_t = router.route(q, tolerance=tol)
-            sel_t = res_t.selected_model
-            cost_by_tolerance[tol] += _compute_cost(q, sel_t, qdata, config)
-
-    oracle_total_cost = 0.0
-    best_single_total_cost = 0.0
-    for q in questions:
-        qdata = by_question[q]
-        correct_models = [m for m, (c, _) in qdata.items() if c]
-        if correct_models:
-            costs = [
-                (_compute_cost(q, m, qdata, config), m) for m in correct_models
-            ]
-            oracle_model = min(costs, key=lambda x: x[0])[1]
-            oracle_total_cost += _compute_cost(q, oracle_model, qdata, config)
-        best_single_total_cost += _compute_cost(q, best_single_model, qdata, config)
-
-    n = len(questions)
-    acc_router = router_correct / n if n else 0
-    acc_best_single = best_single_correct / n if n else 0
-
-    print("=" * 60)
-    print("EVALUATION REPORT")
-    print("=" * 60)
-    print(f"Checkpoint: {checkpoint_path}")
-    print(f"Test samples: {n}")
-    print()
-
-    print("Per-model AUC:")
-    for m in model_names:
-        y_true = labels_by_model[m]
-        y_score = confidences_by_model[m]
-        if len(set(y_true)) < 2:
-            auc = float("nan")
-        else:
-            try:
-                auc = roc_auc_score(y_true, y_score)
-            except ValueError:
-                auc = float("nan")
-        print(f"  {m}: {auc:.4f}")
-
-    print()
-    print("Router accuracy (vs oracle):", f"{acc_router:.2%}")
-    print("Best-single model accuracy:", f"{acc_best_single:.2%}")
-    print()
-
-    print("Cost savings at tolerance levels:")
-    for tol in [0.0, 0.05, 0.10, 0.15, 0.20]:
-        router_cost = cost_by_tolerance[tol]
-        if oracle_total_cost > 0:
-            savings = (oracle_total_cost - router_cost) / oracle_total_cost
-        else:
-            savings = 0.0
-        print(f"  tolerance={tol:.2f}: cost={router_cost:.4f}, savings vs oracle={savings:.2%}")
-
-    print()
-    print("Routing distribution:")
-    for m in model_names:
-        pct = routing_counts[m] / n * 100 if n else 0
-        print(f"  {m}: {pct:.1f}%")
+    if method == "prefill":
+        _run_prefill_evaluate(checkpoint_path, data_path, **kwargs)
+    else:
+        _run_baserouter_evaluate(config_path, checkpoint_path, data_path)
