@@ -9,7 +9,7 @@ routing:
 models:
   - name: nem-think
     display_name: Nemotron 3 Nano Think
-    litellm_model: nvidia_nim/nvidia/nvidia/Nemotron-3-Nano-30B-A3B
+    litellm_model: nvidia_nim/nvidia/Nemotron-3-Nano-30B-A3B
     cost_per_m_input_tokens: 0.20
     cost_per_m_output_tokens: 0.20
     system_prompt: "Think step-by-step before answering."
@@ -44,7 +44,7 @@ models:
 
   - name: gpt-5.2
     display_name: GPT-5.2
-    litellm_model: nvidia_nim/openai/openai/gpt-5.2
+    litellm_model: nvidia_nim/openai/gpt-5.2
     cost_per_m_input_tokens: 1.75
     cost_per_m_output_tokens: 14.00
 

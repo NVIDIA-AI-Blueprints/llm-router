@@ -3,7 +3,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-      target: proxy
+      target: proxy-gpu
     ports:
       - "${PORT:-4000}:4000"
     volumes:
@@ -14,6 +14,6 @@ services:
       ROUTER_CONFIG: /app/configs/prefill-qwen08b.yaml
       HOST: "0.0.0.0"
       PORT: "4000"
-      NVIDIA_API_KEY: ${NVIDIA_API_KEY}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

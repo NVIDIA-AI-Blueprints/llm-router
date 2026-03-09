@@ -68,7 +68,8 @@ class ModelRoutingStrategy:
     @property
     def effective_tolerance(self) -> float:
         """Tolerance for the current request: per-request override or default."""
-        return _request_tolerance.get() or self._tolerance
+        val = _request_tolerance.get()
+        return val if val is not None else self._tolerance
 
     @property
     def last_result(self) -> RoutingResult | None:

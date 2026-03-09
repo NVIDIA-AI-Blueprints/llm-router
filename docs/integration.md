@@ -176,7 +176,7 @@ docker build -f docker/Dockerfile --target proxy-gpu -t model-router:gpu .
 
 ## LiteLLM SDK Integration (No Server)
 
-For applications already using the LiteLLM Python SDK, add routing with three lines of code — no separate server needed:
+For applications already using the LiteLLM Python SDK, add routing in four lines — no separate server needed:
 
 ```python
 from litellm import Router
@@ -189,6 +189,7 @@ model_list = [
 
 router = Router(model_list=model_list)
 strategy = ModelRoutingStrategy.from_config("configs/prefill-qwen08b.yaml")
+strategy.set_litellm_router(router)
 router.set_custom_routing_strategy(strategy)
 
 response = await router.acompletion(

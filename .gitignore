@@ -23,8 +23,3 @@ venv/
 
 checkpoints/smoke*/
 checkpoints/final_smoke/
-
-# Development / AI-assistant artifacts (not distributed)
-AGENTS.md
-CLAUDE.md
-IMPLEMENTATION-LOG.md

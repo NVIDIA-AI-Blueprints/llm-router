@@ -140,6 +140,7 @@ from model_router_toolkit import ModelRoutingStrategy
 
 router = Router(model_list=my_models)
 strategy = ModelRoutingStrategy.from_config("configs/prefill-qwen08b.yaml")
+strategy.set_litellm_router(router)
 router.set_custom_routing_strategy(strategy)
 
 response = await router.acompletion(

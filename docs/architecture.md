@@ -183,13 +183,13 @@ The Dockerfile provides multi-stage builds for containerized deployment:
 Both targets run `model-router proxy` via `docker/entrypoint.sh`.
 
 ```bash
-# CPU (KMeans or remote encoder)
-docker build -f docker/Dockerfile --target proxy -t model-router:proxy ..
+# CPU (KMeans or remote encoder) — run from repo root
+docker build -f docker/Dockerfile --target proxy -t model-router:proxy .
 
-# GPU (local prefill encoder)
-docker build -f docker/Dockerfile --target proxy-gpu -t model-router:gpu ..
+# GPU (local prefill encoder) — run from repo root
+docker build -f docker/Dockerfile --target proxy-gpu -t model-router:gpu .
 
-# Or via compose (proxy target)
+# Or via compose (proxy-gpu target, prefill routing)
 docker compose -f docker/docker-compose.yaml up
 ```
 
