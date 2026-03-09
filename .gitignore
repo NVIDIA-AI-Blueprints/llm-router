@@ -21,9 +21,8 @@ router_telemetry.db
 .venv/
 venv/
 
-data/*.csv
-data/*.txt
-checkpoints/
+checkpoints/smoke*/
+checkpoints/final_smoke/
 
 # Development / AI-assistant artifacts (not distributed)
 AGENTS.md
