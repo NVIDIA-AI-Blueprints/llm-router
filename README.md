@@ -5,7 +5,12 @@ LLM routing toolkit that learns which model handles which queries best, then rou
 ## Quickstart
 
 ```bash
+# Install (also copies the AI assistant skill to ~/.claude/skills/)
+bash scripts/install.sh
+
+# Or install manually without the skill
 pip install -e '.[prefill]'
+
 export OPENROUTER_API_KEY=your-key    # needed for serving and data collection
 model-router serve --config configs/prefill-qwen08b.yaml --port 8000
 ```
@@ -141,6 +146,29 @@ response = await router.acompletion(
     model="nem-think",
     messages=[{"role": "user", "content": "Hello"}],
 )
+```
+
+## AI Assistant Skill
+
+The `skills/model-router-toolkit/` directory contains a comprehensive AI skill that teaches Claude Code and Cursor how to use every `model-router` CLI command. The install script copies it automatically.
+
+**Manual install:**
+
+```bash
+# For Claude Code
+cp -r skills/model-router-toolkit ~/.claude/skills/
+
+# For Cursor
+cp -r skills/model-router-toolkit ~/.cursor/skills/
+```
+
+**Install script options:**
+
+```bash
+bash scripts/install.sh                  # default: pip install + skill → ~/.claude/skills/
+bash scripts/install.sh --cursor         # skill → ~/.cursor/skills/ instead
+bash scripts/install.sh --skip-skill     # pip install only, no skill copy
+bash scripts/install.sh --extras 'dev,prefill,proxy'  # custom pip extras
 ```
 
 ## Development

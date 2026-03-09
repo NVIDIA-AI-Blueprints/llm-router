@@ -16,7 +16,6 @@ src/model_router_toolkit/
 ├── train.py                   # Unified training dispatcher
 ├── evaluate.py                # Unified evaluation (prefill: rich metrics, kmeans: basic)
 ├── collect.py                 # Data collection (run models + judge correctness)
-├── setup_wizard.py            # Interactive setup CLI
 ├── telemetry.py               # SQLite session/chat logging
 ├── kmeans/
 │   ├── router.py              # KMeansRouter(BaseRouter)
@@ -103,11 +102,18 @@ model-router serve --config configs/prefill-qwen08b.yaml --port 8000
 ```
 OpenAI-compatible API at `/v1/chat/completions`. Playground UI at `/`.
 
-### Setup wizard
-```bash
-model-router setup
-```
-Interactive: detects GPU, asks for routing method and API keys, generates config YAML.
+### Configuration
+
+Pick a starter config from `configs/` and customize it:
+
+| Config | Method | Provider | When to use |
+|--------|--------|----------|-------------|
+| `prefill-qwen08b.yaml` | Prefill | OpenRouter | Default — GPU available, best accuracy |
+| `cloud-only.yaml` | KMeans | NVIDIA NIM | No GPU, cloud embeddings |
+| `smoke-test.yaml` | Prefill | OpenRouter | Quick 2-model test |
+| `local-prefill.yaml` | Prefill | Local | Air-gapped / local-only |
+
+Key fields to customize: `routing.checkpoint`, `routing.tolerance`, model pool entries, and the API key env var (`OPENROUTER_API_KEY` or `NVIDIA_API_KEY`).
 
 ## Architecture
 

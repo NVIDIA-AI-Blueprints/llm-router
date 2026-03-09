@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - Prefill complexity-based routing via Qwen3.5-0.8B encoder
 - KMeans embedding-based routing (inference only; training coming soon)
-- Unified CLI: `model-router setup|serve|train|evaluate|collect|proxy|proxy-config`
+- Unified CLI: `model-router serve|train|evaluate|collect|proxy|proxy-config`
 - OpenAI-compatible API server with interactive playground UI
 - LiteLLM custom routing strategy integration
 - Full prefill training pipeline: extract, sweep, train ensemble, save checkpoint

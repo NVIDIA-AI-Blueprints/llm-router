@@ -21,8 +21,6 @@ router_telemetry.db
 .venv/
 venv/
 
-configs/generated.yaml
-
 data/*.csv
 data/*.txt
 checkpoints/
