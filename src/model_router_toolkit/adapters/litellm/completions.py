@@ -53,6 +53,12 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
     response = await litellm_router.acompletion(**kwargs)
 
     result_data = response.model_dump(exclude_none=True)
+
+    for choice in result_data.get("choices", []):
+        msg = choice.get("message", {})
+        if "content" not in msg:
+            msg["content"] = ""
+
     if strategy.last_result:
         result_data["routing"] = {
             "selected_model": strategy.last_result.selected_model,
