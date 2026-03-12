@@ -1,8 +1,4 @@
-"""Shared utilities for server application factories.
-
-Deduplicates warmup, health, and model-list logic used by both
-the full server (app.py) and the router-only server (router_app.py).
-"""
+"""Shared utilities for HTTP server application factories."""
 
 from __future__ import annotations
 

@@ -14,12 +14,12 @@ import pytest
 import yaml
 
 from model_router_toolkit.config import ModelSpec, PoolConfig, RoutingConfig
-from model_router_toolkit.proxy.config_bridge import (
+from model_router_toolkit.adapters.litellm.config_bridge import (
     generate_litellm_config,
     validate_model_alignment,
 )
 from model_router_toolkit.router import BaseRouter, CostEstimate, RoutingResult
-from model_router_toolkit.strategy import ModelRoutingStrategy
+from model_router_toolkit.adapters.litellm.strategy import ModelRoutingStrategy
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +233,7 @@ class TestStrategyInjection:
         import sys
         import types
 
-        from model_router_toolkit.proxy.startup import _inject_strategy
+        from model_router_toolkit.adapters.litellm.proxy import _inject_strategy
 
         fake_proxy_mod = types.ModuleType("litellm.proxy.proxy_server")
         fake_proxy_mod.llm_router = None
@@ -249,7 +249,7 @@ class TestStrategyInjection:
 
         from litellm import Router as LiteLLMRouter
 
-        from model_router_toolkit.proxy.startup import _inject_strategy
+        from model_router_toolkit.adapters.litellm.proxy import _inject_strategy
 
         model_list = [
             {"model_name": "m-a", "litellm_params": {"model": "openai/a", "api_key": "k"}},
@@ -265,7 +265,7 @@ class TestStrategyInjection:
         with (
             patch.dict(sys.modules, {"litellm.proxy.proxy_server": fake_proxy_mod}),
             patch(
-                "model_router_toolkit.strategy.ModelRoutingStrategy.from_config",
+                "model_router_toolkit.adapters.litellm.strategy.ModelRoutingStrategy.from_config",
             ) as mock_from_config,
         ):
             stub = StubRouter(["m-a"])

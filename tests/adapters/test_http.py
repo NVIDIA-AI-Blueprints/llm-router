@@ -1,9 +1,11 @@
-"""Unit tests for the router-only mode and route endpoint.
+"""Unit tests for the router-only HTTP adapter and webhook auth middleware.
 
 Uses a FakeRouter to test the app factory, endpoints, request parsing,
 and response formatting without loading any encoder or checkpoint.
 """
 
+import hashlib
+import hmac as hmac_mod
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -14,12 +16,13 @@ from fastapi.testclient import TestClient
 
 from model_router_toolkit.config import PoolConfig
 from model_router_toolkit.router import BaseRouter, CostEstimate, RoutingResult
-from model_router_toolkit.server.app import create_app
-from model_router_toolkit.server.route import (
+from model_router_toolkit.adapters.http.app import create_app
+from model_router_toolkit.adapters.http.route import (
     RouteRequest,
     _extract_question,
     _result_to_response,
 )
+from model_router_toolkit.adapters.http.auth import WebhookAuthMiddleware
 
 
 class FakeRouter(BaseRouter):
@@ -93,10 +96,22 @@ def fake_config_path(tmp_path):
 @pytest.fixture
 def client(fake_config_path):
     with patch(
-        "model_router_toolkit.server.app.build_router_from_config",
+        "model_router_toolkit.adapters.http.app.build_router_from_config",
         return_value=FakeRouter(),
     ):
-        app = create_app(fake_config_path, router_only=True, warmup=False)
+        app = create_app(fake_config_path, warmup=False)
+        yield TestClient(app)
+
+
+@pytest.fixture
+def authed_client(fake_config_path):
+    """Client with webhook auth middleware enabled."""
+    with patch(
+        "model_router_toolkit.adapters.http.app.build_router_from_config",
+        return_value=FakeRouter(),
+    ):
+        app = create_app(fake_config_path, warmup=False)
+        app.add_middleware(WebhookAuthMiddleware, secret="test-secret-123")
         yield TestClient(app)
 
 
@@ -277,3 +292,89 @@ class TestNoInferenceEndpoints:
     def test_no_review_endpoint(self, client):
         resp = client.post("/api/review", json={"question": "Test"})
         assert resp.status_code in (404, 405)
+
+
+# ---------------------------------------------------------------------------
+# Webhook auth middleware tests
+# ---------------------------------------------------------------------------
+
+class TestWebhookAuth:
+    """Tests for adapters/http/auth.py WebhookAuthMiddleware."""
+
+    SECRET = "test-secret-123"
+
+    def _sign(self, body: bytes) -> str:
+        return hmac_mod.new(self.SECRET.encode(), body, hashlib.sha256).hexdigest()
+
+    def test_hmac_valid_signature(self, authed_client):
+        import json
+
+        body = json.dumps({"question": "What is 2+2?"}).encode()
+        sig = self._sign(body)
+        resp = authed_client.post(
+            "/v1/route",
+            content=body,
+            headers={"Content-Type": "application/json", "X-Webhook-Signature": sig},
+        )
+        assert resp.status_code == 200
+
+    def test_hmac_invalid_signature(self, authed_client):
+        import json
+
+        body = json.dumps({"question": "What is 2+2?"}).encode()
+        resp = authed_client.post(
+            "/v1/route",
+            content=body,
+            headers={"Content-Type": "application/json", "X-Webhook-Signature": "bad-sig"},
+        )
+        assert resp.status_code == 401
+        assert "Invalid webhook signature" in resp.json()["error"]
+
+    def test_hmac_missing_header_returns_401(self, authed_client):
+        resp = authed_client.post(
+            "/v1/route",
+            json={"question": "What is 2+2?"},
+        )
+        assert resp.status_code == 401
+        assert "Missing authentication" in resp.json()["error"]
+
+    def test_bearer_valid_token(self, authed_client):
+        resp = authed_client.post(
+            "/v1/route",
+            json={"question": "What is 2+2?"},
+            headers={"Authorization": f"Bearer {self.SECRET}"},
+        )
+        assert resp.status_code == 200
+
+    def test_bearer_wrong_token(self, authed_client):
+        resp = authed_client.post(
+            "/v1/route",
+            json={"question": "What is 2+2?"},
+            headers={"Authorization": "Bearer wrong-token"},
+        )
+        assert resp.status_code == 401
+        assert "Invalid bearer token" in resp.json()["error"]
+
+    def test_bearer_missing_auth_returns_401(self, authed_client):
+        resp = authed_client.post(
+            "/v1/route",
+            json={"question": "What is 2+2?"},
+        )
+        assert resp.status_code == 401
+
+    def test_no_secret_passes_all_requests(self, fake_config_path):
+        """When no secret is configured, all requests pass through."""
+        with patch(
+            "model_router_toolkit.adapters.http.app.build_router_from_config",
+            return_value=FakeRouter(),
+        ):
+            app = create_app(fake_config_path, warmup=False)
+            app.add_middleware(WebhookAuthMiddleware, secret="")
+            client = TestClient(app)
+            resp = client.post("/v1/route", json={"question": "Test"})
+            assert resp.status_code == 200
+
+    def test_health_bypasses_auth(self, authed_client):
+        resp = authed_client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"

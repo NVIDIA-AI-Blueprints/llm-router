@@ -5,13 +5,9 @@ LLM routing toolkit that learns which model handles which queries best, then rou
 ## Quickstart
 
 ```bash
-# Install (also copies the AI assistant skill to ~/.claude/skills/)
-bash scripts/install.sh
+pip install -e '.[prefill,litellm]'
 
-# Or install manually without the skill
-pip install -e '.[prefill]'
-
-export OPENROUTER_API_KEY=your-key    # needed for serving and data collection
+export OPENROUTER_API_KEY=your-key
 model-router serve --config configs/prefill-qwen08b.yaml --port 8000
 ```
 
@@ -23,28 +19,108 @@ curl http://localhost:8000/v1/chat/completions \
   -d '{"model": "routed", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
-For notebooks, open `notebooks/quickstart.ipynb` (KMeans) or `notebooks/quickstart-prefill.ipynb` (prefill). These are standalone -- no package install required, just an `NVIDIA_API_KEY`.
+Or use the router as a Python library (no server, no API keys):
+
+```python
+from model_router_toolkit.config import load_config, build_router_from_config
+
+config = load_config("configs/prefill-qwen08b.yaml")
+router = build_router_from_config(config)
+
+result = router.route("What is the capital of France?", tolerance=0.20)
+print(result.selected_model, result.confidences)
+```
+
+For notebooks, open `notebooks/quickstart.ipynb` (KMeans) or `notebooks/quickstart-prefill.ipynb` (prefill).
+
+## Install
+
+Pick extras based on what you need:
+
+| Extra | What it adds | When you need it |
+|-------|-------------|-----------------|
+| *(none)* | Core routing engine | Library use, KMeans routing |
+| `[server]` | FastAPI, uvicorn | Router-only HTTP sidecar |
+| `[litellm]` | litellm, FastAPI, uvicorn | Standalone server, LiteLLM SDK |
+| `[proxy]` | litellm[proxy] | LiteLLM Proxy injection |
+| `[prefill]` | torch, transformers | Prefill routing (recommended) |
+| `[training]` | litellm | Data collection (`model-router collect`) |
+| `[dev]` | pytest, ruff, mypy | Testing and linting |
+| `[all]` | Everything | Full development setup |
+
+```bash
+pip install -e '.[prefill,litellm]'      # Recommended — prefill + serve
+pip install -e '.[prefill,server]'       # Router sidecar only (no inference)
+pip install -e '.[prefill,proxy]'        # LiteLLM Proxy mode
+pip install -e '.[all]'                  # Everything for development
+```
+
+Or use the install script (also copies the AI assistant skill):
+
+```bash
+bash scripts/install.sh                          # pip install + skill
+bash scripts/install.sh --cursor                 # skill → ~/.cursor/skills/
+bash scripts/install.sh --extras 'dev,prefill'   # custom extras
+```
 
 ## API Keys
 
 | Variable | When needed | What for |
 |----------|-------------|----------|
-| `OPENROUTER_API_KEY` | Serving, collecting | Calls models via OpenRouter (default provider in configs) |
-| `NVIDIA_API_KEY` | Notebooks, NVIDIA NIM configs | Calls models and embeddings via build.nvidia.com |
+| `OPENROUTER_API_KEY` | Serving, collecting | Calls models via OpenRouter (default provider) |
+| `NVIDIA_API_KEY` | Notebooks, NIM configs | Calls models and embeddings via build.nvidia.com |
 
-Set before running `serve`, `collect`, or the notebooks. **Not needed** for `train` or `evaluate` (these work offline with a local encoder + pre-collected CSV data).
+**Not needed** for `train`, `evaluate`, or the direct Python library (these work offline).
+
+## Adapters
+
+Adapters connect the routing engine to different platforms. The core has no framework dependencies — adapters bring their own.
+
+| Adapter | Location | Install | What it does |
+|---------|----------|---------|-------------|
+| **LiteLLM Strategy** | `adapters/litellm/strategy.py` | `[litellm]` | Embed routing in any `litellm.Router` — 4 lines of Python |
+| **Standalone Server** | `adapters/litellm/app.py` | `[litellm]` | Full server with routing + inference + playground UI |
+| **LiteLLM Proxy** | `adapters/litellm/proxy.py` | `[proxy]` | Inject routing into LiteLLM Proxy at startup |
+| **Router Sidecar** | `adapters/http/app.py` | `[server]` | Route-only HTTP sidecar (POST /v1/route) |
+| **Webhook Auth** | `adapters/http/auth.py` | `[server]` | HMAC-SHA256 / bearer token middleware |
+| **OpenClaw Plugin** | `plugins/openclaw/` | — | TypeScript plugin for OpenClaw's before_model_resolve |
+
+### LiteLLM SDK Integration
+
+```python
+from litellm import Router
+from model_router_toolkit import ModelRoutingStrategy
+
+router = Router(model_list=my_models)
+strategy = ModelRoutingStrategy.from_config("configs/prefill-qwen08b.yaml")
+strategy.set_litellm_router(router)
+router.set_custom_routing_strategy(strategy)
+
+response = await router.acompletion(
+    model="nem-think",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+```
+
+### Router-Only Sidecar
+
+No inference, no API keys — just routing decisions via HTTP:
 
 ```bash
-export OPENROUTER_API_KEY=sk-or-...
-# or
-export NVIDIA_API_KEY=nvapi-...
+model-router serve-router --config configs/prefill-qwen08b.yaml --port 8079
 ```
+
+```bash
+curl -X POST http://localhost:8079/v1/route \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What is 2+2?", "tolerance": 0.20}'
+```
+
+See the [adapters guide](docs/adapters.md) for details on all adapters, and the [plugins guide](docs/plugins.md) for gateway plugins.
 
 ## Workflow: Collect, Train, Evaluate, Serve
 
 ### 1. Collect labeled data
-
-Prepare a questions file (one per line), then run every model in the pool and judge correctness:
 
 ```bash
 model-router collect \
@@ -54,11 +130,7 @@ model-router collect \
   --judge vote
 ```
 
-Output CSV has columns: `question, model, isCorrect, output_tokens`. Split into train/test sets.
-
 ### 2. Train a router
-
-No API key needed -- training uses a local encoder model (Qwen3.5-0.8B, downloaded from HuggingFace on first run).
 
 ```bash
 model-router train \
@@ -67,13 +139,9 @@ model-router train \
   --output-dir checkpoints/
 ```
 
-The pipeline: loads labels, extracts prefill hidden states via the encoder, sweeps layer/mode/PCA per target, trains a SharedTrunkNet MLP ensemble, saves a `.pt` checkpoint.
-
-Key options: `--device cpu|cuda|mps`, `--n-seeds 10`, `--n-keep 5`, `--prefill-dir cache/` (cache extracted features), `--pca-dims 50,100,200`.
+Key options: `--device cpu|cuda|mps`, `--n-seeds 10`, `--n-keep 5`, `--prefill-dir cache/`, `--pca-dims 50,100,200`.
 
 ### 3. Evaluate
-
-No API key needed -- evaluation works offline with the checkpoint and test CSV.
 
 ```bash
 model-router evaluate \
@@ -82,21 +150,15 @@ model-router evaluate \
   --data data/test.csv
 ```
 
-Prints per-model AUC, oracle vs router accuracy, routing distribution, agreement zone analysis, near-miss diagnostics, and pairwise win rates.
-
 ### 4. Serve
 
-Requires an API key for the model provider (see API Keys above).
-
-**Standalone server** (includes playground UI — best for demos and development):
+**Standalone server** (playground UI — best for demos):
 
 ```bash
 model-router serve --config configs/prefill-qwen08b.yaml --port 8000
 ```
 
-OpenAI-compatible API at `http://localhost:8000/v1/chat/completions`. Interactive playground at `http://localhost:8000/`.
-
-**LiteLLM Proxy** (production-grade — includes auth, rate limiting, spend tracking, caching):
+**LiteLLM Proxy** (production — auth, rate limiting, spend tracking):
 
 ```bash
 model-router proxy-config --config configs/prefill-qwen08b.yaml --output configs/litellm-proxy.yaml
@@ -106,9 +168,11 @@ model-router proxy \
     --port 4000
 ```
 
-OpenAI-compatible API at `http://localhost:4000/v1/chat/completions`.
+**Router sidecar** (route-only, no inference):
 
-See the [architecture docs](docs/architecture.md#which-mode-should-i-use) for guidance on which mode to use, and the [integration guide](docs/integration.md) for connecting your application.
+```bash
+model-router serve-router --config configs/prefill-qwen08b.yaml --port 8079
+```
 
 ## Config
 
@@ -130,68 +194,51 @@ models:
     cost_per_m_output_tokens: 0.16
 ```
 
-See `configs/` for full examples and `configs/schema.md` for the config reference. See `docs/` for the [training guide](docs/training-guide.md), [evaluation guide](docs/evaluation-guide.md), [architecture](docs/architecture.md), [integration guide](docs/integration.md), and [model pool reference](docs/model-pool-reference.md).
+See `configs/` for starter configs and [docs/configuration.md](docs/configuration.md) for the full schema reference.
 
-## LiteLLM SDK Integration
+## Documentation
 
-```python
-from litellm import Router
-from model_router_toolkit import ModelRoutingStrategy
-
-router = Router(model_list=my_models)
-strategy = ModelRoutingStrategy.from_config("configs/prefill-qwen08b.yaml")
-strategy.set_litellm_router(router)
-router.set_custom_routing_strategy(strategy)
-
-response = await router.acompletion(
-    model="nem-think",
-    messages=[{"role": "user", "content": "Hello"}],
-)
-```
+| Doc | What it covers |
+|-----|---------------|
+| [Quickstart](docs/quickstart.md) | 5-minute getting started |
+| [Architecture](docs/architecture.md) | Class hierarchy, inference flow, training pipeline, deployment topologies |
+| [Configuration](docs/configuration.md) | Full YAML schema, environment variables, annotated examples |
+| [Integration Guide](docs/integration.md) | All 7 integration paths with code examples |
+| [Adapters Guide](docs/adapters.md) | Using bundled adapters, writing custom adapters, API reference |
+| [Plugins Guide](docs/plugins.md) | OpenClaw plugin, writing gateway plugins, /v1/route API reference |
+| [Extending Guide](docs/extending.md) | Custom routing methods, adding adapters, contributing |
+| [Training Guide](docs/training-guide.md) | Data collection, training pipeline, hyperparameters |
+| [Evaluation Guide](docs/evaluation-guide.md) | Metrics, interpretation, comparison workflow |
+| [Model Pool Reference](docs/model-pool-reference.md) | Provider setup, model configurations |
 
 ## AI Assistant Skill
 
-The `skills/model-router-toolkit/` directory contains a comprehensive AI skill that teaches Claude Code and Cursor how to use every `model-router` CLI command. The install script copies it automatically.
-
-**Manual install:**
-
-```bash
-# For Claude Code
-cp -r skills/model-router-toolkit ~/.claude/skills/
-
-# For Cursor
-cp -r skills/model-router-toolkit ~/.cursor/skills/
-```
-
-**Install script options:**
+The `skills/model-router-toolkit/` directory contains a comprehensive AI skill that teaches Claude Code and Cursor how to use every `model-router` CLI command.
 
 ```bash
 bash scripts/install.sh                  # default: pip install + skill → ~/.claude/skills/
-bash scripts/install.sh --cursor         # skill → ~/.cursor/skills/ instead
-bash scripts/install.sh --skip-skill     # pip install only, no skill copy
-bash scripts/install.sh --extras 'dev,prefill,proxy'  # custom pip extras
+bash scripts/install.sh --cursor         # skill → ~/.cursor/skills/
+bash scripts/install.sh --skip-skill     # pip install only
 ```
 
 ## Development
 
 ```bash
-pip install -e '.[dev,prefill]'
+pip install -e '.[all]'
 ```
-
-### Running Tests
 
 ```bash
-# Unit tests (no API keys or checkpoints needed)
+# Unit tests
 pytest tests/ --ignore=tests/integration/ -v
 
-# Integration tests (no API keys needed; tests use mocks)
+# Integration tests
 pytest tests/integration/ -v
 
-# All tests
-pytest tests/ -v
+# All tests with coverage
+pytest tests/ -v --cov=model_router_toolkit --cov-report=term-missing
 
-# With coverage
-pytest tests/ --cov=model_router_toolkit --cov-report=term-missing
+# Lint and format
+ruff check src/ tests/
+ruff format src/ tests/
+mypy src/
 ```
-
-Note: Some KMeans unit tests are skipped if `checkpoints/kmeans_c100_db.pkl` is not present.

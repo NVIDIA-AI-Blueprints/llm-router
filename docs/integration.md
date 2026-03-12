@@ -1,17 +1,22 @@
 # Application Integration
 
-The Model Router Toolkit provides four integration paths, from a standalone server with a UI down to a direct Python API. All paths that serve HTTP perform both routing and LLM inference — the toolkit picks the model, then LiteLLM dispatches the request to the provider.
+The Model Router Toolkit provides seven integration paths. Each path trades off simplicity, control, and infrastructure requirements.
 
-| Path | Best for | Routing | Inference | Config files |
-|------|----------|---------|-----------|-------------|
-| [Standalone Server](#standalone-server) | Demos, development, exploring | Yes | Yes | 1 (pool config) |
-| [LiteLLM Proxy](#litellm-proxy) | Production, existing LiteLLM stacks | Yes | Yes | 2 (pool + litellm proxy) |
-| [LiteLLM SDK](#litellm-sdk-integration-no-server) | Embedding in your own app | Yes | Yes | 1 (pool config) |
-| [Direct Python Library](#direct-python-library) | Routing decisions only, no inference | Yes | No | 1 (pool config) |
+## Topology Overview
+
+| Path | Topology | Routing | Inference | Extras needed | Config files |
+|------|----------|---------|-----------|--------------|-------------|
+| [LiteLLM SDK](#litellm-sdk) | Embedded | In-process | In-process (litellm) | `[litellm]` | 1 (pool) |
+| [LiteLLM Proxy](#litellm-proxy) | Gateway | In-proxy | In-proxy (litellm) | `[proxy]` | 2 (pool + litellm) |
+| [Standalone Server](#standalone-server) | Server | In-server | In-server (litellm) | `[litellm]` | 1 (pool) |
+| [Router Sidecar](#router-sidecar) | Sidecar | Sidecar | External | `[server]` | 1 (pool) |
+| [Webhook Integration](#webhook-integration) | Sidecar | Sidecar + auth | External | `[server]` | 1 (pool) |
+| [OpenClaw Plugin](#openclaw-plugin) | Gateway Plugin | Sidecar | Gateway | `[server]` | 1 (pool) + plugin config |
+| [Direct Python](#direct-python) | Embedded | In-process | None | *(core only)* | 1 (pool) |
 
 ## API Keys
 
-Both the server and proxy modes call model providers at inference time, so an API key is required:
+Paths that perform LLM inference require a provider API key:
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-...   # for OpenRouter-based configs
@@ -19,164 +24,17 @@ export OPENROUTER_API_KEY=sk-or-...   # for OpenRouter-based configs
 export NVIDIA_API_KEY=nvapi-...       # for NVIDIA NIM-based configs
 ```
 
-Set before starting the server, proxy, or initializing the SDK strategy. **Not needed** for the Direct Python Library path (routing only, no inference).
+**Not needed** for: Router Sidecar, Webhook Integration, OpenClaw Plugin, and Direct Python (these return routing decisions only).
 
 ---
 
-## Standalone Server
+## LiteLLM SDK
 
-A lightweight FastAPI server with a built-in playground UI. Good for demos, local development, and quick deployments.
-
-```bash
-model-router serve --config configs/prefill-qwen08b.yaml --port 8000
-```
-
-### Connecting your app
-
-**OpenAI Python SDK:**
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://localhost:8000/v1",
-    api_key="not-needed",
-)
-
-response = client.chat.completions.create(
-    model="routed",
-    messages=[{"role": "user", "content": "What is the capital of France?"}],
-)
-print(response.choices[0].message.content)
-```
-
-**Environment variable** (works with any tool that reads `OPENAI_API_BASE`):
+Embed routing directly in your Python application. No server, no extra process. Best when you already use `litellm.Router`.
 
 ```bash
-export OPENAI_API_BASE=http://localhost:8000/v1
+pip install 'model-router-toolkit[litellm]'
 ```
-
-**cURL:**
-
-```bash
-curl http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "routed",
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'
-```
-
-**Playground UI:** Open `http://localhost:8000/` in a browser for the interactive playground with routing cards, probability bars, tolerance slider, and model toggles.
-
-### Server endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/v1/chat/completions` | POST | OpenAI-compatible chat (streaming + non-streaming) |
-| `/api/chat` | POST | SSE chat endpoint for the playground UI |
-| `/api/models` | GET | Model pool with cost data |
-| `/api/config` | GET | Server config (routing method, available features) |
-| `/api/review` | POST | Auto-review: judges answer correctness (when API key available) |
-| `/health` | GET | Health check |
-| `/` | GET | Interactive playground UI |
-
----
-
-## LiteLLM Proxy
-
-Starts the full **LiteLLM Proxy server** with the routing strategy injected at startup. Use this when you want LiteLLM's production features (auth, rate limiting, spend tracking, caching, virtual keys) or when you already run a LiteLLM proxy and want to add intelligent routing.
-
-### Setup
-
-Generate the LiteLLM proxy config from your pool config, then start the proxy:
-
-```bash
-# Generate litellm config (one-time)
-model-router proxy-config \
-    --config configs/prefill-qwen08b.yaml \
-    --output configs/litellm-proxy.yaml
-
-# Start the proxy
-model-router proxy \
-    --litellm-config configs/litellm-proxy.yaml \
-    --router-config configs/prefill-qwen08b.yaml \
-    --port 4000
-```
-
-The proxy requires **two config files**:
-
-| File | What it controls |
-|------|-----------------|
-| LiteLLM proxy config (`litellm-proxy.yaml`) | `model_list` with provider endpoints and API keys, `router_settings`, auth, caching |
-| Pool config (`prefill-qwen08b.yaml`) | Routing method, checkpoint path, tolerance, encoder, model costs |
-
-The `proxy-config` command bridges the two — it reads your pool config and generates a matching LiteLLM config with the correct model names and API key references.
-
-### Connecting your app
-
-The proxy exposes the same OpenAI-compatible API on port 4000:
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://localhost:4000/v1",
-    api_key="not-needed",  # or your LiteLLM virtual key if auth is configured
-)
-
-response = client.chat.completions.create(
-    model="nem-think",
-    messages=[{"role": "user", "content": "What is the capital of France?"}],
-)
-```
-
-```bash
-curl http://localhost:4000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "nem-think",
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'
-```
-
-### Docker
-
-For containerized deployment, use the Docker compose setup:
-
-```bash
-# Set API keys
-export OPENROUTER_API_KEY=sk-or-...
-
-# Start (proxy mode, CPU)
-docker compose -f docker/docker-compose.yaml up
-```
-
-Or build directly:
-
-```bash
-# CPU (KMeans routing)
-docker build -f docker/Dockerfile --target proxy -t model-router:proxy .
-
-# GPU (prefill routing with local encoder)
-docker build -f docker/Dockerfile --target proxy-gpu -t model-router:gpu .
-```
-
-### Serve vs Proxy — when to use which
-
-| Scenario | Use | Why |
-|----------|-----|-----|
-| Trying out the toolkit for the first time | `serve` | Playground UI, single config, minimal setup |
-| Local development and debugging | `serve` | Playground UI shows routing decisions visually |
-| Already running a LiteLLM proxy | `proxy` | Drop-in — keeps your existing auth, spend tracking, caching |
-| Production without existing LiteLLM | `proxy` | Gets you auth, rate limiting, virtual keys out of the box |
-| Containerized / Kubernetes | Docker `proxy` or `proxy-gpu` | Standard container with health checks |
-
----
-
-## LiteLLM SDK Integration (No Server)
-
-For applications already using the LiteLLM Python SDK, add routing in four lines — no separate server needed:
 
 ```python
 from litellm import Router
@@ -198,14 +56,14 @@ response = await router.acompletion(
 )
 ```
 
-Per-request tolerance override:
+**Per-request tolerance override:**
 
 ```python
-strategy.set_request_tolerance(0.10)  # tighter tolerance for this request
+strategy.set_request_tolerance(0.10)  # tighter for this request
 response = await router.acompletion(model="nem-think", messages=messages)
 ```
 
-Access routing metadata after a call:
+**Access routing metadata:**
 
 ```python
 if strategy.last_result:
@@ -213,11 +71,273 @@ if strategy.last_result:
     print(strategy.last_result.confidences)
 ```
 
+**Source:** `adapters/litellm/strategy.py`
+
 ---
 
-## Direct Python Library
+## LiteLLM Proxy
 
-Use the router directly without LiteLLM or a server. Returns routing decisions only — no LLM inference. Useful for building custom dispatchers or evaluating routing behavior.
+Starts the full **LiteLLM Proxy server** with the routing strategy injected at startup. Use this when you want LiteLLM's production features (auth, rate limiting, spend tracking, caching, virtual keys).
+
+```bash
+pip install 'model-router-toolkit[proxy]'
+```
+
+### Setup
+
+Generate the LiteLLM proxy config from your pool config, then start:
+
+```bash
+model-router proxy-config \
+    --config configs/prefill-qwen08b.yaml \
+    --output configs/litellm-proxy.yaml
+
+model-router proxy \
+    --litellm-config configs/litellm-proxy.yaml \
+    --router-config configs/prefill-qwen08b.yaml \
+    --port 4000
+```
+
+Two config files are required:
+
+| File | Controls |
+|------|---------|
+| LiteLLM proxy config (`litellm-proxy.yaml`) | `model_list`, provider endpoints, API keys, auth, caching |
+| Pool config (`prefill-qwen08b.yaml`) | Routing method, checkpoint, tolerance, encoder, costs |
+
+The `proxy-config` command bridges the two — reads pool config and generates a matching LiteLLM config.
+
+### Connecting
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:4000/v1", api_key="not-needed")
+response = client.chat.completions.create(
+    model="nem-think",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+```
+
+```bash
+curl http://localhost:4000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "nem-think", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+### Docker
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+docker compose -f docker/docker-compose.yaml up
+
+# Or build directly
+docker build -f docker/Dockerfile --target proxy -t model-router:proxy .      # CPU
+docker build -f docker/Dockerfile --target proxy-gpu -t model-router:gpu .    # GPU
+```
+
+**Source:** `adapters/litellm/proxy.py`, `adapters/litellm/config_bridge.py`
+
+---
+
+## Standalone Server
+
+A full FastAPI server with routing, inference, and a playground UI. Best for demos, development, and quick deployments.
+
+```bash
+pip install 'model-router-toolkit[litellm]'
+model-router serve --config configs/prefill-qwen08b.yaml --port 8000
+```
+
+### Connecting
+
+**OpenAI SDK:**
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="not-needed")
+response = client.chat.completions.create(
+    model="routed",
+    messages=[{"role": "user", "content": "What is the capital of France?"}],
+)
+```
+
+**Environment variable** (works with any tool reading `OPENAI_API_BASE`):
+
+```bash
+export OPENAI_API_BASE=http://localhost:8000/v1
+```
+
+**cURL:**
+
+```bash
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "routed", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+**Playground UI:** Open `http://localhost:8000/` for routing cards, probability bars, tolerance slider, and model toggles.
+
+### Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/chat/completions` | POST | OpenAI-compatible chat (streaming + non-streaming) |
+| `/api/chat` | POST | SSE chat endpoint for the playground UI |
+| `/api/models` | GET | Model pool with cost data |
+| `/api/config` | GET | Server config (routing method, features) |
+| `/api/review` | POST | Auto-review: judges answer correctness |
+| `/health` | GET | Health check |
+| `/` | GET | Interactive playground UI |
+
+**Source:** `adapters/litellm/app.py`, `adapters/litellm/completions.py`, `adapters/litellm/chat.py`, `adapters/litellm/review.py`
+
+---
+
+## Router Sidecar
+
+A lightweight HTTP server that returns routing decisions **without performing LLM inference**. No litellm dependency — only FastAPI + uvicorn. Deploy alongside your existing inference stack.
+
+```bash
+pip install 'model-router-toolkit[server]'
+model-router serve-router --config configs/prefill-qwen08b.yaml --port 8079
+```
+
+### Calling the route endpoint
+
+```bash
+curl -X POST http://localhost:8079/v1/route \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "What is 2+2?"}],
+    "tolerance": 0.20
+  }'
+```
+
+Response:
+
+```json
+{
+  "selected_model": "nem-nothink",
+  "model_names": ["nem-think", "nem-nothink"],
+  "confidences": {"nem-think": 0.92, "nem-nothink": 0.88},
+  "costs": [
+    {"model": "nem-think", "estimated_total_cost": 0.0004},
+    {"model": "nem-nothink", "estimated_total_cost": 0.0001}
+  ],
+  "metadata": {"p_max": 0.92, "threshold": 0.72, "route_ms": 45.2}
+}
+```
+
+You can also pass a plain question:
+
+```bash
+curl -X POST http://localhost:8079/v1/route \
+  -d '{"question": "What is 2+2?", "tolerance": 0.15}'
+```
+
+### Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/route` | POST | Routing decision (no inference) |
+| `/api/models` | GET | Model pool metadata |
+| `/health` | GET | Health check |
+
+**Source:** `adapters/http/app.py`, `adapters/http/route.py`
+
+---
+
+## Webhook Integration
+
+The router sidecar supports HMAC-SHA256 and bearer token authentication for enterprise webhook pipelines (Portkey, TrueFoundry, Cloudflare, custom gateways).
+
+```bash
+export ROUTER_WEBHOOK_SECRET=my-shared-secret
+model-router serve-router --config configs/prefill-qwen08b.yaml --port 8079
+```
+
+### Calling with HMAC
+
+```python
+import hashlib, hmac, json, requests
+
+body = json.dumps({"question": "Explain quantum computing", "tolerance": 0.20})
+signature = hmac.new(b"my-shared-secret", body.encode(), hashlib.sha256).hexdigest()
+
+resp = requests.post(
+    "http://localhost:8079/v1/route",
+    data=body,
+    headers={
+        "Content-Type": "application/json",
+        "X-Webhook-Signature": signature,
+    },
+)
+```
+
+### Calling with bearer token
+
+```bash
+curl -X POST http://localhost:8079/v1/route \
+  -H "Authorization: Bearer my-shared-secret" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Explain quantum computing"}'
+```
+
+When no secret is configured, all requests pass through (backward compatible).
+
+**Source:** `adapters/http/auth.py`
+
+---
+
+## OpenClaw Plugin
+
+TypeScript plugin for the OpenClaw gateway. Uses the `before_model_resolve` hook to call the router sidecar before each LLM request, overriding OpenClaw's model selection with the router's cost-aware decision.
+
+### Setup
+
+1. Start the router sidecar:
+
+```bash
+model-router serve-router --config configs/prefill-qwen08b.yaml --port 8079
+```
+
+2. Install the plugin in your OpenClaw configuration:
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "model-router": {
+        "enabled": true,
+        "config": {
+          "sidecarUrl": "http://127.0.0.1:8079",
+          "tolerance": 0.20,
+          "enabled": true,
+          "timeoutMs": 5000,
+          "pool": [
+            {"routerName": "nem-think", "provider": "openrouter", "model": "nvidia/nemotron-3-nano-30b-a3b"},
+            {"routerName": "nem-nothink", "provider": "openrouter", "model": "nvidia/nemotron-3-nano-30b-a3b"}
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+The `pool` array maps router model names to OpenClaw provider/model references. When the router selects a model, the plugin translates that to an OpenClaw `modelOverride` + `providerOverride`.
+
+**Graceful degradation:** If the sidecar is unreachable or returns an error, the plugin returns `{}` and OpenClaw uses its default model selection.
+
+**Source:** `plugins/openclaw/index.ts`, `plugins/openclaw/openclaw.plugin.json`
+
+---
+
+## Direct Python
+
+Use the router as a library — routing decisions only, no inference, no API keys needed.
 
 ```python
 from model_router_toolkit.config import load_config, build_router_from_config
@@ -232,4 +352,23 @@ print(result.selected_cost)        # estimated cost
 print(result.metadata)             # routing metadata (p_max, threshold)
 ```
 
-No API keys required — the router runs the encoder locally and scores with the trained MLP checkpoint.
+No server, no API keys — the router runs the encoder locally and scores with the trained MLP checkpoint.
+
+**Source:** `config.py` (`load_config`, `build_router_from_config`), `router.py` (`BaseRouter`)
+
+---
+
+## Decision Matrix
+
+| Scenario | Recommended path | Why |
+|----------|-----------------|-----|
+| First time trying the toolkit | Standalone Server | Playground UI, single config, visual routing |
+| Local development and debugging | Standalone Server | Playground shows routing decisions |
+| Already running LiteLLM Proxy | LiteLLM Proxy | Drop-in — keeps auth, spend tracking, caching |
+| Production without existing gateway | LiteLLM Proxy or Docker | Auth, rate limiting, virtual keys out of the box |
+| Existing Python app with litellm | LiteLLM SDK | 4 lines, no extra server |
+| API gateway (OpenClaw, Portkey) | Router Sidecar + Plugin | Route-only, no inference duplication |
+| Enterprise webhook pipeline | Router Sidecar + Webhook Auth | HMAC or bearer token validation |
+| Custom dispatcher, evaluation scripts | Direct Python | Routing decisions only |
+| Air-gapped / no API keys | Direct Python + Prefill | Local encoder, no network calls |
+| Kubernetes / containers | Docker | Standard container with health checks |

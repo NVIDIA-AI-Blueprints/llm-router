@@ -49,14 +49,10 @@ def _check_proxy_available() -> None:
 
 
 def _inject_strategy(router_config: str) -> None:
-    """Patch the litellm proxy's internal Router with our strategy.
-
-    Must be called after the proxy's lifespan startup event has
-    initialized ``litellm.proxy.proxy_server.llm_router``.
-    """
+    """Patch the litellm proxy's internal Router with our strategy."""
     import litellm.proxy.proxy_server as proxy_module
 
-    from model_router_toolkit.strategy import ModelRoutingStrategy
+    from model_router_toolkit.adapters.litellm.strategy import ModelRoutingStrategy
 
     llm_router = proxy_module.llm_router
     if llm_router is None:
@@ -91,14 +87,7 @@ def start_proxy(
     host: str = "0.0.0.0",
     port: int = 4000,
 ) -> None:
-    """Start the litellm proxy with our custom routing strategy injected.
-
-    1. Validates litellm[proxy] is installed
-    2. Points litellm at the user's proxy config via env var
-    3. Imports the proxy's FastAPI app
-    4. Registers a startup hook that patches the Router
-    5. Runs uvicorn
-    """
+    """Start the litellm proxy with our custom routing strategy injected."""
     _check_proxy_available()
 
     litellm_config = str(Path(litellm_config).resolve())

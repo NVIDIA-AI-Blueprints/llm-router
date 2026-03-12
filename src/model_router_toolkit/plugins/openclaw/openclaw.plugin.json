@@ -1,0 +1,47 @@
+{
+  "id": "model-router",
+  "name": "Model Router",
+  "description": "Intelligent per-prompt model routing based on query complexity. Routes easy prompts to cheap models and hard prompts to capable models.",
+  "version": "0.1.0",
+  "kind": "agent",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "sidecarUrl": {
+        "type": "string",
+        "default": "http://127.0.0.1:8079",
+        "description": "URL of the model-router sidecar (model-router serve-router)"
+      },
+      "tolerance": {
+        "type": "number",
+        "default": 0.20,
+        "minimum": 0.0,
+        "maximum": 1.0,
+        "description": "Accuracy-cost tradeoff. Higher = more cost savings, lower = more quality."
+      },
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable/disable routing. When disabled, OpenClaw uses its default model selection."
+      },
+      "timeoutMs": {
+        "type": "number",
+        "default": 5000,
+        "description": "Timeout for sidecar requests in milliseconds."
+      },
+      "pool": {
+        "type": "array",
+        "description": "Maps router model names to OpenClaw provider/model refs.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "routerName": { "type": "string", "description": "Model name in router config (e.g. 'strong', 'cheap')" },
+            "provider": { "type": "string", "description": "OpenClaw provider ID (e.g. 'anthropic', 'ollama')" },
+            "model": { "type": "string", "description": "OpenClaw model ID (e.g. 'claude-sonnet-4-5', 'llama3.3')" }
+          },
+          "required": ["routerName", "provider", "model"]
+        }
+      }
+    }
+  }
+}

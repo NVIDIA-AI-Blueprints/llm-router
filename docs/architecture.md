@@ -1,6 +1,6 @@
 # Architecture
 
-The Model Router Toolkit is built around a **BaseRouter** abstraction. All routing methods inherit from BaseRouter and produce a model selection with confidence scores. **ModelRoutingStrategy** wraps any BaseRouter and implements LiteLLM's `CustomRoutingStrategyBase` for drop-in integration.
+The Model Router Toolkit is built around a **BaseRouter** abstraction. All routing methods inherit from BaseRouter and produce a model selection with confidence scores. Platform integrations live in the **adapters/** and **plugins/** directories, keeping the core routing engine free of framework dependencies.
 
 ## Class Hierarchy
 
@@ -11,17 +11,121 @@ BaseRouter (abstract)
     |
     +-- PrefillRouter     # Prefill complexity scoring; CPU or GPU
 
-ModelRoutingStrategy
-    +-- wraps BaseRouter
-    +-- implements CustomRoutingStrategyBase (LiteLLM)
+Adapters (platform integrations)
+    |
+    +-- adapters/litellm/
+    |       +-- ModelRoutingStrategy   # LiteLLM custom routing strategy
+    |       +-- app.py                 # Full serve mode (routing + inference + UI)
+    |       +-- proxy.py               # LiteLLM Proxy injection
+    |       +-- completions.py         # /v1/chat/completions endpoint
+    |       +-- chat.py                # /api/chat SSE endpoint
+    |       +-- review.py              # /api/review auto-judge endpoint
+    |       +-- config_bridge.py       # Pool config → LiteLLM config generator
+    |
+    +-- adapters/http/
+    |       +-- app.py                 # Router-only sidecar (no inference)
+    |       +-- route.py               # POST /v1/route endpoint
+    |       +-- auth.py                # Webhook HMAC/bearer auth middleware
+    |       +-- _shared.py             # Warmup, health, models helpers
+    |
+    +-- plugins/openclaw/
+            +-- index.ts               # before_model_resolve hook
+            +-- openclaw.plugin.json   # Plugin manifest + config schema
 ```
+
+## Dependency Graph
+
+The core package has **zero framework dependencies** — only pydantic, numpy, scikit-learn, requests, and PyYAML. Each adapter brings its own extras:
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Core (pip install model-router-toolkit)             │
+│  router.py, config.py, checkpoint.py, kmeans/,      │
+│  prefill/, train.py, evaluate.py, collect.py         │
+│  Deps: pydantic, numpy, scikit-learn, requests, yaml │
+└──────────────┬───────────────────────┬───────────────┘
+               │                       │
+    ┌──────────▼──────────┐  ┌────────▼─────────┐
+    │  [server] extra     │  │  [litellm] extra  │
+    │  adapters/http/     │  │  adapters/litellm/ │
+    │  FastAPI, uvicorn   │  │  litellm, FastAPI  │
+    └─────────────────────┘  └────────┬──────────┘
+                                      │
+                             ┌────────▼──────────┐
+                             │  [proxy] extra     │
+                             │  litellm[proxy]    │
+                             │  adapters/litellm/ │
+                             │  proxy.py          │
+                             └───────────────────┘
+
+    ┌─────────────────────┐  ┌────────────────────┐
+    │  [prefill] extra    │  │  [training] extra   │
+    │  torch, transformers│  │  litellm            │
+    │  accelerate, tqdm   │  │  (collect command)  │
+    └─────────────────────┘  └────────────────────┘
+```
+
+Install only what you need:
+
+| Extra | Installs | Enables |
+|-------|----------|---------|
+| *(none)* | Core only | `BaseRouter`, `RoutingResult`, config, KMeans routing |
+| `[server]` | FastAPI, uvicorn | `adapters/http/` — router-only sidecar |
+| `[litellm]` | litellm, FastAPI, uvicorn | `adapters/litellm/` — strategy, serve mode |
+| `[proxy]` | litellm[proxy], packaging | LiteLLM Proxy injection (`model-router proxy`) |
+| `[prefill]` | torch, transformers, accelerate, tqdm | Prefill routing method |
+| `[training]` | litellm | `model-router collect` (calls provider APIs) |
+| `[dev]` | pytest, ruff, mypy, httpx | Testing and linting |
+| `[all]` | Everything above | Full development setup |
+
+## Adapter Layer
+
+### Why adapters?
+
+The routing engine (BaseRouter → RoutingResult) is a pure function: question in, model selection out. But real deployments need to slot into existing infrastructure — LiteLLM proxies, API gateways, OpenAI-compatible servers, webhook pipelines.
+
+**Adapters** bridge the gap. Each adapter translates between a platform's interface and the BaseRouter API. The core never imports FastAPI, litellm, or any adapter-specific dependency.
+
+### adapters/litellm/
+
+Full integration with the LiteLLM ecosystem. Three deployment patterns:
+
+| Module | Pattern | What it does |
+|--------|---------|-------------|
+| `strategy.py` | SDK embedding | Wraps BaseRouter as `CustomRoutingStrategyBase` for `litellm.Router` |
+| `app.py` | Standalone server | FastAPI app with routing + inference + playground UI |
+| `proxy.py` | Proxy injection | Patches LiteLLM Proxy's internal Router at startup |
+
+Supporting modules:
+
+| Module | Purpose |
+|--------|---------|
+| `completions.py` | `/v1/chat/completions` — OpenAI-compatible endpoint |
+| `chat.py` | `/api/chat` — SSE streaming for the playground UI |
+| `review.py` | `/api/review` — auto-judge answer correctness |
+| `config_bridge.py` | Generates LiteLLM proxy config from pool config |
+
+### adapters/http/
+
+Lightweight router-only sidecar. No LiteLLM dependency — only needs `[server]` (FastAPI + uvicorn). Returns routing decisions via `POST /v1/route` without performing LLM inference.
+
+| Module | Purpose |
+|--------|---------|
+| `app.py` | FastAPI app factory — `/v1/route`, `/health`, `/api/models` |
+| `route.py` | Route endpoint — accepts messages or question text, returns `RouteResponse` |
+| `auth.py` | `WebhookAuthMiddleware` — HMAC-SHA256 signature or bearer token verification |
+| `_shared.py` | Shared helpers: warmup, health dict, models list |
+
+### plugins/openclaw/
+
+TypeScript plugin for the OpenClaw gateway. Hooks into `before_model_resolve` to call the HTTP sidecar and override model selection. Graceful degradation — if the sidecar is unreachable, falls back to OpenClaw's default.
 
 ## Inference Flow
 
 ### KMeans Path
 
 ```
-Question --> Embed API (build.nvidia.com) --> KMeansRouter --> LiteLLM dispatch
+Question --> Embed API (build.nvidia.com) --> KMeansRouter --> Adapter dispatch
                   |                              |
                   v                              v
           nvidia/llama-nemotron-         checkpoint.pkl
@@ -31,12 +135,12 @@ Question --> Embed API (build.nvidia.com) --> KMeansRouter --> LiteLLM dispatch
 1. Question is embedded via API
 2. KMeansRouter assigns to nearest cluster, applies Platt calibration for P(correct) per model
 3. Selects cheapest model above tolerance threshold
-4. LiteLLM dispatches to selected provider
+4. Adapter dispatches to selected provider (or returns decision only)
 
 ### Prefill Path
 
 ```
-Question --> Encoder (Qwen3.5-0.8B) --> PrefillRouter --> LiteLLM dispatch
+Question --> Encoder (Qwen3.5-0.8B) --> PrefillRouter --> Adapter dispatch
                   |                          |
                   v                          v
           hidden states               checkpoint.pt
@@ -106,99 +210,26 @@ models:
 
 `routing.method` determines which BaseRouter is instantiated. The model pool, costs, and endpoints are all in the config. No code changes needed to add or remove models.
 
-## Deployment Modes
+## Deployment Topologies
 
-The toolkit offers three deployment modes. All three perform routing **and** LLM inference — the routing decision determines which model handles the request, then LiteLLM dispatches it.
+| Topology | Adapter | Routing | Inference | Latency overhead |
+|----------|---------|---------|-----------|-----------------|
+| **Embedded SDK** | `adapters/litellm/strategy.py` | In-process | In-process (litellm) | ~0ms network |
+| **Standalone Server** | `adapters/litellm/app.py` | In-server | In-server (litellm) | 1 hop |
+| **LiteLLM Proxy** | `adapters/litellm/proxy.py` | In-proxy | In-proxy (litellm) | 1 hop |
+| **Router Sidecar** | `adapters/http/app.py` | Sidecar | External (caller handles) | 1 hop (route only) |
+| **Gateway Plugin** | `plugins/openclaw/` | Sidecar | Gateway handles | 1 hop (route only) |
+| **Direct Python** | `config.build_router_from_config()` | In-process | None (caller handles) | 0 |
+| **Docker** | `adapters/litellm/proxy.py` | Container | Container (litellm) | 1 hop |
 
-### Standalone Server (`model-router serve`)
+### Which Topology Should I Use?
 
-A custom FastAPI application built into the toolkit. Creates a `litellm.Router` internally and registers `ModelRoutingStrategy` via `set_custom_routing_strategy()`.
-
-```
-Client --> FastAPI app (port 8000)
-               |
-               +-- /v1/chat/completions  (OpenAI-compatible)
-               +-- /api/chat             (SSE for playground UI)
-               +-- /api/models           (pool info + costs)
-               +-- /api/config           (routing method, features)
-               +-- /api/review           (answer quality judging)
-               +-- /health
-               +-- /                     (interactive playground UI)
-               |
-               v
-         ModelRoutingStrategy --> BaseRouter.route()
-               |
-               v
-         litellm.Router.acompletion() --> provider API
-```
-
-**Config**: Single pool config YAML (e.g., `configs/prefill-qwen08b.yaml`).
-
-```bash
-model-router serve --config configs/prefill-qwen08b.yaml --port 8000
-```
-
-### LiteLLM Proxy (`model-router proxy`)
-
-Starts the full **LiteLLM Proxy server** and injects `ModelRoutingStrategy` at startup. The proxy is LiteLLM's production-grade API gateway with built-in auth, rate limiting, spend tracking, caching, virtual keys, and load balancing.
-
-```
-Client --> LiteLLM Proxy (port 4000)
-               |
-               +-- /v1/chat/completions   (OpenAI-compatible)
-               +-- /v1/completions        (legacy completions)
-               +-- /v1/embeddings         (embedding passthrough)
-               +-- /health
-               +-- LiteLLM's full endpoint set (auth, spend, etc.)
-               |
-               v
-         ModelRoutingStrategy injected at startup
-               |
-               v
-         litellm.proxy.Router --> provider API
-```
-
-**Config**: Two config files — a LiteLLM proxy config (`model_list` + `router_settings`) and a pool config (routing method + checkpoint).
-
-```bash
-# Generate the LiteLLM proxy config from your pool config
-model-router proxy-config --config configs/prefill-qwen08b.yaml --output configs/litellm-proxy.yaml
-
-# Start the proxy
-model-router proxy \
-    --litellm-config configs/litellm-proxy.yaml \
-    --router-config configs/prefill-qwen08b.yaml \
-    --port 4000
-```
-
-### Docker
-
-The Dockerfile provides multi-stage builds for containerized deployment:
-
-| Target | Extras installed | Use case |
-|--------|-----------------|----------|
-| `proxy` | `.[proxy]` (CPU only) | KMeans routing or prefill with remote encoder |
-| `proxy-gpu` | `.[proxy,prefill]` (torch + transformers) | Prefill routing with local encoder on GPU |
-
-Both targets run `model-router proxy` via `docker/entrypoint.sh`.
-
-```bash
-# CPU (KMeans or remote encoder) — run from repo root
-docker build -f docker/Dockerfile --target proxy -t model-router:proxy .
-
-# GPU (local prefill encoder) — run from repo root
-docker build -f docker/Dockerfile --target proxy-gpu -t model-router:gpu .
-
-# Or via compose (proxy-gpu target, prefill routing)
-docker compose -f docker/docker-compose.yaml up
-```
-
-### Which Mode Should I Use?
-
-| Scenario | Recommended mode | Why |
-|----------|-----------------|-----|
-| Demos, local development, exploring routing | `serve` | Includes playground UI, single config file, fast to start |
-| Already using LiteLLM Proxy in your stack | `proxy` | Drop-in replacement — keeps your existing LiteLLM auth, rate limiting, and spend tracking |
-| Production deployment without existing LiteLLM | `proxy` | LiteLLM Proxy provides auth, rate limiting, caching, and virtual keys out of the box |
-| Containerized / Kubernetes deployment | Docker (`proxy` or `proxy-gpu`) | Standard container with health checks, non-root user |
-| Adding routing to an existing LiteLLM SDK setup | Neither — use SDK integration | 3 lines of Python, no server needed (see [integration guide](integration.md)) |
+| Scenario | Recommended | Why |
+|----------|------------|-----|
+| Demos, local development | Standalone Server | Playground UI, single config, fast to start |
+| Existing LiteLLM stack | LiteLLM Proxy | Drop-in — keeps auth, rate limiting, spend tracking |
+| Production without LiteLLM | LiteLLM Proxy or Docker | Auth, rate limiting, caching out of the box |
+| Gateway integration (OpenClaw, Portkey) | Router Sidecar + Plugin | Route-only, no inference duplication |
+| Existing Python app | Embedded SDK | 3 lines, no server needed |
+| Custom dispatcher | Direct Python | Routing decisions only, you handle inference |
+| Air-gapped / no API keys | Direct Python + Prefill | Local encoder, no network calls |

@@ -16,7 +16,7 @@ class TestCreateAppReal:
 
     @pytest.mark.requires_openrouter_api_key
     def test_create_app_real_config(self, smoke_config_path):
-        from model_router_toolkit.server.app import create_app
+        from model_router_toolkit.adapters.litellm.app import create_app
 
         app = create_app(str(smoke_config_path))
         routes = [r.path for r in app.routes]
@@ -27,7 +27,7 @@ class TestCreateAppReal:
     def test_health_endpoint_real_app(self, smoke_config_path):
         from fastapi.testclient import TestClient
 
-        from model_router_toolkit.server.app import create_app
+        from model_router_toolkit.adapters.litellm.app import create_app
 
         app = create_app(str(smoke_config_path))
         client = TestClient(app)
@@ -41,7 +41,7 @@ class TestCreateAppReal:
     def test_completions_real_api(self, smoke_config_path):
         from fastapi.testclient import TestClient
 
-        from model_router_toolkit.server.app import create_app
+        from model_router_toolkit.adapters.litellm.app import create_app
 
         app = create_app(str(smoke_config_path))
         client = TestClient(app)
@@ -62,7 +62,7 @@ class TestCreateAppReal:
     def test_review_endpoint_judges_answer(self, smoke_config_path):
         from fastapi.testclient import TestClient
 
-        from model_router_toolkit.server.app import create_app
+        from model_router_toolkit.adapters.litellm.app import create_app
 
         app = create_app(str(smoke_config_path))
         client = TestClient(app)

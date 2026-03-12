@@ -4,7 +4,7 @@ import sys
 
 def _cmd_serve(args):
     import uvicorn
-    from model_router_toolkit.server.app import create_app
+    from model_router_toolkit.adapters.litellm.app import create_app
 
     app = create_app(args.config)
     uvicorn.run(app, host="0.0.0.0", port=args.port)
@@ -65,15 +65,15 @@ def _cmd_collect(args):
 
 def _cmd_serve_router(args):
     import uvicorn
-    from model_router_toolkit.server.app import create_app
+    from model_router_toolkit.adapters.http.app import create_app
 
-    app = create_app(args.config, router_only=True)
+    app = create_app(args.config)
     uvicorn.run(app, host="0.0.0.0", port=args.port)
 
 
 def _cmd_proxy(args):
-    from model_router_toolkit.proxy.config_bridge import validate_model_alignment
-    from model_router_toolkit.proxy.startup import start_proxy
+    from model_router_toolkit.adapters.litellm.config_bridge import validate_model_alignment
+    from model_router_toolkit.adapters.litellm.proxy import start_proxy
 
     warnings = validate_model_alignment(args.litellm_config, args.router_config)
     for w in warnings:
@@ -88,7 +88,7 @@ def _cmd_proxy(args):
 
 
 def _cmd_proxy_config(args):
-    from model_router_toolkit.proxy.config_bridge import generate_litellm_config
+    from model_router_toolkit.adapters.litellm.config_bridge import generate_litellm_config
 
     config = generate_litellm_config(args.config, output=args.output)
     if args.output:
@@ -106,13 +106,11 @@ def main():
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # ── serve ──────────────────────────────────────────────────────────
     serve_p = subparsers.add_parser("serve", help="Start the router server")
     serve_p.add_argument("--config", default="configs/prefill-qwen08b.yaml")
     serve_p.add_argument("--port", type=int, default=8000)
     serve_p.set_defaults(func=_cmd_serve)
 
-    # ── serve-router ───────────────────────────────────────────────────
     sr_p = subparsers.add_parser(
         "serve-router",
         help="Start a router-only server (routing decisions, no LLM inference)",
@@ -121,7 +119,6 @@ def main():
     sr_p.add_argument("--port", type=int, default=8080)
     sr_p.set_defaults(func=_cmd_serve_router)
 
-    # ── train ──────────────────────────────────────────────────────────
     train_p = subparsers.add_parser(
         "train", help="Train a routing model from labeled data",
     )
@@ -139,7 +136,6 @@ def main():
     train_p.add_argument("--pca-dims", default=None, help="PCA dims to sweep, comma-separated (e.g. 50,100,200)")
     train_p.set_defaults(func=_cmd_train)
 
-    # ── evaluate ───────────────────────────────────────────────────────
     eval_p = subparsers.add_parser(
         "evaluate", help="Evaluate a trained router checkpoint",
     )
@@ -151,7 +147,6 @@ def main():
     eval_p.add_argument("--prefill-dir", default=None, help="Cache dir for prefill features")
     eval_p.set_defaults(func=_cmd_evaluate)
 
-    # ── collect ────────────────────────────────────────────────────────
     collect_p = subparsers.add_parser(
         "collect", help="Collect training data by running models on questions",
     )
@@ -166,7 +161,6 @@ def main():
     collect_p.add_argument("--references", default=None, help="Reference CSV for reference judging")
     collect_p.set_defaults(func=_cmd_collect)
 
-    # ── proxy ──────────────────────────────────────────────────────────
     proxy_p = subparsers.add_parser(
         "proxy",
         help="Start LiteLLM Proxy with intelligent routing",
@@ -183,7 +177,6 @@ def main():
     proxy_p.add_argument("--port", type=int, default=4000)
     proxy_p.set_defaults(func=_cmd_proxy)
 
-    # ── proxy-config ──────────────────────────────────────────────────
     pc_p = subparsers.add_parser(
         "proxy-config",
         help="Generate a litellm proxy config.yaml from a pool config",
@@ -192,7 +185,6 @@ def main():
     pc_p.add_argument("--output", default=None, help="Output path (prints to stdout if omitted)")
     pc_p.set_defaults(func=_cmd_proxy_config)
 
-    # ── serve-config ───────────────────────────────────────────────────
     sc_p = subparsers.add_parser(
         "serve-config", help="Generate serve config from checkpoint (coming soon)",
     )

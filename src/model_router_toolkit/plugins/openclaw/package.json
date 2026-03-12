@@ -1,0 +1,13 @@
+{
+  "name": "@model-router/openclaw-plugin",
+  "version": "0.1.0",
+  "description": "Model Router Toolkit plugin for OpenClaw — intelligent per-prompt model routing",
+  "main": "index.ts",
+  "license": "Apache-2.0",
+  "keywords": ["openclaw", "model-router", "llm-routing", "cost-optimization"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NVIDIA/model-router-toolkit",
+    "directory": "src/model_router_toolkit/plugins/openclaw"
+  }
+}

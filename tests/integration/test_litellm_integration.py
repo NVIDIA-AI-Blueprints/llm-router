@@ -18,8 +18,8 @@ from fastapi.testclient import TestClient
 
 from model_router_toolkit.config import ModelSpec, PoolConfig, RoutingConfig
 from model_router_toolkit.router import BaseRouter, CostEstimate, RoutingResult
-from model_router_toolkit.server.app import _build_model_list, _resolve_api_key
-from model_router_toolkit.strategy import ModelRoutingStrategy
+from model_router_toolkit.adapters.litellm.app import _build_model_list, _resolve_api_key
+from model_router_toolkit.adapters.litellm.strategy import ModelRoutingStrategy
 
 
 # ---------------------------------------------------------------------------
@@ -113,8 +113,8 @@ def _make_test_app(
     """Build a minimal FastAPI app with mocked routing components."""
     from litellm import Router as LiteLLMRouter
 
-    from model_router_toolkit.server.chat import router as chat_router
-    from model_router_toolkit.server.completions import router as completions_router
+    from model_router_toolkit.adapters.litellm.chat import router as chat_router
+    from model_router_toolkit.adapters.litellm.completions import router as completions_router
 
     config = _make_config()
     if model_names is None:

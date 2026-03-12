@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from model_router_toolkit.router import BaseRouter, RoutingResult, CostEstimate
-from model_router_toolkit.strategy import ModelRoutingStrategy
+from model_router_toolkit.adapters.litellm.strategy import ModelRoutingStrategy
 
 
 class FakeRouter(BaseRouter):
