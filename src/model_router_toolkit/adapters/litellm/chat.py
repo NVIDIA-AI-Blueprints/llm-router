@@ -38,22 +38,16 @@ async def _chat_stream(request: Request, req: ChatRequest):
     result = strategy.router.route(req.message, tolerance=tolerance)
     route_ms = (time.perf_counter() - t0) * 1000
 
-    filtered = [
-        (n, c, ct)
-        for n, c, ct in zip(result.model_names, result.confidences, result.costs)
-        if n in enabled
-    ]
-    if not filtered:
-        filtered = list(zip(result.model_names, result.confidences, result.costs))
+    selected = result.selected_model
 
-    p_max = max(c for _, c, _ in filtered)
-    threshold = p_max - tolerance
-    cost_sorted = sorted(filtered, key=lambda x: x[2].estimated_total_cost)
-    selected = cost_sorted[-1][0]
-    for name, conf, _ in cost_sorted:
-        if conf >= threshold:
-            selected = name
-            break
+    if enabled and selected not in enabled:
+        above = [
+            (n, c, ct)
+            for n, c, ct in zip(result.model_names, result.confidences, result.costs)
+            if n in enabled and c >= (max(result.confidences) - tolerance)
+        ]
+        if above:
+            selected = min(above, key=lambda x: x[2].cost_per_m_input_tokens)[0]
 
     model_spec = config.get_model(selected)
     system_prompt = model_spec.system_prompt if model_spec else ""

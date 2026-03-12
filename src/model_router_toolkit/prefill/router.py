@@ -38,7 +38,7 @@ class PrefillRouter(BaseRouter):
 
         cost_sorted = sorted(
             zip(raw.model_names, raw.confidences, raw.costs),
-            key=lambda x: x[2].estimated_total_cost,
+            key=lambda x: x[2].cost_per_m_input_tokens,
         )
 
         selected = cost_sorted[-1][0]
