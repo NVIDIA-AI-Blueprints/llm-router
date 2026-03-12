@@ -28,6 +28,8 @@ def _resolve_api_key(litellm_model: str, api_base: str) -> str:
     if litellm_model.startswith("nvidia_nim/"):
         return os.environ.get("NVIDIA_API_KEY", "")
 
+    if "inference-api.nvidia" in api_base:
+        return os.environ.get("NVIDIA_INTERNAL_API_KEY_REDACTED", "") or os.environ.get("NVIDIA_API_KEY", "")
     if "nvidia" in api_base or "integrate.api.nvidia" in api_base:
         return os.environ.get("NVIDIA_API_KEY", "")
     if "openrouter" in api_base:
@@ -49,7 +51,7 @@ def _build_model_list(config: PoolConfig) -> list[dict]:
             "openrouter/", "nvidia_nim/", "openai/", "anthropic/", "ollama/",
         ))
         if not has_provider:
-            if "nvidia" in api_base:
+            if "integrate.api.nvidia" in api_base:
                 litellm_model = f"nvidia_nim/{litellm_model}"
             elif "openrouter" in api_base:
                 litellm_model = f"openrouter/{litellm_model}"
@@ -60,6 +62,8 @@ def _build_model_list(config: PoolConfig) -> list[dict]:
             "model": litellm_model,
             "api_key": api_key,
         }
+        if m.api_base:
+            params["api_base"] = m.api_base
 
         model_list.append({
             "model_name": m.name,
@@ -118,7 +122,11 @@ def create_app(
     async def get_models():
         return models_list(config)
 
-    review_available = bool(os.environ.get("OPENROUTER_API_KEY"))
+    review_available = bool(
+        os.environ.get("OPENROUTER_API_KEY")
+        or os.environ.get("NVIDIA_API_KEY")
+        or os.environ.get("NVIDIA_INTERNAL_API_KEY_REDACTED")
+    )
     judge_model = max(config.models, key=lambda m: m.cost_per_m_output_tokens).display_name if config.models else None
 
     @app.get("/api/config")

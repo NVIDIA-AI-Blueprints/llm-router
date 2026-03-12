@@ -39,6 +39,8 @@ def generate_litellm_config(
         params: dict[str, Any] = {"model": litellm_model}
         if env_var:
             params["api_key"] = f"os.environ/{env_var}"
+        if m.api_base:
+            params["api_base"] = m.api_base
 
         entry: dict[str, Any] = {
             "model_name": m.name,
@@ -112,6 +114,8 @@ def _api_key_env_var(litellm_model: str, api_base: str) -> str:
     if litellm_model.startswith("anthropic/"):
         return "ANTHROPIC_API_KEY"
 
+    if "inference-api.nvidia" in api_base:
+        return "NVIDIA_INTERNAL_API_KEY_REDACTED"
     if "nvidia" in api_base or "integrate.api.nvidia" in api_base:
         return "NVIDIA_API_KEY"
     if "openrouter" in api_base:
