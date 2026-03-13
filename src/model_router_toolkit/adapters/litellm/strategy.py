@@ -90,13 +90,38 @@ class ModelRoutingStrategy:
                 return dep
         return None
 
+    def _try_pin(self, request_kwargs: dict | None) -> dict | None:
+        """Check request_kwargs for an explicit pin_model directive.
+
+        Returns the pinned deployment dict, or None to fall through to
+        normal routing.  The pin_model value must match a model in the
+        pool; unknown names are silently ignored.
+        """
+        if not request_kwargs:
+            return None
+        metadata = request_kwargs.get("metadata") or {}
+        pin = metadata.get("pin_model")
+        if not pin or not self._router.has_model(pin):
+            return None
+        pinned = self._router.resolve(pin)
+        if pinned is None:
+            return None
+        self._last_result = pinned
+        return self._find_deployment(pin)
+
     def _route_and_select(
         self,
         model: str,
         messages: list[dict[str, str]] | None = None,
         input: str | list | None = None,
+        request_kwargs: dict | None = None,
         **kwargs: Any,
     ) -> dict:
+        # Explicit pin via metadata — for router-per-subagent flows.
+        dep = self._try_pin(request_kwargs)
+        if dep:
+            return dep
+
         text = self._extract_user_text(messages)
         if not text and isinstance(input, str):
             text = input
@@ -126,7 +151,9 @@ class ModelRoutingStrategy:
         specific_deployment: bool | None = False,
         request_kwargs: dict | None = None,
     ) -> dict:
-        return await asyncio.to_thread(self._route_and_select, model, messages, input)
+        return await asyncio.to_thread(
+            self._route_and_select, model, messages, input, request_kwargs,
+        )
 
     def get_available_deployment(
         self,
@@ -136,7 +163,7 @@ class ModelRoutingStrategy:
         specific_deployment: bool | None = False,
         request_kwargs: dict | None = None,
     ) -> dict:
-        return self._route_and_select(model, messages, input)
+        return self._route_and_select(model, messages, input, request_kwargs)
 
     def set_litellm_router(self, litellm_router: Any) -> None:
         """Called internally when plugged into a litellm.Router."""

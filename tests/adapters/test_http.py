@@ -61,6 +61,35 @@ class FakeRouter(BaseRouter):
             metadata={"p_max": 0.92, "threshold": 0.72, "tolerance": tolerance},
         )
 
+    def has_model(self, model_name):
+        return model_name in self._model_names
+
+    def resolve(self, model_name):
+        if model_name not in self._model_names:
+            return None
+        confidences = [1.0 if m == model_name else 0.0 for m in self._model_names]
+        costs = [
+            CostEstimate(
+                median_output_tokens=100,
+                cost_per_m_input_tokens=0.04,
+                cost_per_m_output_tokens=0.16,
+                estimated_total_cost=0.0001,
+            ),
+            CostEstimate(
+                median_output_tokens=200,
+                cost_per_m_input_tokens=1.75,
+                cost_per_m_output_tokens=14.00,
+                estimated_total_cost=0.003,
+            ),
+        ]
+        return RoutingResult(
+            model_names=self._model_names,
+            confidences=confidences,
+            costs=costs,
+            selected_model=model_name,
+            metadata={"pinned": True},
+        )
+
 
 @pytest.fixture
 def fake_config_path(tmp_path):
@@ -274,6 +303,34 @@ class TestRouteEndpoint:
         assert isinstance(data["confidences"], dict)
         assert data["confidences"]["model-a"] == pytest.approx(0.92)
         assert data["confidences"]["model-b"] == pytest.approx(0.71)
+
+    def test_route_model_pin_bypasses_routing(self, client):
+        resp = client.post("/v1/route", json={"model": "model-b"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["selected_model"] == "model-b"
+        assert data["metadata"].get("pinned") is True
+
+    def test_route_model_pin_unknown_falls_through(self, client):
+        resp = client.post("/v1/route", json={
+            "model": "unknown-model",
+            "question": "What is 2+2?",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["selected_model"] == "model-a"
+        assert data["metadata"].get("pinned") is None
+
+    def test_route_model_pin_ignores_question(self, client):
+        """When model is a known pool model, question text is irrelevant."""
+        resp = client.post("/v1/route", json={
+            "model": "model-b",
+            "question": "This text should be ignored",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["selected_model"] == "model-b"
+        assert data["metadata"].get("pinned") is True
 
 
 class TestNoInferenceEndpoints:

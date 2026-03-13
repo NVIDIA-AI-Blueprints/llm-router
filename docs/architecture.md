@@ -6,6 +6,9 @@ The Model Router Toolkit is built around a **BaseRouter** abstraction. All routi
 
 ```
 BaseRouter (abstract)
+    |   route(question, tolerance)  -> RoutingResult  # ML-based model selection
+    |   has_model(model_name)       -> bool           # pool membership check
+    |   resolve(model_name)         -> RoutingResult   # pin a model without ML inference
     |
     +-- KMeansRouter      # Embedding-based clustering; no GPU required
     |
@@ -209,6 +212,51 @@ models:
 ```
 
 `routing.method` determines which BaseRouter is instantiated. The model pool, costs, and endpoints are all in the config. No code changes needed to add or remove models.
+
+## Model-Name Bypass (Pin Mode)
+
+All adapters support **model-name bypass**: if the caller specifies a model name that exists in the pool, the router returns it directly without running ML inference. This enables two routing workflows:
+
+| Workflow | How it works | When to use |
+|----------|-------------|-------------|
+| **Per-turn routing** | Every request goes through `route()`. Model can change on each call. | Default. Cost-optimize every LLM call independently. |
+| **Router-per-subagent** | First request goes through `route()`. Caller captures `selected_model` and sends it as `model` on subsequent requests. `resolve()` returns instantly. | Multi-turn agent chains where mid-chain model switches would hurt quality. |
+
+### How it works
+
+`BaseRouter` exposes two methods:
+
+- `has_model(name)` — returns `True` if the name is in the model pool
+- `resolve(name)` — returns a `RoutingResult` with `selected_model` pinned and `metadata.pinned = True`, without running the encoder or ML model
+
+Each adapter uses a different signal for pinning (because the `model` parameter means different things in different contexts):
+
+| Adapter | Pin signal | Why |
+|---------|-----------|-----|
+| **LiteLLM strategy** | `metadata.pin_model` in `request_kwargs` | `model` is always a pool name in LiteLLM flows — can't distinguish "route me" from "pin me" by model name alone |
+| **HTTP route endpoint** | `model` field in `RouteRequest` body | Separate from `question` — presence of `model` is an unambiguous pin signal |
+| **Direct Python** | Caller calls `router.resolve(name)` explicitly | Full programmatic control |
+
+### Example: router-per-subagent via LiteLLM Proxy
+
+```
+1. First call:   metadata={}                              → strategy runs route() → selected_model="nem-think"
+2. Next calls:   metadata={"pin_model": "nem-think"}      → strategy runs resolve() → instant pin, no ML
+```
+
+### Example: router-per-subagent via HTTP sidecar
+
+```bash
+# First call: get routing decision
+curl -X POST http://localhost:8079/v1/route \
+  -d '{"question": "Explain quantum computing"}'
+# Response: {"selected_model": "nem-think", "metadata": {...}}
+
+# Subsequent calls: pin the model (no ML inference)
+curl -X POST http://localhost:8079/v1/route \
+  -d '{"model": "nem-think"}'
+# Response: {"selected_model": "nem-think", "metadata": {"pinned": true}}
+```
 
 ## Deployment Topologies
 

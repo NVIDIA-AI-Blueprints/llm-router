@@ -16,6 +16,7 @@ router = APIRouter()
 class RouteRequest(BaseModel):
     messages: list[dict[str, str]] | None = None
     question: str | None = None
+    model: str | None = None
     tolerance: float = Field(default=0.20, ge=0.0, le=1.0)
 
 
@@ -57,6 +58,16 @@ def _result_to_response(result: RoutingResult) -> RouteResponse:
 async def route(request: Request, req: RouteRequest):
     app_router = request.app.state.router
     config = request.app.state.config
+
+    # Model-name bypass: if a specific model is requested and it exists
+    # in the pool, return it directly without ML inference.
+    if req.model and app_router.has_model(req.model):
+        t0 = time.perf_counter()
+        result = app_router.resolve(req.model)
+        route_ms = (time.perf_counter() - t0) * 1000
+        response = _result_to_response(result)
+        response.metadata["route_ms"] = round(route_ms, 2)
+        return response
 
     question = _extract_question(req)
     if not question:

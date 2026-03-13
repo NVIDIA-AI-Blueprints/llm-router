@@ -85,3 +85,23 @@ class BaseRouter(ABC):
     def unload(self) -> None:
         """Release resources (GPU memory, model weights, etc.)."""
         pass
+
+    def has_model(self, model_name: str) -> bool:
+        """Check whether *model_name* is a known model in the pool.
+
+        Subclasses that store a PoolConfig should override this.
+        The default returns False so callers fall through to route().
+        """
+        return False
+
+    def resolve(self, model_name: str) -> RoutingResult | None:
+        """Return a RoutingResult that pins *model_name* without ML inference.
+
+        Use this for "router-per-subagent" flows: call resolve() once at
+        subagent start to lock a model, then send subsequent requests
+        directly to that model.
+
+        Returns None if the model is not in the pool (caller should
+        fall through to route()).
+        """
+        return None

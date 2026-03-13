@@ -59,6 +59,32 @@ class PrefillRouter(BaseRouter):
             },
         )
 
+    def has_model(self, model_name: str) -> bool:
+        if self._config and hasattr(self._config, "model_names"):
+            return model_name in self._config.model_names
+        return model_name in self._model_names
+
+    def resolve(self, model_name: str) -> RoutingResult | None:
+        if not self.has_model(model_name):
+            return None
+        model_names = self._config.model_names if self._config else list(self._model_names)
+        confidences = [1.0 if m == model_name else 0.0 for m in model_names]
+        costs = []
+        for m in model_names:
+            spec = self._config.get_model(m) if self._config else None
+            costs.append(CostEstimate(
+                median_output_tokens=500,
+                cost_per_m_input_tokens=spec.cost_per_m_input_tokens if spec else 0,
+                cost_per_m_output_tokens=spec.cost_per_m_output_tokens if spec else 0,
+            ))
+        return RoutingResult(
+            model_names=model_names,
+            confidences=confidences,
+            costs=costs,
+            selected_model=model_name,
+            metadata={"pinned": True},
+        )
+
     def unload(self) -> None:
         if self._scorer is not None:
             self._scorer.unload()

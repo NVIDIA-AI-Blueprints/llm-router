@@ -129,6 +129,30 @@ class KMeansRouter(BaseRouter):
             },
         )
 
+    def has_model(self, model_name: str) -> bool:
+        return model_name in self._models
+
+    def resolve(self, model_name: str) -> RoutingResult | None:
+        if model_name not in self._models:
+            return None
+        model_names = list(self._models)
+        confidences = [1.0 if m == model_name else 0.0 for m in model_names]
+        costs = []
+        for m in model_names:
+            ct = self._cost_table.get(m, {})
+            costs.append(CostEstimate(
+                median_output_tokens=ct.get("median_output_tokens", 500),
+                cost_per_m_input_tokens=ct.get("cost_per_m_input_tokens", 0),
+                cost_per_m_output_tokens=ct.get("cost_per_m_output_tokens", 0),
+            ))
+        return RoutingResult(
+            model_names=model_names,
+            confidences=confidences,
+            costs=costs,
+            selected_model=model_name,
+            metadata={"pinned": True},
+        )
+
     def unload(self) -> None:
         self._kmeans_model = None
         self._platt_models = {}

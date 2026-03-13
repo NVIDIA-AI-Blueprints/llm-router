@@ -237,6 +237,29 @@ curl -X POST http://localhost:8079/v1/route \
   -d '{"question": "What is 2+2?", "tolerance": 0.15}'
 ```
 
+#### Model-name bypass (pin mode)
+
+To pin a specific model without ML inference, pass a `model` field matching a pool model name:
+
+```bash
+curl -X POST http://localhost:8079/v1/route \
+  -d '{"model": "nem-think"}'
+```
+
+Response:
+
+```json
+{
+  "selected_model": "nem-think",
+  "model_names": ["nem-think", "nem-nothink"],
+  "confidences": {"nem-think": 1.0, "nem-nothink": 0.0},
+  "costs": [...],
+  "metadata": {"pinned": true, "route_ms": 0.01}
+}
+```
+
+Use this for **router-per-subagent** flows: route once normally, then pass the `selected_model` back as `model` on subsequent calls to lock the model for the subagent's lifetime.
+
 ### Endpoints
 
 | Endpoint | Method | Description |
@@ -353,6 +376,18 @@ print(result.metadata)             # routing metadata (p_max, threshold)
 ```
 
 No server, no API keys — the router runs the encoder locally and scores with the trained MLP checkpoint.
+
+### Pin mode (router-per-subagent)
+
+```python
+# Check if a model is in the pool
+router.has_model("nem-think")  # True
+
+# Pin a model without ML inference
+pinned = router.resolve("nem-think")
+print(pinned.selected_model)   # "nem-think"
+print(pinned.metadata)         # {"pinned": True}
+```
 
 **Source:** `config.py` (`load_config`, `build_router_from_config`), `router.py` (`BaseRouter`)
 
