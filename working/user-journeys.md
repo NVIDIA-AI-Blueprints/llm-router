@@ -31,7 +31,7 @@ This document maps every user journey and job-to-be-done (JTBD) for the Model Ro
 | **Evaluator** | AI team lead, PM, developer | Prove routing works in 5 min | Quickstart notebook | Time to first routing decision |
 | **Integrator** | Backend/ML engineer | Running router accepting requests | `configs/` + `model-router serve` | Time to first routed API call |
 | **Optimizer** | ML engineer | Domain-tuned routing | `collect` + `train` + `evaluate` | AUC improvement, cost savings |
-| **Platform Engineer** | DevOps/infra engineer | Production-grade deployment | Docker + `model-router proxy` | Uptime, container health |
+| **Platform Engineer** | DevOps/infra engineer | Production-grade deployment | `model-router proxy` | Uptime, health checks |
 | **LiteLLM User** | Developer with existing LiteLLM setup | Add routing to current stack | `ModelRoutingStrategy` SDK | Lines of code to integrate |
 | **QA Lead** | Team lead, quality engineer | Validate routing quality | `/api/review` + evaluation CLI | Routing accuracy, review verdicts |
 | **Gateway Admin** | Platform/infra engineer with existing API gateway | Add routing to gateway (OpenClaw, Portkey, etc.) | Router sidecar + plugin/webhook | Request overhead, fallback rate |
@@ -388,21 +388,20 @@ DevOps and infrastructure engineers who need to deploy the router in a container
 
 ### Job to Be Done
 
-> "Give me a Docker container I can deploy to our Kubernetes cluster with standard ops tooling."
+> "Give me a production-grade deployment I can run with standard ops tooling."
 
 ### Journey Steps
 
 | Step | Action | Asset | Success Criteria |
 |------|--------|-------|-----------------|
-| 4.1 | Review deployment options | `docker/`, `docs/integration.md` | Understand proxy vs. serve modes |
-| 4.2 | Choose deployment mode | Proxy (LiteLLM) vs. Serve (standalone) | Decision based on existing stack |
-| 4.3 | Configure environment | `.env.example`, `docker-compose.yaml` | API keys, config paths set |
-| 4.4 | Build Docker image | `docker build -f docker/Dockerfile --target proxy .` | Image builds without errors |
-| 4.5 | Start container | `docker compose up` | Container healthy, port 4000 accessible |
-| 4.6 | Validate health | `curl http://localhost:4000/health` | Returns OK with model list |
-| 4.7 | Send test request | cURL to `/v1/chat/completions` | Routed response returned |
-| 4.8 | Configure monitoring | Health check endpoint | Kubernetes readiness/liveness probes |
-| 4.9 | Scale and maintain | Docker compose or Kubernetes manifests | Horizontal scaling if needed |
+| 4.1 | Review deployment options | `docs/integration.md` | Understand proxy vs. serve vs. sidecar modes |
+| 4.2 | Choose deployment mode | Proxy (LiteLLM) vs. Serve (standalone) vs. Sidecar | Decision based on existing stack |
+| 4.3 | Configure environment | `.env.example` | API keys, config paths set |
+| 4.4 | Start server | `model-router proxy` or `model-router serve` | Server starts, port accessible |
+| 4.5 | Validate health | `curl http://localhost:4000/health` | Returns OK with model list |
+| 4.6 | Send test request | cURL to `/v1/chat/completions` | Routed response returned |
+| 4.7 | Configure monitoring | Health check endpoint | Readiness/liveness probes |
+| 4.8 | Scale and maintain | Process manager or orchestrator | Horizontal scaling if needed |
 
 ### Deployment Modes
 
@@ -411,16 +410,6 @@ DevOps and infrastructure engineers who need to deploy the router in a container
 | **Standalone server** | `model-router serve` | 8000 | Yes | Yes | Quick deployment, includes playground UI |
 | **Router-only sidecar** | `model-router serve-router` | 8079 | Yes | No | Routing decisions as a microservice, no API keys needed |
 | **LiteLLM Proxy** | `model-router proxy` | 4000 | Yes | Yes | Drop-in replacement for existing LiteLLM proxy |
-| **Docker (Proxy)** | `docker compose up` | 4000 | Yes | Yes | Containerized LiteLLM proxy with routing |
-| **Docker (GPU)** | Build `proxy-gpu` target | 4000 | Yes | Yes | Prefill routing in container |
-
-### Docker Details
-
-- **Base image**: `python:3.12-slim`
-- **Dockerfile targets**: `proxy` (CPU, `.[proxy]`) and `proxy-gpu` (GPU, `.[proxy,prefill]`)
-- **Health check**: `curl -f http://localhost:4000/health` (built into Dockerfile)
-- **Entrypoint**: `docker/entrypoint.sh` runs `model-router proxy` with `LITELLM_CONFIG` and `ROUTER_CONFIG` env vars
-- **Volumes**: `configs/` and `checkpoints/` mounted read-only via compose
 
 ### Sidecar Security
 
@@ -437,29 +426,20 @@ Supports HMAC-SHA256 (`X-Webhook-Signature` header) and bearer token (`Authoriza
 
 | JTBD | Current State | Completeness |
 |------|--------------|-------------|
-| Containerized deployment | Multi-stage Dockerfile (`proxy`, `proxy-gpu` targets) | Complete |
-| Docker Compose for dev | `docker/docker-compose.yaml` | Complete (proxy-gpu mode) |
-| GPU-enabled container | `proxy-gpu` Dockerfile target | Complete (target exists, compose uses it) |
-| Health checks | `/health` endpoint, Dockerfile HEALTHCHECK | Complete |
-| Config volume mounts | `configs/` and `checkpoints/` mounted read-only | Complete |
-| Environment variable config | Env vars in compose + entrypoint | Complete |
+| Health checks | `/health` endpoint on all server modes | Complete |
+| Environment variable config | Env vars for API keys, CORS origins, webhook secret | Complete |
 | Secure the sidecar | HMAC-SHA256 + bearer token via `ROUTER_WEBHOOK_SECRET` | Complete |
-| Kubernetes manifests | Not provided | Missing |
-| Helm charts | Not provided | Missing |
 | Horizontal scaling guide | Not documented | Missing |
 | Log aggregation | Stdout logging | Basic — no structured logging |
 | Secrets management | Environment variables | Basic — no vault integration |
-| TLS/SSL | Not handled | Out of scope (use ingress) |
+| TLS/SSL | Not handled | Out of scope (use reverse proxy) |
 
 ### Gaps & Friction Points
 
-1. **No Kubernetes manifests or Helm charts**: Container exists but no K8s deployment artifacts
-2. **Port inconsistency across modes**: Serve uses 8000, sidecar uses 8079, proxy uses 4000 — document the reasoning
-3. **Checkpoint provisioning**: Checkpoints are gitignored; no download or init-container strategy
-4. **No resource limits**: No CPU/memory recommendations documented
-5. **No rolling update strategy**: No guidance on zero-downtime deployments
-6. **No observability stack**: No Prometheus metrics, no OpenTelemetry spans
-7. **No structured logging**: All output is `print()` to stdout — no JSON logging for log aggregation
+1. **Port inconsistency across modes**: Serve uses 8000, sidecar uses 8079, proxy uses 4000 — document the reasoning
+2. **No resource recommendations**: No CPU/memory guidelines documented
+3. **No observability stack**: No Prometheus metrics, no OpenTelemetry spans
+4. **No structured logging**: All output is `print()` to stdout — no JSON logging for log aggregation
 
 ---
 
@@ -691,7 +671,7 @@ Build a new plugin for any platform with a pre-request hook.
 ### Gaps & Friction Points
 
 1. **Only OpenClaw has a packaged plugin**: Other gateways require custom implementation using the webhook/HTTP pattern
-2. **No Docker Compose for sidecar + gateway**: No ready-made compose file pairing the sidecar with a gateway
+2. **No compose file for sidecar + gateway**: No ready-made setup pairing the sidecar with a gateway
 3. **Sidecar warm-up latency**: First request with prefill encoder takes 5-15s — gateway timeout may need increasing
 4. **No mTLS**: Auth is HMAC/bearer only — no mutual TLS for sidecar communication
 5. **No distributed tracing**: No trace propagation between gateway and sidecar
@@ -808,7 +788,7 @@ These journeys extend beyond the toolkit itself. The Model Router Toolkit is one
 | 1. Audit | Analyze current LLM spending by model and use case | — | Billing dashboards, usage logs |
 | 2. Evaluate | Prove routing can maintain quality at lower cost | **Journey 1** (quickstart) | Management buy-in, ROI analysis |
 | 3. Benchmark | Collect accuracy data across model pool | **Journey 3** (collect) | Internal benchmark suite |
-| 4. Deploy | Set up routing in staging | **Journey 2** (deploy) or **Journey 4** (Docker) | CI/CD pipeline, staging environment |
+| 4. Deploy | Set up routing in staging | **Journey 2** (deploy) or **Journey 4** (production) | CI/CD pipeline, staging environment |
 | 5. Validate | Run formal evaluation, compare to baseline | **Journey 6** (QA) | A/B testing infrastructure |
 | 6. Production | Promote to production traffic | **Journey 4** (production) | Load balancers, monitoring, alerting |
 | 7. Iterate | Retrain as models/costs change | **Journey 3** (train) | Model catalog management |
@@ -827,7 +807,7 @@ These journeys extend beyond the toolkit itself. The Model Router Toolkit is one
 | 3. Prototype | Build prototype with manual model selection | — | Application code, frontend |
 | 4. Add routing | Replace manual selection with intelligent routing | **Journey 5** (LiteLLM integration) | Application LiteLLM setup |
 | 5. Customize | Collect domain data and train custom router | **Journey 3** (train) | Domain question sets |
-| 6. Ship | Deploy router as part of application infrastructure | **Journey 4** (Docker/K8s) | Application deployment pipeline |
+| 6. Ship | Deploy router as part of application infrastructure | **Journey 4** (production) | Application deployment pipeline |
 | 7. Monitor | Track routing quality alongside product metrics | **Journey 6** (QA) | Application analytics, user feedback |
 | 8. Evolve | Update model pool as new models launch | `model-pool-reference.md`, retrain | Model marketplace monitoring |
 
@@ -872,7 +852,7 @@ These journeys extend beyond the toolkit itself. The Model Router Toolkit is one
 |-------|----------|-------------|-----------------|
 | 1. Define tenants | Team-specific model pools and budgets | — | Organization management, billing |
 | 2. Create per-tenant configs | Separate pool_config.yaml per team | **Config system** | Config management tool |
-| 3. Deploy shared infrastructure | LiteLLM Proxy with routing | **Journey 4** (Docker), **Journey 5** (proxy) | Kubernetes, API gateway |
+| 3. Deploy shared infrastructure | LiteLLM Proxy with routing | **Journey 4** (production), **Journey 5** (proxy) | API gateway |
 | 4. Route per tenant | Tenant-specific routing strategy | **Not directly supported** | Request headers, API key mapping |
 | 5. Train per tenant | Custom routers for each team's domain | **Journey 3** (train) per tenant | Isolated training pipelines |
 | 6. Monitor per tenant | Per-tenant quality and cost tracking | **Telemetry** (partial) | Multi-tenant dashboards |
@@ -917,10 +897,10 @@ Complete JTBD inventory across all personas.
 | I4 | Connect downstream apps | Integrator | `docs/integration.md` — 7 paths with decision matrix | Complete |
 | I5 | Add routing to existing LiteLLM SDK | LiteLLM User | `ModelRoutingStrategy` | Complete |
 | I6 | Add routing to existing LiteLLM Proxy | LiteLLM User | `model-router proxy` | Complete |
-| I7 | Deploy in Docker | Platform Eng. | `docker/Dockerfile` (proxy + proxy-gpu), compose | Complete |
+| I7 | ~~Deploy in Docker~~ | Platform Eng. | Removed (YAGNI at v0.1.0-alpha) | Removed |
 | I8 | Deploy to Kubernetes | Platform Eng. | — | Missing |
 | I9 | Run as system service/daemon | Platform Eng. | — | Missing |
-| I10 | Configure health checks | Platform Eng. | `/health`, Dockerfile HEALTHCHECK | Complete |
+| I10 | Configure health checks | Platform Eng. | `/health` endpoint on all server modes | Complete |
 | I11 | Pin model for multi-turn chains | Integrator | `resolve()`, `model` field, `metadata.pin_model` | Complete |
 | I12 | Secure sidecar with webhook auth | Gateway Admin | `WebhookAuthMiddleware` — HMAC + bearer | Complete |
 | I13 | Integrate with OpenClaw gateway | Gateway Admin | `plugins/openclaw/` — full plugin | Complete |
@@ -999,7 +979,7 @@ Journey 1 (Evaluate)
     │        │
     │        ├──► 2a/2b: Full mode (routing + inference)
     │        │        │
-    │        │        ├──► Journey 4 (Production / Docker)
+    │        │        ├──► Journey 4 (Production)
     │        │        │        │
     │        │        │        └──► Broader E (Multi-Tenant Platform)
     │        │        │
@@ -1039,7 +1019,7 @@ Journey 1 (Evaluate)
 ```
 
 **Natural progression paths:**
-1. **Evaluator → Integrator (full) → Platform Engineer**: Try → deploy with inference → productionize in Docker
+1. **Evaluator → Integrator (full) → Platform Engineer**: Try → deploy with inference → productionize
 2. **Evaluator → Integrator (sidecar) → Gateway Admin**: Try → deploy sidecar → plug into OpenClaw/Portkey/etc.
 3. **Evaluator → Optimizer → QA Lead**: Try → customize → validate
 4. **LiteLLM User → Optimizer → Platform Engineer**: Integrate → tune → operate
@@ -1169,15 +1149,14 @@ Synthesize findings into actionable improvements:
 
 | Phase | Specific Actions |
 |-------|-----------------|
-| Doc Audit | Read `docker/Dockerfile`, `docker-compose.yaml`, `entrypoint.sh`, `.dockerignore` |
-| Execution | Parse Dockerfile stages, verify compose config, check health check configuration, validate volume mounts, verify port mappings |
+| Doc Audit | Read deployment docs in `docs/integration.md`, `.env.example`, verify server startup |
+| Execution | Verify server startup, check health check endpoints, validate config handling |
 | Gaps | Evaluate K8s readiness, assess security posture, check for production hardening |
 
 **Key questions to answer:**
-- Does `docker compose up` work on first try?
-- Is the container suitable for production (non-root user, health checks, resource limits)?
-- Can I deploy this to Kubernetes with reasonable effort?
-- Are secrets handled appropriately?
+- Do the server modes start and serve correctly on first try?
+- Are health checks available across all modes?
+- Are secrets handled appropriately (env vars, webhook auth)?
 
 #### Review J5: Plug into Existing LiteLLM (The LiteLLM User)
 
@@ -1316,7 +1295,7 @@ The review agent should follow this protocol:
 | J1: Evaluate | 5 files (2 notebooks + README + 2 checkpoints) | Medium (two notebooks, cross-comparison) |
 | J2: Deploy | 15+ files (adapters/litellm/, adapters/http/, configs, docs) | High (multi-module, 7 integration paths) |
 | J3: Train | 8+ files | High (pipeline complexity) |
-| J4: Production | 6 files (Docker, compose, entrypoint, auth) | Medium (Docker + config + security) |
+| J4: Production | 4 files (integration docs, env, auth) | Medium (deployment modes + security) |
 | J5: LiteLLM | 8+ files (strategy, proxy, config_bridge, docs) | Medium (integration surface) |
 | J6: QA | 6+ files (review, evaluate, telemetry, docs) | Medium (metrics + endpoints) |
 | J7: Gateway | 8+ files (auth, plugins, docs) | Medium (sidecar + plugin + webhook) |

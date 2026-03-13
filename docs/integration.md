@@ -125,17 +125,6 @@ curl http://localhost:4000/v1/chat/completions \
   -d '{"model": "nem-think", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
-### Docker
-
-```bash
-export OPENROUTER_API_KEY=sk-or-...
-docker compose -f docker/docker-compose.yaml up
-
-# Or build directly
-docker build -f docker/Dockerfile --target proxy -t model-router:proxy .      # CPU
-docker build -f docker/Dockerfile --target proxy-gpu -t model-router:gpu .    # GPU
-```
-
 **Source:** `adapters/litellm/proxy.py`, `adapters/litellm/config_bridge.py`
 
 ---
@@ -400,10 +389,9 @@ print(pinned.metadata)         # {"pinned": True}
 | First time trying the toolkit | Standalone Server | Playground UI, single config, visual routing |
 | Local development and debugging | Standalone Server | Playground shows routing decisions |
 | Already running LiteLLM Proxy | LiteLLM Proxy | Drop-in — keeps auth, spend tracking, caching |
-| Production without existing gateway | LiteLLM Proxy or Docker | Auth, rate limiting, virtual keys out of the box |
+| Production without existing gateway | LiteLLM Proxy | Auth, rate limiting, virtual keys out of the box |
 | Existing Python app with litellm | LiteLLM SDK | 4 lines, no extra server |
 | API gateway (OpenClaw, Portkey) | Router Sidecar + Plugin | Route-only, no inference duplication |
 | Enterprise webhook pipeline | Router Sidecar + Webhook Auth | HMAC or bearer token validation |
 | Custom dispatcher, evaluation scripts | Direct Python | Routing decisions only |
 | Air-gapped / no API keys | Direct Python + Prefill | Local encoder, no network calls |
-| Kubernetes / containers | Docker | Standard container with health checks |

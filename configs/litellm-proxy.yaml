@@ -1,4 +1,4 @@
-# LiteLLM Proxy config for use with Docker and model-router proxy mode.
+# LiteLLM Proxy config for use with model-router proxy mode.
 # Generated from configs/prefill-qwen08b.yaml via:
 #   model-router proxy-config --config configs/prefill-qwen08b.yaml
 #

@@ -19,7 +19,7 @@ These items are referenced in docs or configs but require net-new implementation
 - [ ] **Update collection function based on Max's code** — Refactor `collect.py` to align with Max's implementation in the `max/running_eval` branch of `dl-tme/llmrouter` (https://gitlab-master.nvidia.com/dl-tme/llmrouter/-/tree/max/running_eval). Port relevant patterns and improvements.
 - [ ] **Split collection function into modular data collection + encoder output generation** — Decompose the monolithic collection function in `collect.py` so that (1) data collection (running models, judging correctness) and (2) encoder output generation (prefill extraction for training) are separate, composable modules. Both should remain accessible from the collection entrypoint but independently callable.
 - [ ] **Pretrained getting-started flow (skip extraction + sweep)** — Ship bundled training data, pre-extracted prefill cache, and pre-computed sweep results so users can train a router checkpoint without running the encoder or sweep. Requires: `SweepResult` serialization to/from JSON in `sweep.py`, `--sweep-config` and `--save-sweep` CLI flags, conditional sweep skip in `train_prefill()`, bundled data artifacts in `data/`. Plan: `working/prefill-pretrained-getting-started.md`.
-- [ ] **Address remaining virtual review action items** — Continue working through the open items from `working/virtual-review.md`. Key remaining work: fix question format mismatch in `collect.py` (Tier 1.4), add review result persistence in telemetry (Tier 1.6), add Docker section to README (Tier 2.2), document `/api/review` endpoint (Tier 2.3), add `serve-router` to `architecture.md` (Tier 2.4), update `schema.md` (Tier 2.6), add routing failure fallback in `strategy.py` (Tier 3.1), add `--output` flag to evaluate (Tier 3.2), create monitoring guide (Tier 3.3), and replace `print()` with structured logging (Tier 3.5). See virtual review Tiers 1–3 for full priority list.
+- [ ] **Address remaining virtual review action items** — Continue working through the open items from `working/virtual-review.md`. Key remaining work: fix question format mismatch in `collect.py` (Tier 1.4), add review result persistence in telemetry (Tier 1.6), document `/api/review` endpoint (Tier 2.3), add `serve-router` to `architecture.md` (Tier 2.4), update `schema.md` (Tier 2.6), add routing failure fallback in `strategy.py` (Tier 3.1), add `--output` flag to evaluate (Tier 3.2), create monitoring guide (Tier 3.3), and replace `print()` with structured logging (Tier 3.5). See virtual review Tiers 1–3 for full priority list.
 
 ### Polish Items (Can Be Done Incrementally)
 
@@ -28,7 +28,6 @@ These items are referenced in docs or configs but require net-new implementation
 - [ ] **API reference docs** — Public Python API (`BaseRouter`, `RoutingResult`, `ModelRoutingStrategy`, `PoolConfig`) has no reference documentation
 - [ ] **Deployment / performance guide** — No docs on recommended hardware, GPU vs CPU latency, scaling, cold start times
 - [ ] **Troubleshooting / FAQ** — Common issues (encoder download hangs, OpenRouter rate limits, checkpoint compatibility)
-- [ ] **GPU service in Docker** — Dockerfile has `proxy-gpu` stage but no compose service or GPU resource configuration
 - [ ] **Deprecated FastAPI `on_event`** in `proxy/startup.py` — Should migrate to `lifespan` pattern
 
 ## Status
@@ -270,9 +269,16 @@ pytest tests/ -v --run-slow         # All tiers: 126 tests, needs API keys + enc
 **Tests passing:** 68/68 unit tests (48 existing + 20 new), all green after refactor.
 
 **Doc updates (same session):**
-- `docs/architecture.md`: Full "Deployment Modes" section with serve vs proxy vs Docker and decision guide.
+- `docs/architecture.md`: Full "Deployment Modes" section with serve vs proxy and decision guide.
 - `docs/integration.md`: Restructured into 4 integration paths with serve-vs-proxy decision table.
 - `README.md`: Both server and proxy modes documented under "4. Serve".
 - `docs/user-journeys.md`: Marked proxy-mode and deployment-mode gaps as resolved.
+
+
+### 2026-03-13 -- Planned: Remove internal NVIDIA Inference API references
+**Status:** Planned (not yet executed). See `working/plan-remove-internal-nvidia-config.md`.
+**What:** Delete `configs/nvidia-nim-smoke.yaml` and remove all `NVIDIA_INTERNAL_API_KEY_REDACTED` / `REDACTED_INTERNAL_ENDPOINT` code paths from `adapters/litellm/app.py`, `config_bridge.py`, and `review.py`. Update `working/user-journeys.md` config list.
+**Why:** `REDACTED_INTERNAL_ENDPOINT` is an internal NVIDIA endpoint. `NVIDIA_INTERNAL_API_KEY_REDACTED` exists solely to support it. Neither should be published. All other configs use the public `integrate.api.nvidia.com` endpoint with `NVIDIA_API_KEY`.
+**Scope:** 1 file to delete, 3 source files to edit, 1 working doc to update.
 
 

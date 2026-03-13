@@ -16,14 +16,14 @@ The Model Router Toolkit has strong architectural foundations — the routing en
 |---|---------|-------------------|--------|
 | 1 | ~~Checkpoints are gitignored with no download mechanism~~ | J1, J2, J4 | **RESOLVED** — removed `checkpoints/` from `.gitignore`; LFS tracking active; data files also tracked |
 | 2 | ~~SDK integration example is broken~~ | J5 | **RESOLVED** — added `strategy.set_litellm_router(router)` to `integration.md` and `README.md`; fixed `effective_tolerance` bug |
-| 3 | ~~Docker compose config mismatch~~ | J4 | **RESOLVED** — changed target to `proxy-gpu`; fixed `NVIDIA_API_KEY` default; fixed `cloud-only.yaml` doubled prefixes; fixed architecture.md build context |
+| 3 | ~~Docker compose config mismatch~~ | J4 | **RESOLVED** — Docker support removed (YAGNI at v0.1.0-alpha); `cloud-only.yaml` doubled prefixes fixed separately |
 
 ### Top 3 Quick Wins
 
 | # | Quick Win | Impact | Status |
 |---|-----------|--------|--------|
 | 1 | ~~Fix SDK examples~~ | Unblocks J5 entirely | **RESOLVED** |
-| 2 | ~~Fix Docker compose~~ | Unblocks J4 first-run | **RESOLVED** |
+| 2 | ~~Fix Docker compose~~ | Unblocks J4 first-run | **RESOLVED** — Docker removed |
 | 3 | ~~Re-run notebooks with saved outputs~~ | Enables J1 evaluation without API keys | **RESOLVED** — both notebooks re-run end-to-end with fresh outputs |
 
 ### Remaining Priority Improvements
@@ -31,8 +31,7 @@ The Model Router Toolkit has strong architectural foundations — the routing en
 1. **Document review endpoint** (improves J6)
 2. **Add monitoring guide** (improves J3, J6)
 3. **Add `--output` flag to evaluate** (improves J3, J6)
-4. **Add Kubernetes manifests** (improves J4)
-5. **Add routing failure fallback in strategy.py** (improves J5)
+4. **Add routing failure fallback in strategy.py** (improves J5)
 
 ---
 

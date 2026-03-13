@@ -268,7 +268,6 @@ curl -X POST http://localhost:8079/v1/route \
 | **Router Sidecar** | `adapters/http/app.py` | Sidecar | External (caller handles) | 1 hop (route only) |
 | **Gateway Plugin** | `plugins/openclaw/` | Sidecar | Gateway handles | 1 hop (route only) |
 | **Direct Python** | `config.build_router_from_config()` | In-process | None (caller handles) | 0 |
-| **Docker** | `adapters/litellm/proxy.py` | Container | Container (litellm) | 1 hop |
 
 ### Which Topology Should I Use?
 
@@ -276,7 +275,7 @@ curl -X POST http://localhost:8079/v1/route \
 |----------|------------|-----|
 | Demos, local development | Standalone Server | Playground UI, single config, fast to start |
 | Existing LiteLLM stack | LiteLLM Proxy | Drop-in — keeps auth, rate limiting, spend tracking |
-| Production without LiteLLM | LiteLLM Proxy or Docker | Auth, rate limiting, caching out of the box |
+| Production without LiteLLM | LiteLLM Proxy | Auth, rate limiting, caching out of the box |
 | Gateway integration (OpenClaw, Portkey) | Router Sidecar + Plugin | Route-only, no inference duplication |
 | Existing Python app | Embedded SDK | 3 lines, no server needed |
 | Custom dispatcher | Direct Python | Routing decisions only, you handle inference |

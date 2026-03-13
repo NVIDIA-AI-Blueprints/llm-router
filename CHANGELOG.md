@@ -45,7 +45,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Full prefill training pipeline: extract, sweep, train ensemble, save checkpoint
 - Rich evaluation metrics: per-model AUC, oracle accuracy, agreement zones, near-miss analysis
 - Data collection with majority vote and reference-based judging
-- Docker support (CPU proxy and GPU proxy stages)
 - Comprehensive documentation: architecture, training guide, evaluation guide, integration guide
 - Apache 2.0 license
 

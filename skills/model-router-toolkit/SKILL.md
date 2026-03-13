@@ -4,7 +4,7 @@ description: >
   LLM routing toolkit that learns which model handles which queries best, then routes
   each request to the cheapest model above an accuracy threshold. Use when the user asks
   about model routing, training a router, evaluating routing quality, serving a router,
-  collecting training data, deploying with LiteLLM proxy or Docker, integrating routing
+  collecting training data, deploying with LiteLLM proxy, integrating routing
   into an application, configuring routing tolerance/models/checkpoints, or anything
   involving the `model-router` CLI. Also use when the user discusses cost-quality
   tradeoffs across multiple LLMs, intelligent model selection, or prefill/KMeans
@@ -29,7 +29,7 @@ The Model Router Toolkit is an LLM routing system that learns per-query model st
 - Config-driven — all behavior controlled by a single YAML file
 - LiteLLM under the hood — works with any provider (OpenRouter, NVIDIA NIM, OpenAI, Anthropic, local vLLM)
 - Full pipeline via CLI: `collect` → `train` → `evaluate` → `serve`
-- Multiple deployment modes: standalone server with playground UI, LiteLLM Proxy (production), Docker, SDK integration
+- Multiple deployment modes: standalone server with playground UI, LiteLLM Proxy (production), SDK integration
 
 **Package:** `model-router-toolkit` (PyPI name). CLI command: `model-router`. Python 3.10+.
 
@@ -532,39 +532,9 @@ The proxy exposes the OpenAI-compatible API at `http://localhost:4000/v1/chat/co
 | Local development | `serve` | Visual routing decisions in playground |
 | Already running LiteLLM | `proxy` | Drop-in with existing auth, spend tracking |
 | Production without LiteLLM | `proxy` | Auth, rate limiting, virtual keys out of the box |
-| Containerized / Kubernetes | Docker `proxy` or `proxy-gpu` | Standard container with health checks |
-
 ---
 
-## Journey 7: Docker Deployment
-
-### Build
-
-```bash
-# CPU (KMeans routing or prefill with remote encoder)
-docker build -f docker/Dockerfile --target proxy -t model-router:proxy .
-
-# GPU (prefill routing with local encoder)
-docker build -f docker/Dockerfile --target proxy-gpu -t model-router:gpu .
-```
-
-| Target | Extras | Use case |
-|--------|--------|----------|
-| `proxy` | `.[proxy]` (CPU only) | KMeans routing or prefill with remote encoder |
-| `proxy-gpu` | `.[proxy,prefill]` (torch + transformers) | Prefill routing with local GPU encoder |
-
-### Docker Compose
-
-```bash
-export OPENROUTER_API_KEY=sk-or-...
-docker compose -f docker/docker-compose.yaml up
-```
-
-Both targets run `model-router proxy` via `docker/entrypoint.sh`.
-
----
-
-## Journey 8: SDK and Library Integration
+## Journey 7: SDK and Library Integration
 
 ### LiteLLM SDK (no server needed)
 
