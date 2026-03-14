@@ -78,11 +78,11 @@ def _build_shared_features(
         if t["mode"] == "mean":
             import torch
             raw = pr.hidden_mean[t["layer"]]
-            raw = raw.numpy() if isinstance(raw, torch.Tensor) else raw
+            raw = raw.float().numpy() if isinstance(raw, torch.Tensor) else raw
         else:
             import torch
             raw = pr.hidden_last[t["layer"]]
-            raw = raw.numpy() if isinstance(raw, torch.Tensor) else raw
+            raw = raw.float().numpy() if isinstance(raw, torch.Tensor) else raw
         feat[mname] = apply_pipeline(raw, t["scaler"], t["pca"])
 
     return np.hstack([feat[m] for m in model_names])
@@ -326,43 +326,65 @@ def _run_prefill_evaluate(
     device: str = "cpu",
     batch_size: int = 4,
     prefill_dir: str | Path | None = None,
+    prefill_cache: str | Path | None = None,
     hf_cache_dir: str | None = None,
+    models: list[str] | None = None,
 ) -> dict[str, Any]:
     """Rich prefill evaluation: batch extraction + trunk + full metrics."""
     import torch
 
-    from model_router_toolkit.prefill.extract import extract_from_checkpoint
+    from model_router_toolkit.prefill.extract import PrefillResult
     from model_router_toolkit.prefill.trunk import predict_proba, reconstruct_trunk
 
     ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     ckpt["_path"] = str(checkpoint_path)
-    model_names = ckpt["model_names"]
-    n_models = len(model_names)
+    all_model_names = ckpt["model_names"]
+    n_all = len(all_model_names)
 
     # Load labels
     questions_raw, label_map = _load_labels(data_path)
     N = len(questions_raw)
-    Y = np.zeros((N, n_models), dtype=int)
+    Y_all = np.zeros((N, n_all), dtype=int)
     for qi, (_, d) in enumerate(label_map.items()):
-        for mi, mname in enumerate(model_names):
-            Y[qi, mi] = d.get(mname, 0)
+        for mi, mname in enumerate(all_model_names):
+            Y_all[qi, mi] = d.get(mname, 0)
 
-    # Filter to only questions with labels for models in checkpoint
-    print(f"  Loaded {N} questions for {n_models} targets")
+    print(f"  Loaded {N} questions for {n_all} targets")
 
-    # Extract prefill features
-    print("  Extracting prefill features...")
-    prefill_results = extract_from_checkpoint(
-        ckpt, questions_raw,
-        device=device, batch_size=batch_size,
-        cache_dir=prefill_dir, hf_cache_dir=hf_cache_dir,
-    )
+    if prefill_cache:
+        print(f"  Loading prefill cache: {prefill_cache}")
+        pr = PrefillResult.load(prefill_cache)
+        prefill_results = {mname: pr for mname in all_model_names}
+    else:
+        from model_router_toolkit.prefill.extract import extract_from_checkpoint
 
-    # Build features & run trunk
+        print("  Extracting prefill features...")
+        prefill_results = extract_from_checkpoint(
+            ckpt, questions_raw,
+            device=device, batch_size=batch_size,
+            cache_dir=prefill_dir, hf_cache_dir=hf_cache_dir,
+        )
+
+    # Build features & run trunk on full pool
     print("  Running trunk inference...")
-    shared_feats = _build_shared_features(ckpt, prefill_results, model_names)
+    shared_feats = _build_shared_features(ckpt, prefill_results, all_model_names)
     trunk_nets = reconstruct_trunk(ckpt, device=device)
-    probs = predict_proba(trunk_nets, shared_feats, device=device)
+    probs_all = predict_proba(trunk_nets, shared_feats, device=device)
+
+    # Subset filtering
+    if models:
+        unknown = set(models) - set(all_model_names)
+        if unknown:
+            raise ValueError(f"Models not in checkpoint: {unknown}")
+        subset_idx = [all_model_names.index(m) for m in models]
+        model_names = [all_model_names[i] for i in subset_idx]
+        Y = Y_all[:, subset_idx]
+        probs = probs_all[:, subset_idx]
+        print(f"  Filtering to {len(models)} models: {models}")
+    else:
+        model_names = all_model_names
+        Y = Y_all
+        probs = probs_all
 
     return _print_eval_report(model_names, Y, probs, ckpt)
 
@@ -375,6 +397,8 @@ def _run_baserouter_evaluate(
     config_path: str | Path,
     checkpoint_path: str | Path,
     data_path: str | Path,
+    *,
+    models: list[str] | None = None,
 ) -> None:
     """Per-question evaluation through the BaseRouter interface."""
     config = load_config(config_path)
@@ -416,7 +440,7 @@ def _run_baserouter_evaluate(
     routing_counts: dict[str, int] = defaultdict(int)
 
     for q in questions:
-        result = router.route(q, tolerance=config.routing.tolerance)
+        result = router.route(q, tolerance=config.routing.tolerance, models=models)
         selected = result.selected_model
         routing_counts[selected] += 1
         qdata = by_question[q]
@@ -455,4 +479,7 @@ def run_evaluate(
     if method == "prefill":
         _run_prefill_evaluate(checkpoint_path, data_path, **kwargs)
     else:
-        _run_baserouter_evaluate(config_path, checkpoint_path, data_path)
+        models = kwargs.get("models")
+        _run_baserouter_evaluate(
+            config_path, checkpoint_path, data_path, models=models,
+        )

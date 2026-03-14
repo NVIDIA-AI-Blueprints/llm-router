@@ -73,8 +73,16 @@ class BaseRouter(ABC):
     """Abstract base for all routing methods."""
 
     @abstractmethod
-    def route(self, question: str, *, tolerance: float = 0.20) -> RoutingResult:
-        """Score all models and select the best cost-efficient one above threshold."""
+    def route(
+        self, question: str, *, tolerance: float = 0.20,
+        models: list[str] | None = None,
+    ) -> RoutingResult:
+        """Score all models and select the best cost-efficient one above threshold.
+
+        If *models* is provided, only those models are considered for the
+        routing decision.  Confidence scores are still computed for the full
+        pool so callers can inspect them.
+        """
         ...
 
     @abstractmethod

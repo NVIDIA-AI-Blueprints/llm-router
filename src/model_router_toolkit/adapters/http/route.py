@@ -17,6 +17,7 @@ class RouteRequest(BaseModel):
     messages: list[dict[str, str]] | None = None
     question: str | None = None
     model: str | None = None
+    models: list[str] | None = None
     tolerance: float = Field(default=0.20, ge=0.0, le=1.0)
 
 
@@ -79,8 +80,10 @@ async def route(request: Request, req: RouteRequest):
             metadata={"error": "no question text provided"},
         )
 
+    allowed = req.models or getattr(request.app.state, "allowed_models", None)
+
     t0 = time.perf_counter()
-    result = app_router.route(question, tolerance=req.tolerance)
+    result = app_router.route(question, tolerance=req.tolerance, models=allowed)
     route_ms = (time.perf_counter() - t0) * 1000
 
     response = _result_to_response(result)

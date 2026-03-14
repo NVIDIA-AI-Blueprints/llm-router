@@ -27,13 +27,25 @@ class PrefillRouter(BaseRouter):
         self._scorer = load_scorer(checkpoint_path, config=self._config)
         self._model_names = self._scorer.model_names
 
-    def route(self, question: str, *, tolerance: float = 0.20) -> RoutingResult:
+    def route(
+        self, question: str, *, tolerance: float = 0.20,
+        models: list[str] | None = None,
+    ) -> RoutingResult:
         if self._scorer is None:
             raise RuntimeError("Router not loaded. Call load() first.")
 
-        raw = self._scorer.score(question)
+        if models:
+            unknown = set(models) - set(self._model_names)
+            if unknown:
+                raise ValueError(f"Models not in pool: {unknown}")
 
-        p_max = max(raw.confidences)
+        raw = self._scorer.score(question)
+        allowed = set(models) if models else set(raw.model_names)
+
+        allowed_confs = [
+            c for m, c in zip(raw.model_names, raw.confidences) if m in allowed
+        ]
+        p_max = max(allowed_confs)
         threshold = p_max - tolerance
 
         cost_sorted = sorted(
@@ -41,9 +53,9 @@ class PrefillRouter(BaseRouter):
             key=lambda x: x[2].cost_per_m_input_tokens,
         )
 
-        selected = cost_sorted[-1][0]
+        selected = [n for n, _, _ in cost_sorted if n in allowed][-1]
         for name, conf, _ in cost_sorted:
-            if conf >= threshold:
+            if name in allowed and conf >= threshold:
                 selected = name
                 break
 
@@ -56,6 +68,7 @@ class PrefillRouter(BaseRouter):
                 "p_max": p_max,
                 "threshold": threshold,
                 "tolerance": tolerance,
+                "allowed_models": sorted(allowed),
             },
         )
 

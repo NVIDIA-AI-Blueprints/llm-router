@@ -103,6 +103,7 @@ def _build_checkpoint(
     cost_table: dict[str, dict[str, float]],
 ) -> dict[str, Any]:
     """Build a self-contained checkpoint dict."""
+    active = set(model_names)
     pool_config = {
         "encoders": [{"hf_path": config.routing.encoder}],
         "targets": [
@@ -113,6 +114,7 @@ def _build_checkpoint(
                 "cost_per_m_output_tokens": m.cost_per_m_output_tokens,
             }
             for m in config.models
+            if m.name in active
         ],
     }
 
@@ -189,7 +191,9 @@ def train_prefill(
     n_seeds: int = DEFAULT_N_SEEDS,
     n_keep: int = DEFAULT_N_KEEP,
     prefill_dir: str | Path | None = None,
+    prefill_cache: str | Path | None = None,
     hf_cache_dir: str | None = None,
+    models: list[str] | None = None,
     pca_dims: list[int] | None = None,
     epochs: int = TRUNK_EPOCHS,
     patience: int = TRUNK_PATIENCE,
@@ -211,7 +215,14 @@ def train_prefill(
             "(e.g., 'Qwen/Qwen3.5-0.8B')"
         )
     encoder_tpl: dict[str, Any] = {}
-    model_names = config.model_names
+    all_model_names = config.model_names
+    if models:
+        unknown = set(models) - set(all_model_names)
+        if unknown:
+            raise ValueError(f"Models not in config: {unknown}")
+        model_names = [m for m in all_model_names if m in set(models)]
+    else:
+        model_names = all_model_names
 
     print("", flush=True)
     print("=" * 60)
@@ -243,19 +254,27 @@ def train_prefill(
     # ── 2. Output token stats ─────────────────────────────────────────
     cost_table: dict[str, dict[str, float]] = {}
     for m in config.models:
+        if m.name not in set(model_names):
+            continue
         stats = _compute_output_token_stats(label_data, m.name)
         if stats:
             cost_table[m.name] = stats
 
     # ── 3. Extract prefill ────────────────────────────────────────────
     print()
-    print("  [2/6] Extracting prefill features...")
-    prefill = run_extraction(
-        encoder, questions_raw,
-        chat_template_kwargs=encoder_tpl,
-        device=dev, batch_size=batch_size,
-        cache_dir=prefill_dir, hf_cache_dir=hf_cache_dir,
-    )
+    if prefill_cache:
+        from model_router_toolkit.prefill.extract import PrefillResult
+
+        print(f"  [2/6] Loading prefill cache: {prefill_cache}")
+        prefill = PrefillResult.load(prefill_cache)
+    else:
+        print("  [2/6] Extracting prefill features...")
+        prefill = run_extraction(
+            encoder, questions_raw,
+            chat_template_kwargs=encoder_tpl,
+            device=dev, batch_size=batch_size,
+            cache_dir=prefill_dir, hf_cache_dir=hf_cache_dir,
+        )
 
     # ── 4. Sweep per model ────────────────────────────────────────────
     print(flush=True)

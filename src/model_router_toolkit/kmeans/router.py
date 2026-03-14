@@ -79,7 +79,10 @@ class KMeansRouter(BaseRouter):
 
         return cluster, probs
 
-    def route(self, question: str, *, tolerance: float = 0.20) -> RoutingResult:
+    def route(
+        self, question: str, *, tolerance: float = 0.20,
+        models: list[str] | None = None,
+    ) -> RoutingResult:
         if self._kmeans_model is None:
             raise RuntimeError("Router not loaded. Call load() first.")
 
@@ -90,7 +93,12 @@ class KMeansRouter(BaseRouter):
         embedding = self._embed_client.embed(question)
         cluster, probs = self.predict_probs(embedding)
 
-        p_max = max(probs.values())
+        allowed = set(models) if models else set(self._models)
+        unknown = allowed - set(self._models)
+        if unknown:
+            raise ValueError(f"Models not in pool: {unknown}")
+
+        p_max = max(probs[m] for m in allowed)
         threshold = p_max - tolerance
 
         candidates = sorted(
@@ -98,9 +106,9 @@ class KMeansRouter(BaseRouter):
             key=lambda m: self._cost_table.get(m, {}).get("cost", 0),
         )
 
-        selected = candidates[-1]
+        selected = [m for m in candidates if m in allowed][-1]
         for model in candidates:
-            if probs.get(model, 0) >= threshold:
+            if model in allowed and probs.get(model, 0) >= threshold:
                 selected = model
                 break
 
@@ -126,6 +134,7 @@ class KMeansRouter(BaseRouter):
                 "p_max": p_max,
                 "threshold": threshold,
                 "tolerance": tolerance,
+                "allowed_models": sorted(allowed),
             },
         )
 

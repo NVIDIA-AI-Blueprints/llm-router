@@ -29,25 +29,17 @@ async def _chat_stream(request: Request, req: ChatRequest):
     strategy = request.app.state.strategy
     config = request.app.state.config
 
-    enabled = set(req.enabled_models) if req.enabled_models else {m.name for m in config.models}
     tolerance = max(0.0, min(1.0, req.tolerance))
 
     messages = [{"role": "user", "content": req.message}]
 
     t0 = time.perf_counter()
-    result = strategy.router.route(req.message, tolerance=tolerance)
+    result = strategy.router.route(
+        req.message, tolerance=tolerance, models=req.enabled_models,
+    )
     route_ms = (time.perf_counter() - t0) * 1000
 
     selected = result.selected_model
-
-    if enabled and selected not in enabled:
-        above = [
-            (n, c, ct)
-            for n, c, ct in zip(result.model_names, result.confidences, result.costs)
-            if n in enabled and c >= (max(result.confidences) - tolerance)
-        ]
-        if above:
-            selected = min(above, key=lambda x: x[2].cost_per_m_input_tokens)[0]
 
     model_spec = config.get_model(selected)
     system_prompt = model_spec.system_prompt if model_spec else ""

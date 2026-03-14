@@ -39,7 +39,9 @@ class FakeRouter(BaseRouter):
     def unload(self):
         self._unload_called = True
 
-    def route(self, question, *, tolerance=0.20):
+    def route(self, question, *, tolerance=0.20, models=None):
+        allowed = set(models) if models else set(self._model_names)
+        selected = next(m for m in self._model_names if m in allowed)
         return RoutingResult(
             model_names=self._model_names,
             confidences=[0.92, 0.71],
@@ -57,8 +59,11 @@ class FakeRouter(BaseRouter):
                     estimated_total_cost=0.003,
                 ),
             ],
-            selected_model=self._model_names[0],
-            metadata={"p_max": 0.92, "threshold": 0.72, "tolerance": tolerance},
+            selected_model=selected,
+            metadata={
+                "p_max": 0.92, "threshold": 0.72, "tolerance": tolerance,
+                "allowed_models": sorted(allowed),
+            },
         )
 
     def has_model(self, model_name):
@@ -435,3 +440,64 @@ class TestWebhookAuth:
         resp = authed_client.get("/health")
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
+
+
+class TestRouteModelsFilter:
+    """Test the models subset filter on /v1/route."""
+
+    @pytest.fixture
+    def client(self, fake_config_path):
+        with patch(
+            "model_router_toolkit.adapters.http.app.build_router_from_config",
+            return_value=FakeRouter(),
+        ):
+            app = create_app(fake_config_path, warmup=False)
+            yield TestClient(app)
+
+    def test_route_with_models_filter(self, client):
+        resp = client.post("/v1/route", json={
+            "question": "What is 2+2?",
+            "models": ["model-b"],
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["selected_model"] == "model-b"
+
+    def test_route_without_models_filter(self, client):
+        resp = client.post("/v1/route", json={"question": "What is 2+2?"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["selected_model"] == "model-a"
+
+    def test_route_models_still_returns_all_confidences(self, client):
+        resp = client.post("/v1/route", json={
+            "question": "What is 2+2?",
+            "models": ["model-b"],
+        })
+        data = resp.json()
+        assert set(data["confidences"].keys()) == {"model-a", "model-b"}
+
+    def test_server_wide_models_default(self, fake_config_path):
+        with patch(
+            "model_router_toolkit.adapters.http.app.build_router_from_config",
+            return_value=FakeRouter(),
+        ):
+            app = create_app(fake_config_path, warmup=False, models=["model-b"])
+            client = TestClient(app)
+            resp = client.post("/v1/route", json={"question": "What is 2+2?"})
+            assert resp.status_code == 200
+            assert resp.json()["selected_model"] == "model-b"
+
+    def test_per_request_overrides_server_default(self, fake_config_path):
+        with patch(
+            "model_router_toolkit.adapters.http.app.build_router_from_config",
+            return_value=FakeRouter(),
+        ):
+            app = create_app(fake_config_path, warmup=False, models=["model-b"])
+            client = TestClient(app)
+            resp = client.post("/v1/route", json={
+                "question": "What is 2+2?",
+                "models": ["model-a"],
+            })
+            assert resp.status_code == 200
+            assert resp.json()["selected_model"] == "model-a"

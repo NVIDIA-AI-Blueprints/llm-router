@@ -6,7 +6,8 @@ def _cmd_serve(args):
     import uvicorn
     from model_router_toolkit.adapters.litellm.app import create_app
 
-    app = create_app(args.config)
+    models = [m.strip() for m in args.models.split(",")] if args.models else None
+    app = create_app(args.config, models=models)
     uvicorn.run(app, host="0.0.0.0", port=args.port)
 
 
@@ -29,12 +30,16 @@ def _cmd_train(args):
         kwargs["n_keep"] = args.n_keep
     if args.prefill_dir is not None:
         kwargs["prefill_dir"] = args.prefill_dir
+    if args.prefill_cache is not None:
+        kwargs["prefill_cache"] = args.prefill_cache
     if args.epochs is not None:
         kwargs["epochs"] = args.epochs
     if args.patience is not None:
         kwargs["patience"] = args.patience
     if args.pca_dims is not None:
         kwargs["pca_dims"] = [int(x) for x in args.pca_dims.split(",")]
+    if args.models is not None:
+        kwargs["models"] = [m.strip() for m in args.models.split(",")]
 
     run_train(args.config, args.data, args.output_dir, **kwargs)
 
@@ -49,6 +54,10 @@ def _cmd_evaluate(args):
         kwargs["batch_size"] = args.batch_size
     if args.prefill_dir is not None:
         kwargs["prefill_dir"] = args.prefill_dir
+    if args.prefill_cache is not None:
+        kwargs["prefill_cache"] = args.prefill_cache
+    if args.models is not None:
+        kwargs["models"] = [m.strip() for m in args.models.split(",")]
 
     run_evaluate(args.config, args.checkpoint, args.data, **kwargs)
 
@@ -67,7 +76,8 @@ def _cmd_serve_router(args):
     import uvicorn
     from model_router_toolkit.adapters.http.app import create_app
 
-    app = create_app(args.config)
+    models = [m.strip() for m in args.models.split(",")] if args.models else None
+    app = create_app(args.config, models=models)
     uvicorn.run(app, host="0.0.0.0", port=args.port)
 
 
@@ -109,6 +119,7 @@ def main():
     serve_p = subparsers.add_parser("serve", help="Start the router server")
     serve_p.add_argument("--config", default="configs/prefill-qwen08b.yaml")
     serve_p.add_argument("--port", type=int, default=8000)
+    serve_p.add_argument("--models", default=None, help="Comma-separated model subset to route between (default: all)")
     serve_p.set_defaults(func=_cmd_serve)
 
     sr_p = subparsers.add_parser(
@@ -117,6 +128,7 @@ def main():
     )
     sr_p.add_argument("--config", default="configs/prefill-qwen08b.yaml")
     sr_p.add_argument("--port", type=int, default=8080)
+    sr_p.add_argument("--models", default=None, help="Comma-separated model subset to route between (default: all)")
     sr_p.set_defaults(func=_cmd_serve_router)
 
     train_p = subparsers.add_parser(
@@ -131,9 +143,11 @@ def main():
     train_p.add_argument("--n-seeds", type=int, default=None, help="Ensemble seeds (default: 10)")
     train_p.add_argument("--n-keep", type=int, default=None, help="Ensemble models to keep (default: 5)")
     train_p.add_argument("--prefill-dir", default=None, help="Cache dir for prefill features")
+    train_p.add_argument("--prefill-cache", default=None, help="Pre-extracted PrefillResult .pt file (skips extraction)")
     train_p.add_argument("--epochs", type=int, default=None, help="Max training epochs")
     train_p.add_argument("--patience", type=int, default=None, help="Early stopping patience")
     train_p.add_argument("--pca-dims", default=None, help="PCA dims to sweep, comma-separated (e.g. 50,100,200)")
+    train_p.add_argument("--models", default=None, help="Comma-separated model subset to train on (default: all in config)")
     train_p.set_defaults(func=_cmd_train)
 
     eval_p = subparsers.add_parser(
@@ -145,6 +159,8 @@ def main():
     eval_p.add_argument("--device", default=None, help="Device: cpu, cuda, mps")
     eval_p.add_argument("--batch-size", type=int, default=None, help="Extraction batch size")
     eval_p.add_argument("--prefill-dir", default=None, help="Cache dir for prefill features")
+    eval_p.add_argument("--prefill-cache", default=None, help="Pre-extracted PrefillResult .pt file (skips extraction)")
+    eval_p.add_argument("--models", default=None, help="Comma-separated model subset to evaluate (default: all)")
     eval_p.set_defaults(func=_cmd_evaluate)
 
     collect_p = subparsers.add_parser(

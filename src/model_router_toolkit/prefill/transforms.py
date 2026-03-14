@@ -20,7 +20,7 @@ def raw_hidden(result: PrefillResult, layer: int, mode: str) -> np.ndarray:
     """Pull the right hidden state array from a PrefillResult as numpy."""
     tensor = result.hidden_mean[layer] if mode == "mean" else result.hidden_last[layer]
     if isinstance(tensor, torch.Tensor):
-        return tensor.numpy()
+        return tensor.float().numpy()
     return tensor
 
 

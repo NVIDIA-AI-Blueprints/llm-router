@@ -23,6 +23,7 @@ def create_app(
     config_path: str,
     *,
     warmup: bool = True,
+    models: list[str] | None = None,
 ) -> FastAPI:
     """Create router-only FastAPI app (no inference, no API keys needed)."""
     config = load_config(config_path)
@@ -49,6 +50,7 @@ def create_app(
 
     app.state.router = base_router
     app.state.config = config
+    app.state.allowed_models = models
 
     @app.get("/health")
     async def health():

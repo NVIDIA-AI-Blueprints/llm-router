@@ -28,6 +28,10 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
     # The routing strategy intercepts the call and picks the actual deployment.
     model_group = config.models[0].name if config.models else "default"
 
+    metadata: dict[str, Any] = {}
+    if "models" in body:
+        metadata["models"] = body["models"]
+
     kwargs: dict[str, Any] = {
         "model": model_group,
         "messages": messages,
@@ -35,6 +39,8 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
         "max_tokens": max_tokens,
         "stream": stream,
     }
+    if metadata:
+        kwargs["metadata"] = metadata
 
     if stream:
         async def sse_stream():

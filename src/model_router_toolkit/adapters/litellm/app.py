@@ -76,6 +76,7 @@ def create_app(
     config_path: str,
     *,
     warmup: bool = True,
+    models: list[str] | None = None,
 ) -> FastAPI:
     """Create full-mode FastAPI app with routing + LLM inference."""
     from litellm import Router
@@ -86,6 +87,7 @@ def create_app(
     model_list = _build_model_list(config)
     litellm_router = Router(model_list=model_list)
     strategy = ModelRoutingStrategy.from_config(config_path)
+    strategy.models = models
     strategy.set_litellm_router(litellm_router)
     litellm_router.set_custom_routing_strategy(strategy)
     base_router = strategy.router
@@ -113,6 +115,7 @@ def create_app(
     app.state.config = config
     app.state.litellm_router = litellm_router
     app.state.strategy = strategy
+    app.state.allowed_models = models
 
     @app.get("/health")
     async def health():

@@ -15,7 +15,11 @@ class FakeRouter(BaseRouter):
     def load(self, checkpoint_path):
         pass
 
-    def route(self, question, *, tolerance=0.10):
+    def route(self, question, *, tolerance=0.10, models=None):
+        allowed = set(models) if models else set(self._pool)
+        selected = self._selected if self._selected in allowed else next(
+            m for m in self._pool if m in allowed
+        )
         return RoutingResult(
             model_names=["model-a", "model-b"],
             confidences=[0.9, 0.7],
@@ -25,8 +29,8 @@ class FakeRouter(BaseRouter):
                 CostEstimate(median_output_tokens=200, cost_per_m_input_tokens=1.0,
                              cost_per_m_output_tokens=1.0),
             ],
-            selected_model=self._selected,
-            metadata={"test": True},
+            selected_model=selected,
+            metadata={"test": True, "allowed_models": sorted(allowed)},
         )
 
     def has_model(self, model_name):
@@ -187,3 +191,58 @@ class TestModelRoutingStrategy:
         )
         assert dep["model_name"] == "model-b"
         assert strategy.last_result.metadata.get("pinned") is True
+
+    def test_models_via_request_metadata(self):
+        """Models subset passed via request metadata restricts routing."""
+        strategy = ModelRoutingStrategy(FakeRouter("model-a"), tolerance=0.20)
+        strategy._litellm_router = type("R", (), {
+            "model_list": [
+                {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
+                {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
+            ]
+        })()
+
+        dep = strategy.get_available_deployment(
+            model="test",
+            messages=[{"role": "user", "content": "Hello"}],
+            request_kwargs={"metadata": {"models": ["model-b"]}},
+        )
+        assert dep["model_name"] == "model-b"
+        assert "model-b" in strategy.last_result.metadata["allowed_models"]
+
+    def test_models_server_default(self):
+        """Server-wide models default restricts routing when no per-request override."""
+        strategy = ModelRoutingStrategy(
+            FakeRouter("model-a"), tolerance=0.20, models=["model-b"],
+        )
+        strategy._litellm_router = type("R", (), {
+            "model_list": [
+                {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
+                {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
+            ]
+        })()
+
+        dep = strategy.get_available_deployment(
+            model="test",
+            messages=[{"role": "user", "content": "Hello"}],
+        )
+        assert dep["model_name"] == "model-b"
+
+    def test_models_request_overrides_server_default(self):
+        """Per-request models override the server-wide default."""
+        strategy = ModelRoutingStrategy(
+            FakeRouter("model-a"), tolerance=0.20, models=["model-b"],
+        )
+        strategy._litellm_router = type("R", (), {
+            "model_list": [
+                {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
+                {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
+            ]
+        })()
+
+        dep = strategy.get_available_deployment(
+            model="test",
+            messages=[{"role": "user", "content": "Hello"}],
+            request_kwargs={"metadata": {"models": ["model-a"]}},
+        )
+        assert dep["model_name"] == "model-a"

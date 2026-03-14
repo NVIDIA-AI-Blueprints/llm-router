@@ -38,9 +38,11 @@ class ModelRoutingStrategy:
         router: BaseRouter,
         *,
         tolerance: float = 0.20,
+        models: list[str] | None = None,
     ):
         self._router = router
         self._tolerance = tolerance
+        self._models = models
         self._litellm_router: Any = None
         self._last_result: RoutingResult | None = None
 
@@ -64,6 +66,14 @@ class ModelRoutingStrategy:
     def set_request_tolerance(self, value: float) -> None:
         """Set tolerance for the current async request context only."""
         _request_tolerance.set(max(0.0, min(1.0, value)))
+
+    @property
+    def models(self) -> list[str] | None:
+        return self._models
+
+    @models.setter
+    def models(self, value: list[str] | None) -> None:
+        self._models = value
 
     @property
     def effective_tolerance(self) -> float:
@@ -132,7 +142,11 @@ class ModelRoutingStrategy:
                 return self._litellm_router.model_list[0]
             return {}
 
-        result = self._router.route(text, tolerance=self.effective_tolerance)
+        req_models = ((request_kwargs or {}).get("metadata") or {}).get("models")
+        allowed = req_models or self._models
+        result = self._router.route(
+            text, tolerance=self.effective_tolerance, models=allowed,
+        )
         self._last_result = result
 
         dep = self._find_deployment(result.selected_model)
