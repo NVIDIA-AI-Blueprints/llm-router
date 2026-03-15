@@ -66,7 +66,7 @@ if [ "$LEAN" = true ]; then
         --config "$CONFIG" \
         --checkpoint "$OUTPUT_DIR/prefill_router_qwen35b.pt" \
         --data "$TEST_CSV" \
-        --prefill-cache "$TEST_FEAT" \
+        --features-from "$TEST_FEAT" \
         --device cpu
 else
     TRAIN_CACHE=data/v1-9models-pool/train.pt
