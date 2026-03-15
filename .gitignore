@@ -27,6 +27,7 @@ checkpoints/*.pt
 
 data/*.csv
 data/*/
+!data/v1-9models-lean/
 
 logs/
 

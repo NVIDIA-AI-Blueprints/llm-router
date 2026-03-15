@@ -1,3 +1,4 @@
 *.pt filter=lfs diff=lfs merge=lfs -text
 *.pkl filter=lfs diff=lfs merge=lfs -text
 *.csv filter=lfs diff=lfs merge=lfs -text
+data/v1-9models-lean/*.pt filter=lfs diff=lfs merge=lfs -text
