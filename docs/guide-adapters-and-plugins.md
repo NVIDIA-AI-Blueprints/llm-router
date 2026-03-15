@@ -366,65 +366,114 @@ A TypeScript plugin for the OpenClaw API gateway.
 
 On failure (sidecar unreachable, timeout, error), the plugin returns `{}` — OpenClaw falls back to its default model selection.
 
-### Configuration
+### Prerequisites
 
-Plugin config in OpenClaw:
+- **OpenClaw** 2026.2+ installed (`npm install -g openclaw` — requires Node.js 22+)
+- **OpenClaw onboarded** with a provider (`openclaw onboard`)
+- **Router sidecar** running (see [Router-Only Sidecar](guide-serving-and-deployment.md#router-only-sidecar))
 
-```json
+### Step 1: Start the Router Sidecar
+
+```bash
+pip install -e '.[prefill,server]'
+model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
+```
+
+Wait for `Uvicorn running on http://0.0.0.0:8079` before proceeding.
+
+### Step 2: Install the Plugin in OpenClaw
+
+Copy the plugin files to OpenClaw's extensions directory:
+
+```bash
+mkdir -p ~/.openclaw/extensions/model-router
+cp src/model_router_toolkit/plugins/openclaw/* ~/.openclaw/extensions/model-router/
+```
+
+### Step 3: Configure OpenClaw
+
+Edit `~/.openclaw/openclaw.json` and add the `plugins` section. The plugin must be allowlisted since it's a workspace plugin:
+
+```json5
 {
-  "sidecarUrl": "http://localhost:8079",
-  "tolerance": 0.20,
-  "enabled": true,
-  "timeoutMs": 5000,
-  "pool": [
-    {
-      "routerName": "nemotron-3-nano-reasoning",
-      "provider": "nvidia",
-      "model": "nemotron-3-nano-30b-a3b"
-    },
-    {
-      "routerName": "gpt-oss-120b-high",
-      "provider": "openai",
-      "model": "gpt-oss-120b"
-    },
-    {
-      "routerName": "claude-opus-4-6-high",
-      "provider": "anthropic",
-      "model": "claude-opus-4-6"
+  // ... existing config ...
+  "plugins": {
+    "allow": ["model-router"],
+    "entries": {
+      "model-router": {
+        "enabled": true,
+        "config": {
+          "sidecarUrl": "http://127.0.0.1:8079",
+          "tolerance": 0.20,
+          "enabled": true,
+          "timeoutMs": 15000,
+          "pool": [
+            { "routerName": "nemotron-3-nano-reasoning", "provider": "openrouter", "model": "nvidia/nemotron-3-nano-30b-a3b" },
+            { "routerName": "nemotron-3-super", "provider": "openrouter", "model": "nvidia/nemotron-3-super-120b-a12b:free" },
+            { "routerName": "gpt-5-2-high", "provider": "openrouter", "model": "openai/gpt-5.2" },
+            { "routerName": "claude-opus-4-6-high", "provider": "openrouter", "model": "anthropic/claude-opus-4-6" }
+          ]
+        }
+      }
     }
-  ]
+  }
 }
 ```
 
+**Pool mapping**: Each entry maps a `routerName` (from your pool config YAML) to an OpenClaw `provider` and `model` ID. The `provider` and `model` values depend on how you've configured your models in OpenClaw. With OpenRouter, use `"provider": "openrouter"` and the OpenRouter model ref (e.g., `nvidia/nemotron-3-nano-30b-a3b`). With Ollama, use `"provider": "ollama"` and the local model name.
+
+### Configuration Reference
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `sidecarUrl` | string | (required) | URL of the router sidecar |
-| `tolerance` | number | `0.20` | Routing tolerance |
+| `sidecarUrl` | string | `http://127.0.0.1:8079` | URL of the router sidecar |
+| `tolerance` | number | `0.20` | Routing tolerance (higher = more cost savings, lower = more accuracy) |
 | `enabled` | boolean | `true` | Enable/disable the plugin |
-| `timeoutMs` | number | `5000` | HTTP timeout for sidecar calls |
-| `pool` | array | (required) | Maps router names to OpenClaw providers |
+| `timeoutMs` | number | `15000` | HTTP timeout for sidecar calls (CPU routing ~5-10s, GPU ~100ms) |
+| `pool` | array | (required) | Maps router names to OpenClaw provider/model pairs |
 
-The `pool` array is the critical mapping. Each entry maps a router model name (`routerName`) to an OpenClaw provider and model name. This decouples the router's naming from the gateway's naming.
+### Step 4: Restart the Gateway
 
-### Deployment
+```bash
+# If running as a service:
+openclaw gateway restart
 
-1. Start the router sidecar:
+# Or kill and re-run:
+kill $(lsof -ti:18789)
+openclaw gateway run
+```
+
+### Step 5: Verify
+
+1. **Check the plugin loaded:**
    ```bash
-   model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
+   openclaw plugins list
+   ```
+   Confirm `model-router` shows as `loaded`.
+
+2. **Check gateway logs** for the startup health check:
+   ```
+   [model-router] Plugin registered. sidecarUrl=http://127.0.0.1:8079
+   [model-router] Pool entries: 4
+   [model-router] gateway_start hook fired
+   [model-router] Sidecar is healthy
    ```
 
-2. Copy plugin files to OpenClaw's plugins directory:
+3. **Send a test message:**
+   ```bash
+   openclaw agent --agent main --message "What is 2+2?" --json
    ```
-   plugins/
-     model-router/
-       index.ts
-       openclaw.plugin.json
-       package.json
-   ```
+   In the JSON output, check `result.meta.agentMeta.model` — it should be the router's choice (e.g., `nvidia/nemotron-3-nano-30b-a3b`), not your default model.
 
-3. Configure the plugin in OpenClaw's settings with the sidecar URL and pool mapping.
+### Troubleshooting
 
-4. The plugin calls `GET /health` on the sidecar at gateway startup to verify connectivity.
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `api.getConfig is not a function` | Plugin uses old API | Update to latest plugin code (`api.pluginConfig`) |
+| `plugin id mismatch` | `package.json` name doesn't match manifest | Ensure `package.json` `name` is `model-router` |
+| Sidecar timeout (uses default model) | CPU routing takes 5-10s | Increase `timeoutMs` to 15000+ or use GPU |
+| `not a valid model ID` | Wrong model ref in pool | Use the exact model ID from your provider (e.g., OpenRouter model page) |
+| Plugin not in `plugins list` | Not allowlisted | Add `"model-router"` to `plugins.allow` in config |
 
 ---
 

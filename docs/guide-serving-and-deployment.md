@@ -480,56 +480,76 @@ response = await litellm_router.acompletion(
 
 ## OpenClaw Gateway Plugin
 
-TypeScript plugin for the OpenClaw API gateway. Calls the router sidecar and overrides model selection.
+TypeScript plugin for the OpenClaw API gateway. Calls the router sidecar's `POST /v1/route` endpoint before each LLM call and overrides model selection based on the routing decision.
 
-### Prerequisites
+### Quick Start
 
-- Router sidecar running (see [Router-Only Sidecar](#router-only-sidecar))
-- OpenClaw gateway
+```bash
+# 1. Start the sidecar (in one terminal)
+model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
 
-### Setup
+# 2. Install the plugin
+mkdir -p ~/.openclaw/extensions/model-router
+cp src/model_router_toolkit/plugins/openclaw/* ~/.openclaw/extensions/model-router/
 
-1. Copy the plugin files from `src/model_router_toolkit/plugins/openclaw/` to your OpenClaw plugins directory.
-2. Configure the plugin in OpenClaw's config:
+# 3. Add plugin config to ~/.openclaw/openclaw.json (see below)
 
-```json
+# 4. Restart the gateway
+openclaw gateway restart
+
+# 5. Verify — model should be the router's choice, not the default
+openclaw agent --agent main --message "What is 2+2?" --json
+```
+
+Add to `~/.openclaw/openclaw.json`:
+
+```json5
 {
-  "sidecarUrl": "http://localhost:8079",
-  "tolerance": 0.20,
-  "enabled": true,
-  "timeoutMs": 5000,
-  "pool": [
-    {
-      "routerName": "nemotron-3-nano-reasoning",
-      "provider": "nvidia",
-      "model": "nemotron-3-nano-30b-a3b"
-    },
-    {
-      "routerName": "gpt-oss-120b-high",
-      "provider": "openai",
-      "model": "gpt-oss-120b"
+  "plugins": {
+    "allow": ["model-router"],
+    "entries": {
+      "model-router": {
+        "enabled": true,
+        "config": {
+          "sidecarUrl": "http://127.0.0.1:8079",
+          "tolerance": 0.20,
+          "enabled": true,
+          "timeoutMs": 15000,
+          "pool": [
+            { "routerName": "nemotron-3-nano-reasoning", "provider": "openrouter", "model": "nvidia/nemotron-3-nano-30b-a3b" },
+            { "routerName": "nemotron-3-super", "provider": "openrouter", "model": "nvidia/nemotron-3-super-120b-a12b:free" }
+          ]
+        }
+      }
     }
-  ]
+  }
 }
 ```
 
-The `pool` array maps router model names to OpenClaw's provider/model pairs.
+The `pool` maps router model names (from your pool config YAML) to OpenClaw provider/model pairs. Adjust `provider` and `model` to match your OpenClaw setup (OpenRouter, Ollama, etc.).
+
+### Prerequisites
+
+- OpenClaw 2026.2+ installed (requires Node.js 22+)
+- Router sidecar running (see [Router-Only Sidecar](#router-only-sidecar))
 
 ### How it works
 
 1. OpenClaw receives a chat request
-2. The plugin's `before_model_resolve` hook fires
-3. The plugin calls `POST /v1/route` on the sidecar
-4. The sidecar returns the selected model
+2. The plugin's `before_model_resolve` hook fires with `event.prompt`
+3. The plugin calls `POST /v1/route` on the sidecar with the prompt text
+4. The sidecar returns `{ selected_model: "nemotron-3-nano-reasoning", ... }`
 5. The plugin maps the router's model name to an OpenClaw provider/model via the `pool` config
-6. OpenClaw routes the request to the selected provider
+6. Returns `{ modelOverride, providerOverride }` — OpenClaw uses the overridden model
 
-If the sidecar is unreachable or returns an error, the plugin returns an empty override and OpenClaw falls back to its default model selection.
+If the sidecar is unreachable or returns an error, the plugin returns `{}` and OpenClaw falls back to its default model selection.
 
 ### When to use
 
 - Teams using OpenClaw as their API gateway
 - When you want routing decisions at the gateway level
+
+For full configuration reference and troubleshooting, see the [OpenClaw Plugin](guide-adapters-and-plugins.md#openclaw-plugin) section in the Adapters & Plugins guide.
 
 ---
 

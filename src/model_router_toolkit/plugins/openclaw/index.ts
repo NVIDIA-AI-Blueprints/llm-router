@@ -37,7 +37,7 @@ interface RouteResponse {
 }
 
 export default function register(api: any) {
-  const config: PluginConfig = api.getConfig();
+  const config: PluginConfig = api.pluginConfig ?? {};
 
   const poolMap = new Map(
     (config.pool || []).map((e: PoolEntry) => [
@@ -49,15 +49,18 @@ export default function register(api: any) {
   api.on("before_model_resolve", async (event: { prompt: string }) => {
     if (!config.enabled) return {};
 
+    const prompt = event.prompt || "";
+    if (!prompt) return {};
+
     try {
       const res = await fetch(`${config.sidecarUrl}/v1/route`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          question: event.prompt,
+          question: prompt,
           tolerance: config.tolerance,
         }),
-        signal: AbortSignal.timeout(config.timeoutMs || 5000),
+        signal: AbortSignal.timeout(config.timeoutMs || 15000),
       });
 
       if (!res.ok) return {};
@@ -80,10 +83,10 @@ export default function register(api: any) {
     try {
       const res = await fetch(`${config.sidecarUrl}/health`);
       if (res.ok) {
-        api.log?.info?.("Model router sidecar is healthy");
+        api.logger?.info?.("Model router sidecar is healthy");
       }
     } catch {
-      api.log?.warn?.(
+      api.logger?.warn?.(
         `Model router sidecar not reachable at ${config.sidecarUrl}`,
       );
     }

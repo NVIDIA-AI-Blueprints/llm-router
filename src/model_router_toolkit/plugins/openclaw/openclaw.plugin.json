@@ -26,8 +26,8 @@
       },
       "timeoutMs": {
         "type": "number",
-        "default": 5000,
-        "description": "Timeout for sidecar requests in milliseconds."
+        "default": 15000,
+        "description": "Timeout for sidecar requests in milliseconds. CPU-based routing may take 5-10s; GPU routing is ~100ms."
       },
       "pool": {
         "type": "array",
