@@ -28,6 +28,7 @@ data/*.csv
 !data/test_v1.csv
 data/*/
 !data/v1-9models-lean/
+!data/v1-9models-qwen08b-lean/
 
 logs/
 
