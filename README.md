@@ -466,8 +466,6 @@ The training pipeline:
 | `--epochs` | 150 | Max MLP training epochs |
 | `--patience` | 15 | Early stopping patience |
 | `--batch-size` | 4 | Encoder extraction batch size |
-| `--prefill-dir` | `cache/` | Cache dir for extracted features |
-| `--no-cache` | off | Disable prefill caching |
 
 No API key needed — training runs entirely locally with the encoder model.
 

@@ -28,10 +28,6 @@ def _cmd_train(args):
         kwargs["n_seeds"] = args.n_seeds
     if args.n_keep is not None:
         kwargs["n_keep"] = args.n_keep
-    if not args.no_cache and args.prefill_dir:
-        kwargs["prefill_dir"] = args.prefill_dir
-    if args.prefill_cache is not None:
-        kwargs["prefill_cache"] = args.prefill_cache
     if args.epochs is not None:
         kwargs["epochs"] = args.epochs
     if args.patience is not None:
@@ -40,8 +36,6 @@ def _cmd_train(args):
         kwargs["pca_dims"] = [int(x) for x in args.pca_dims.split(",")]
     if args.models is not None:
         kwargs["models"] = [m.strip() for m in args.models.split(",")]
-    if args.features_from is not None:
-        kwargs["features_from"] = args.features_from
 
     run_train(args.config, args.data, args.output_dir, **kwargs)
 
@@ -54,14 +48,8 @@ def _cmd_evaluate(args):
         kwargs["device"] = args.device
     if args.batch_size is not None:
         kwargs["batch_size"] = args.batch_size
-    if not args.no_cache and args.prefill_dir:
-        kwargs["prefill_dir"] = args.prefill_dir
-    if args.prefill_cache is not None:
-        kwargs["prefill_cache"] = args.prefill_cache
     if args.models is not None:
         kwargs["models"] = [m.strip() for m in args.models.split(",")]
-    if args.features_from is not None:
-        kwargs["features_from"] = args.features_from
     if args.pricing is not None:
         kwargs["pricing"] = args.pricing
 
@@ -148,14 +136,10 @@ def main():
     train_p.add_argument("--batch-size", type=int, default=None, help="Extraction batch size")
     train_p.add_argument("--n-seeds", type=int, default=None, help="Ensemble seeds (default: 10)")
     train_p.add_argument("--n-keep", type=int, default=None, help="Ensemble models to keep (default: 5)")
-    train_p.add_argument("--prefill-dir", default="cache/", help="Cache dir for prefill features (default: cache/)")
-    train_p.add_argument("--no-cache", action="store_true", help="Disable automatic prefill caching")
-    train_p.add_argument("--prefill-cache", default=None, help="Pre-extracted PrefillResult .pt file (skips extraction)")
     train_p.add_argument("--epochs", type=int, default=None, help="Max training epochs")
     train_p.add_argument("--patience", type=int, default=None, help="Early stopping patience")
     train_p.add_argument("--pca-dims", default=None, help="PCA dims to sweep, comma-separated (e.g. 50,100,200)")
     train_p.add_argument("--models", default=None, help="Comma-separated model subset to train on (default: all in config)")
-    train_p.add_argument("--features-from", default=None, help="Pre-transformed features .pt file (skips extraction + sweep)")
     train_p.set_defaults(func=_cmd_train)
 
     eval_p = subparsers.add_parser(
@@ -166,11 +150,7 @@ def main():
     eval_p.add_argument("--data", required=True, help="Test CSV (question, model, isCorrect)")
     eval_p.add_argument("--device", default=None, help="Device: cpu, cuda, mps")
     eval_p.add_argument("--batch-size", type=int, default=None, help="Extraction batch size")
-    eval_p.add_argument("--prefill-dir", default="cache/", help="Cache dir for prefill features (default: cache/)")
-    eval_p.add_argument("--no-cache", action="store_true", help="Disable automatic prefill caching")
-    eval_p.add_argument("--prefill-cache", default=None, help="Pre-extracted PrefillResult .pt file (skips extraction)")
     eval_p.add_argument("--models", default=None, help="Comma-separated model subset to evaluate (default: all)")
-    eval_p.add_argument("--features-from", default=None, help="Pre-transformed features .pt file (skips extraction + transforms)")
     eval_p.add_argument("--pricing", default=None, help="Pricing CSV (model, cost_per_m_input_tokens) to override config costs")
     eval_p.set_defaults(func=_cmd_evaluate)
 

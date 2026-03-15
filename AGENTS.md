@@ -120,7 +120,6 @@ Pipeline: load labels -> extract prefill features (Qwen3.5-0.8B) -> sweep layer/
 Key options:
 - `--device cpu|cuda|mps` -- compute device (auto-detected if omitted)
 - `--n-seeds 10 --n-keep 5` -- ensemble size
-- `--prefill-dir cache/` -- cache dir for extracted features (default: `cache/`, disable with `--no-cache`)
 - `--pca-dims 50,100,200` -- PCA dimensions to sweep
 - `--epochs 150 --patience 15` -- MLP training
 

@@ -532,17 +532,13 @@ def _run_prefill_evaluate(
     config: Any | None = None,
     device: str = "cpu",
     batch_size: int = 4,
-    prefill_dir: str | Path | None = None,
-    prefill_cache: str | Path | None = None,
-    hf_cache_dir: str | None = None,
-    features_from: str | Path | None = None,
     models: list[str] | None = None,
     pricing: str | Path | None = None,
 ) -> dict[str, Any]:
     """Rich prefill evaluation: batch extraction + trunk + full metrics."""
     import torch
 
-    from model_router_toolkit.prefill.extract import PrefillResult
+    from model_router_toolkit.prefill.extract import extract_from_checkpoint
     from model_router_toolkit.prefill.trunk import predict_proba, reconstruct_trunk
 
     ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
@@ -560,27 +556,13 @@ def _run_prefill_evaluate(
 
     print(f"  Loaded {N} questions for {n_all} targets")
 
-    if features_from:
-        print(f"  Loading pre-transformed features: {features_from}")
-        feat_data = torch.load(features_from, map_location="cpu", weights_only=False)
-        shared_feats = feat_data["features"]
-        if isinstance(shared_feats, torch.Tensor):
-            shared_feats = shared_feats.numpy()
-    elif prefill_cache:
-        print(f"  Loading prefill cache: {prefill_cache}")
-        pr = PrefillResult.load(prefill_cache)
-        prefill_results = {mname: pr for mname in all_model_names}
-        shared_feats = _build_shared_features(ckpt, prefill_results, all_model_names)
-    else:
-        from model_router_toolkit.prefill.extract import extract_from_checkpoint
-
-        print("  Extracting prefill features...")
-        prefill_results = extract_from_checkpoint(
-            ckpt, questions_raw,
-            device=device, batch_size=batch_size,
-            cache_dir=prefill_dir, hf_cache_dir=hf_cache_dir,
-        )
-        shared_feats = _build_shared_features(ckpt, prefill_results, all_model_names)
+    print("  Extracting prefill features...")
+    prefill_results = extract_from_checkpoint(
+        ckpt, questions_raw,
+        device=device, batch_size=batch_size,
+        cache_dir="cache/",
+    )
+    shared_feats = _build_shared_features(ckpt, prefill_results, all_model_names)
 
     print("  Running trunk inference...")
     trunk_nets = reconstruct_trunk(ckpt, device=device)

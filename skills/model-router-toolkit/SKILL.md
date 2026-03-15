@@ -62,36 +62,16 @@ pip install -e '.[all]'                  # Everything for development
 
 The `model-router` CLI is available after install.
 
-## Reproduce the v1 Checkpoint
+## Pre-trained Checkpoints
 
-No pre-trained checkpoint is included in the repository. Before routing, reproduce the v1 checkpoint from the provided training data.
+The repo includes pre-trained checkpoints tracked via Git LFS:
 
-The v1 dataset covers three benchmarks — **MMLU Pro**, **LiveCodeBench**, and **Humanity's Last Exam** — evaluated across a 9-model pool ranging from Nemotron 3 Nano ($0.05/M input) to Claude Opus 4.6 ($2.77/M input).
+| Checkpoint | Encoder | Config |
+|------------|---------|--------|
+| `checkpoints/prefill_router_qwen08b.pt` | Qwen3.5-0.8B | `configs/v1-9models-qwen08b.yaml` |
+| `checkpoints/prefill_router_qwen35b.pt` | Qwen3.5-35B-A3B | `configs/v1-9models-qwen35b.yaml` |
 
-### Data prerequisites
-
-Training requires label CSVs and pre-extracted prefill features. Two modes are available:
-
-| Mode | Required files | Size |
-|------|---------------|------|
-| **Lean** (recommended) | `data/train_v1.csv`, `data/test_v1.csv`, `data/v1-9models-lean/train_features.pt`, `data/v1-9models-lean/test_features.pt` | ~90 MB |
-| **Full** (sweep + train) | `data/train_v1.csv`, `data/test_v1.csv`, `data/v1-9models-pool/train.pt`, `data/v1-9models-pool/test.pt` | ~2.4 GB |
-
-### Train the checkpoint
-
-Lean mode uses pre-transformed features and runs in ~30 seconds on CPU:
-
-```bash
-./scripts/reproduce_v1_checkpoint.sh --lean
-```
-
-Full mode runs the hyperparameter sweep (layer, pooling mode, PCA dimension) before training:
-
-```bash
-./scripts/reproduce_v1_checkpoint.sh
-```
-
-Both produce `checkpoints/prefill_router.pt`. The script also runs evaluation on the held-out test set so you can verify the checkpoint before using it.
+These were trained on the v1 dataset (MMLU Pro, LiveCodeBench, Humanity's Last Exam) across a 9-model pool ranging from Nemotron 3 Nano ($0.05/M input) to Claude Opus 4.6 ($2.77/M input).
 
 ## Environment Variables
 
@@ -287,10 +267,6 @@ model-router train \
 | `--batch-size` | No | 4 | Encoder extraction batch size |
 | `--n-seeds` | No | 10 | Number of ensemble seeds |
 | `--n-keep` | No | 5 | Best models to keep from ensemble |
-| `--prefill-dir` | No | `cache/` | Cache dir for extracted prefill features (saves hours on re-runs) |
-| `--no-cache` | No | false | Disable automatic prefill caching |
-| `--prefill-cache` | No | — | Pre-extracted PrefillResult `.pt` file (skips extraction) |
-| `--features-from` | No | — | Pre-transformed features `.pt` file (skips extraction + sweep) |
 | `--epochs` | No | 150 | Max MLP training epochs |
 | `--patience` | No | 15 | Early stopping patience |
 | `--pca-dims` | No | `50,100,150,200,300` | PCA dimensions to sweep, comma-separated |
@@ -318,7 +294,7 @@ model-router train \
 
 ### Tips
 
-- Use `--prefill-dir cache/` to cache extracted features — dramatically speeds up re-runs
+- Extracted features are automatically cached to `cache/` — re-runs skip the encoder
 - `--device cpu` forces CPU when GPU detection causes issues
 - Wider `--pca-dims` sweep (e.g. `50,100,150,200,300,400`) can find better transforms at the cost of longer sweep time
 
@@ -344,10 +320,6 @@ model-router evaluate \
 | `--data` | Yes | — | Test CSV (question, model, isCorrect) |
 | `--device` | No | auto | `cpu`, `cuda`, or `mps` |
 | `--batch-size` | No | 4 | Encoder extraction batch size |
-| `--prefill-dir` | No | `cache/` | Cache dir for extracted features |
-| `--no-cache` | No | false | Disable automatic prefill caching |
-| `--prefill-cache` | No | — | Pre-extracted PrefillResult `.pt` file (skips extraction) |
-| `--features-from` | No | — | Pre-transformed features `.pt` file (skips extraction + transforms) |
 | `--models` | No | all | Comma-separated model subset to evaluate |
 | `--pricing` | No | — | Pricing CSV to override config costs |
 

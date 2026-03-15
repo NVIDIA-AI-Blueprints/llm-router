@@ -11,10 +11,7 @@ This guide covers the full training pipeline — from labeled CSV to a productio
   - [Running Training](#running-training)
   - [What Happens Under the Hood](#what-happens-under-the-hood)
   - [All Training Options](#all-training-options)
-  - [Feature Caching](#feature-caching)
   - [Quick Verification Run](#quick-verification-run)
-  - [Training with Pre-Extracted Features](#training-with-pre-extracted-features)
-  - [Reproducing Included Checkpoints](#reproducing-included-checkpoints)
 - [Evaluation](#evaluation)
   - [Running Evaluation](#running-evaluation)
   - [All Evaluation Options](#all-evaluation-options)
@@ -154,36 +151,8 @@ Builds and saves the `.pt` checkpoint containing:
 | `--pca-dims` | 50,100,150,200,300 | PCA dimensions to sweep (comma-separated) |
 | `--epochs` | 150 | Max MLP training epochs |
 | `--patience` | 15 | Early stopping patience (epochs without improvement) |
-| `--prefill-dir` | `cache/` | Directory for cached prefill features |
-| `--no-cache` | off | Disable prefill feature caching |
-| `--prefill-cache` | (none) | Path to pre-computed prefill cache file |
 | `--models` | all | Comma-separated model subset to train on |
-| `--features-from` | (none) | Path to pre-transformed features (skips extraction + sweep) |
 | `--mode` | auto | Training mode override |
-
-### Feature Caching
-
-Feature extraction is the bottleneck. The toolkit caches extracted features to disk to avoid redundant encoder runs.
-
-**Default caching** (automatic):
-- Features are saved to `cache/` after extraction
-- On subsequent runs with the same encoder and questions, cached features are loaded instead
-- The cache key includes the encoder name and chat template kwargs
-
-**Custom cache directory**:
-```bash
-model-router train --prefill-dir my-cache/ ...
-```
-
-**Pre-computed cache**:
-```bash
-model-router train --prefill-cache cache/prefill_Qwen_Qwen3.5-0.8B_abc123.pt ...
-```
-
-**Disable caching**:
-```bash
-model-router train --no-cache ...
-```
 
 ### Quick Verification Run
 
@@ -201,40 +170,6 @@ model-router train \
 ```
 
 This runs in a few minutes and validates the full pipeline without the full hyperparameter search.
-
-### Training with Pre-Extracted Features
-
-For fast iteration on the MLP training stage, you can pre-extract and pre-transform features, then skip directly to trunk training:
-
-```bash
-# First: build lean feature files from a full cache
-python scripts/build_lean_data.py \
-  --checkpoint checkpoints/prefill_router_qwen08b.pt \
-  --train-cache cache/train_prefill.pt \
-  --test-cache cache/test_prefill.pt \
-  --output-dir data/lean/
-
-# Then: train using pre-transformed features (skips extraction + sweep)
-model-router train \
-  --config configs/v1-9models-qwen08b.yaml \
-  --data data/train.csv \
-  --output-dir checkpoints/ \
-  --features-from data/lean/train_features.pt
-```
-
-This is useful for:
-- Re-training the MLP with different hyperparameters without re-extracting
-- Sharing features across team members (the `.pt` feature files are much smaller than raw caches)
-- CI/CD pipelines where extraction is too slow
-
-### Reproducing Included Checkpoints
-
-The repo includes a script to reproduce the pre-trained checkpoints:
-
-```bash
-bash scripts/reproduce_v1_checkpoint.sh          # full pipeline (sweep + train)
-bash scripts/reproduce_v1_checkpoint.sh --lean    # from pre-transformed features (~30s)
-```
 
 ---
 
@@ -258,11 +193,7 @@ model-router evaluate \
 | `--data` | (required) | Test CSV path |
 | `--device` | auto-detect | `cpu`, `cuda`, or `mps` |
 | `--batch-size` | 4 | Encoder extraction batch size |
-| `--prefill-dir` | `cache/` | Cache dir for extracted features |
-| `--no-cache` | off | Disable prefill caching |
-| `--prefill-cache` | (none) | Path to pre-computed prefill cache |
 | `--models` | all | Model subset to evaluate |
-| `--features-from` | (none) | Pre-transformed features (skips extraction) |
 | `--pricing` | (none) | Pricing CSV override (`model,cost_per_m_input_tokens`) |
 
 ### Understanding the Report
