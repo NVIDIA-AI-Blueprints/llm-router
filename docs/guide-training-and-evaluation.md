@@ -354,6 +354,12 @@ Cost-coverage analysis at different tolerance levels:
 
 ---
 
+## Live Quality Review
+
+When the standalone server is running (`model-router serve`), the `/api/review` endpoint provides live auto-judging: it sends the question and model answer to the most expensive model in the pool for a correctness verdict. This complements offline evaluation by letting you spot-check routing quality on real traffic. See the [Serving & Deployment Guide](guide-serving-and-deployment.md#post-apireview--auto-judge) for details.
+
+---
+
 ## End-to-End Workflow
 
 Here's the complete workflow from scratch:
@@ -375,7 +381,8 @@ model-router collect \
   --output data/collected.csv \
   --judge vote
 
-# 5. Split into train/test (use the Python script from the Data Collection guide)
+# 5. Split into train/test
+model-router split --data data/collected.csv --train-output data/train.csv --test-output data/test.csv
 
 # 6. Train
 model-router train \
