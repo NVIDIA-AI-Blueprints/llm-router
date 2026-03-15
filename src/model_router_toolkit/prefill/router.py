@@ -25,6 +25,7 @@ class PrefillRouter(BaseRouter):
         from model_router_toolkit.prefill.scorer import load_scorer
 
         self._scorer = load_scorer(checkpoint_path, config=self._config)
+        self._scorer._ensure_loaded()
         self._model_names = self._scorer.model_names
 
     def route(

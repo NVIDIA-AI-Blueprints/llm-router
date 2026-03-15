@@ -35,20 +35,63 @@ The Model Router Toolkit is an LLM routing system that learns per-query model st
 ## Installation
 
 ```bash
-# Recommended (includes prefill routing with local encoder)
-pip install -e '.[prefill]'
+pip install -e '.[prefill,litellm]'
+```
 
-# Development (adds pytest, ruff, mypy)
-pip install -e '.[dev,prefill]'
+Pick extras based on what you need:
 
-# LiteLLM Proxy mode
-pip install -e '.[proxy]'
+| Extra | What it adds | When you need it |
+|-------|-------------|-----------------|
+| *(none)* | Core routing engine | Library use only |
+| `[server]` | FastAPI, uvicorn | Router-only HTTP sidecar |
+| `[litellm]` | litellm, FastAPI, uvicorn | Standalone server, LiteLLM SDK integration |
+| `[proxy]` | litellm[proxy] | LiteLLM Proxy injection |
+| `[prefill]` | torch, transformers | Prefill routing method (recommended) |
+| `[training]` | litellm | Data collection (`model-router collect`) |
+| `[dev]` | pytest, ruff, mypy | Development and testing |
+| `[all]` | Everything | Full development setup |
 
-# Everything
-pip install -e '.[dev,prefill,proxy]'
+Common combos:
+
+```bash
+pip install -e '.[prefill,litellm]'      # Recommended — prefill routing + serve
+pip install -e '.[prefill,server]'       # Router sidecar only (no inference)
+pip install -e '.[prefill,proxy]'        # LiteLLM Proxy mode
+pip install -e '.[all]'                  # Everything for development
 ```
 
 The `model-router` CLI is available after install.
+
+## Reproduce the v1 Checkpoint
+
+No pre-trained checkpoint is included in the repository. Before routing, reproduce the v1 checkpoint from the provided training data.
+
+The v1 dataset covers three benchmarks — **MMLU Pro**, **LiveCodeBench**, and **Humanity's Last Exam** — evaluated across a 9-model pool ranging from Nemotron 3 Nano ($0.05/M input) to Claude Opus 4.6 ($2.77/M input).
+
+### Data prerequisites
+
+Training requires label CSVs and pre-extracted prefill features. Two modes are available:
+
+| Mode | Required files | Size |
+|------|---------------|------|
+| **Lean** (recommended) | `data/train_v1.csv`, `data/test_v1.csv`, `data/v1-9models-lean/train_features.pt`, `data/v1-9models-lean/test_features.pt` | ~90 MB |
+| **Full** (sweep + train) | `data/train_v1.csv`, `data/test_v1.csv`, `data/v1-9models-pool/train.pt`, `data/v1-9models-pool/test.pt` | ~2.4 GB |
+
+### Train the checkpoint
+
+Lean mode uses pre-transformed features and runs in ~30 seconds on CPU:
+
+```bash
+./scripts/reproduce_v1_checkpoint.sh --lean
+```
+
+Full mode runs the hyperparameter sweep (layer, pooling mode, PCA dimension) before training:
+
+```bash
+./scripts/reproduce_v1_checkpoint.sh
+```
+
+Both produce `checkpoints/prefill_router.pt`. The script also runs evaluation on the held-out test set so you can verify the checkpoint before using it.
 
 ## Environment Variables
 
@@ -103,27 +146,28 @@ Each entry in the `models` list:
 ```yaml
 routing:
   method: prefill
-  checkpoint: checkpoints/prefill_qwen08b.pt
+  checkpoint: checkpoints/prefill_router_qwen08b.pt
   tolerance: 0.20
   encoder: Qwen/Qwen3.5-0.8B
   encoder_backend: transformers
 
 models:
-  - name: nem-think
-    display_name: Nemotron 3 Nano Think
+  - name: nemotron-3-nano-reasoning
+    display_name: Nemotron 3 Nano (Reasoning)
     litellm_model: openrouter/nvidia/nemotron-3-nano-30b-a3b
-    cost_per_m_input_tokens: 0.20
-    cost_per_m_output_tokens: 0.20
+    cost_per_m_input_tokens: 0.050
+    cost_per_m_output_tokens: 0.200
     system_prompt: Think step-by-step before answering.
     chat_template_kwargs:
       enable_thinking: true
 
-  - name: nem-nothink
-    display_name: Nemotron 3 Nano
-    litellm_model: openrouter/nvidia/nemotron-3-nano-30b-a3b
-    cost_per_m_input_tokens: 0.04
-    cost_per_m_output_tokens: 0.16
-    system_prompt: Answer directly and concisely.
+  - name: gpt-oss-20b-high
+    display_name: GPT-OSS 20B High
+    litellm_model: openrouter/openai/gpt-oss-20b
+    cost_per_m_input_tokens: 0.052
+    cost_per_m_output_tokens: 0.245
+    chat_template_kwargs:
+      reasoning_effort: high
 ```
 
 ### Starter Configs
@@ -165,10 +209,10 @@ One row per (question, model) pair. The same question appears once per model in 
 
 ```csv
 question,model,isCorrect,output_tokens
-"What is the capital of France?",nem-think,1,45
-"What is the capital of France?",nem-nothink,1,12
-"Prove sqrt(2) is irrational",nem-think,1,380
-"Prove sqrt(2) is irrational",nem-nothink,0,95
+"What is the capital of France?",nemotron-3-nano-reasoning,1,45
+"What is the capital of France?",gpt-oss-20b-high,1,12
+"Prove sqrt(2) is irrational",nemotron-3-nano-reasoning,0,95
+"Prove sqrt(2) is irrational",gpt-5-2-high,1,380
 ```
 
 ---
@@ -243,10 +287,14 @@ model-router train \
 | `--batch-size` | No | 4 | Encoder extraction batch size |
 | `--n-seeds` | No | 10 | Number of ensemble seeds |
 | `--n-keep` | No | 5 | Best models to keep from ensemble |
-| `--prefill-dir` | No | — | Cache dir for extracted prefill features (saves hours on re-runs) |
+| `--prefill-dir` | No | `cache/` | Cache dir for extracted prefill features (saves hours on re-runs) |
+| `--no-cache` | No | false | Disable automatic prefill caching |
+| `--prefill-cache` | No | — | Pre-extracted PrefillResult `.pt` file (skips extraction) |
+| `--features-from` | No | — | Pre-transformed features `.pt` file (skips extraction + sweep) |
 | `--epochs` | No | 150 | Max MLP training epochs |
 | `--patience` | No | 15 | Early stopping patience |
 | `--pca-dims` | No | `50,100,150,200,300` | PCA dimensions to sweep, comma-separated |
+| `--models` | No | all | Comma-separated model subset to train on |
 
 ### What the Pipeline Does
 
@@ -296,7 +344,12 @@ model-router evaluate \
 | `--data` | Yes | — | Test CSV (question, model, isCorrect) |
 | `--device` | No | auto | `cpu`, `cuda`, or `mps` |
 | `--batch-size` | No | 4 | Encoder extraction batch size |
-| `--prefill-dir` | No | — | Cache dir for extracted features |
+| `--prefill-dir` | No | `cache/` | Cache dir for extracted features |
+| `--no-cache` | No | false | Disable automatic prefill caching |
+| `--prefill-cache` | No | — | Pre-extracted PrefillResult `.pt` file (skips extraction) |
+| `--features-from` | No | — | Pre-transformed features `.pt` file (skips extraction + transforms) |
+| `--models` | No | all | Comma-separated model subset to evaluate |
+| `--pricing` | No | — | Pricing CSV to override config costs |
 
 ### Metrics Reference
 
@@ -354,6 +407,7 @@ model-router serve --config configs/v1-9models-qwen08b.yaml --port 8000
 |------|---------|-------------|
 | `--config` | `configs/v1-9models-qwen08b.yaml` | Pool config YAML |
 | `--port` | 8000 | Server port |
+| `--models` | all | Comma-separated model subset to route between |
 
 Requires an API key for the model provider.
 
@@ -402,7 +456,7 @@ curl http://localhost:8000/v1/chat/completions \
 Returns routing decisions only — no LLM inference, no API keys needed. Useful for external dispatchers or microservice architectures.
 
 ```bash
-model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8080
+model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
 ```
 
 ### Flags
@@ -411,6 +465,7 @@ model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8080
 |------|---------|-------------|
 | `--config` | `configs/v1-9models-qwen08b.yaml` | Pool config YAML |
 | `--port` | 8080 | Server port |
+| `--models` | all | Comma-separated model subset to route between |
 
 ### Endpoints
 
@@ -422,18 +477,17 @@ model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8080
 
 ### Route Request
 
+```bash
+curl -X POST http://localhost:8079/v1/route \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What is 2+2?", "tolerance": 0.20}'
+```
+
+Accepts either the `question` field or OpenAI-style `messages`:
+
 ```json
 {
   "messages": [{"role": "user", "content": "Prove sqrt(2) is irrational"}],
-  "tolerance": 0.20
-}
-```
-
-Or use the `question` field directly:
-
-```json
-{
-  "question": "Prove sqrt(2) is irrational",
   "tolerance": 0.20
 }
 ```
@@ -442,13 +496,20 @@ Or use the `question` field directly:
 
 ```json
 {
-  "selected_model": "nem-think",
-  "model_names": ["nem-think", "nem-nothink", "gptoss-high", "gpt-5.2"],
-  "confidences": {"nem-think": 0.85, "nem-nothink": 0.42, "gptoss-high": 0.78, "gpt-5.2": 0.91},
-  "costs": [
-    {"model": "nem-think", "estimated_total_cost": 0.00012, "cost_per_m_input_tokens": 0.20, "cost_per_m_output_tokens": 0.20, "median_output_tokens": 200}
+  "selected_model": "nemotron-3-nano-reasoning",
+  "model_names": [
+    "nemotron-3-nano-reasoning", "gpt-oss-20b-high", "nemotron-3-super",
+    "gpt-oss-120b-high", "qwen-3-5-35b", "qwen-3-5-122b",
+    "gpt-5-2-high", "gpt-5-4-high", "claude-opus-4-6-high"
   ],
-  "metadata": {"route_ms": 4.52, "p_max": 0.91, "threshold": 0.71}
+  "confidences": {
+    "nemotron-3-nano-reasoning": 0.91, "gpt-oss-20b-high": 0.87,
+    "nemotron-3-super": 0.93, "gpt-oss-120b-high": 0.90,
+    "qwen-3-5-35b": 0.94, "qwen-3-5-122b": 0.95,
+    "gpt-5-2-high": 0.96, "gpt-5-4-high": 0.97,
+    "claude-opus-4-6-high": 0.98
+  },
+  "metadata": {"p_max": 0.98, "threshold": 0.78, "route_ms": 85.4}
 }
 ```
 
@@ -503,23 +564,23 @@ The proxy exposes the OpenAI-compatible API at `http://localhost:4000/v1/chat/co
 
 ### LiteLLM SDK (no server needed)
 
-Add routing to an existing LiteLLM application with three lines:
+Add routing to an existing LiteLLM application:
 
 ```python
 from litellm import Router
 from model_router_toolkit import ModelRoutingStrategy
 
-model_list = [
-    {"model_name": "nem-think", "litellm_params": {"model": "openrouter/nvidia/nemotron-3-nano-30b-a3b"}},
-    {"model_name": "nem-nothink", "litellm_params": {"model": "openrouter/nvidia/nemotron-3-nano-30b-a3b"}},
-]
-
-router = Router(model_list=model_list)
+router = Router(model_list=[
+    {"model_name": "nemotron-3-nano-reasoning", "litellm_params": {"model": "openrouter/nvidia/nemotron-3-nano-30b-a3b"}},
+    {"model_name": "nemotron-3-super", "litellm_params": {"model": "openrouter/nvidia/nemotron-3-super-49b-v1"}},
+    {"model_name": "gpt-5-2-high", "litellm_params": {"model": "openrouter/openai/gpt-5.2"}},
+])
 strategy = ModelRoutingStrategy.from_config("configs/v1-9models-qwen08b.yaml")
+strategy.set_litellm_router(router)
 router.set_custom_routing_strategy(strategy)
 
 response = await router.acompletion(
-    model="nem-think",
+    model="nemotron-3-nano-reasoning",
     messages=[{"role": "user", "content": "Hello"}],
 )
 ```
@@ -527,7 +588,7 @@ response = await router.acompletion(
 **Per-request tolerance override:**
 ```python
 strategy.set_request_tolerance(0.10)
-response = await router.acompletion(model="nem-think", messages=messages)
+response = await router.acompletion(model="nemotron-3-nano-reasoning", messages=messages)
 ```
 
 **Access routing metadata:**
@@ -548,8 +609,8 @@ config = load_config("configs/v1-9models-qwen08b.yaml")
 router = build_router_from_config(config)
 
 result = router.route("What is the capital of France?", tolerance=0.20)
-print(result.selected_model)       # cheapest model above threshold
-print(result.confidences)          # P(correct) per model
+print(f"Selected: {result.selected_model}")
+print(f"Confidences: {dict(zip(result.model_names, result.confidences))}")
 print(result.selected_cost)        # estimated cost
 print(result.metadata)             # routing metadata (p_max, threshold)
 ```
