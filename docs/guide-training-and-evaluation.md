@@ -34,6 +34,8 @@ Labeled CSV ──> Train ──> Checkpoint (.pt) ──> Evaluate ──> Depl
 - **Evaluation** is also fully offline. It uses the same encoder and checkpoint.
 - The output is a self-contained `.pt` checkpoint that includes everything the router needs at inference time.
 
+> **Git LFS:** Checkpoints and data files are tracked with Git LFS. Run `git lfs install && git lfs pull` after cloning to fetch the actual files.
+
 ---
 
 ## Training

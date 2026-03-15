@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Documentation Request
+description: Request corrections, updates, or new documentation
+title: "[DOC]: "
+labels: ["doc"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to improve our documentation!
+
+  - type: dropdown
+    id: request_type
+    attributes:
+      label: Is this a correction or a new documentation request?
+      options:
+        - Correction / Update
+        - New Documentation
+    validations:
+      required: true
+
+  - type: dropdown
+    id: criticality
+    attributes:
+      label: How would you describe the priority of this documentation request?
+      options:
+        - Critical (currently preventing usage)
+        - High
+        - Medium
+        - Low (would be nice)
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Link or source to the relevant docs (if correcting)
+      placeholder: "ex: https://github.com/NVIDIA-AI-Blueprints/llm-router/blob/v3-prefill/README.md"
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the issue or the documentation you'd like
+      placeholder: The README says to use X, but the actual command is Y.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: (Optional) Proposed fix or content
+      placeholder: Replace the command on line 42 with ...

@@ -1,4 +1,20 @@
-# Model Router Toolkit
+# NVIDIA AI Blueprint: LLM Router v3 — Prefill Cost-Optimization
+
+> **Branch: v3-prefill** — This branch contains LLM Router v3, a prefill complexity-based routing system that learns which models handle which queries and routes to the cheapest model above an accuracy threshold. For the intent/multimodal router (v2), see the [experimental](../../tree/experimental) branch. For the original BERT-based router (v1), see [main](../../tree/main).
+
+### How This Branch Differs
+
+| Feature | v1 (main) | v2 (experimental) | **v3-prefill (this branch)** |
+|---------|-----------|-------------------|------------------------------|
+| **Routing signal** | BERT classification | Intent (Qwen 1.7B) or CLIP+NN | Encoder hidden states → PCA → MLP |
+| **Server** | Rust proxy | NeMo Agent Toolkit (FastAPI) | FastAPI + LiteLLM |
+| **Training** | N/A | Notebook-driven | Full CLI pipeline (collect/train/evaluate) |
+| **Models** | 2 | 3 | 9 (500x cost range) |
+| **Multimodal** | No | Yes (images) | No (text only) |
+| **Proxying** | Yes | No (classification only) | Yes (routing + inference) |
+| **Deployment modes** | Docker | Docker | Library, server, sidecar, proxy, SDK |
+
+---
 
 **Route every LLM call to the cheapest model that can answer it correctly.**
 
@@ -210,6 +226,12 @@ pip install -e '.[all]'
 ### Prerequisites
 
 - Python 3.10+
+- **Git LFS** — checkpoints and data files are stored with [Git LFS](https://git-lfs.com). After cloning, pull the actual files:
+  ```bash
+  git lfs install
+  git lfs pull
+  ```
+  Without this step, checkpoint files will be small LFS pointer files and the router will fail to load.
 - A trained checkpoint file (`.pt`) — the repo includes pre-trained checkpoints in `checkpoints/`
 - An API key for your model provider (only needed for serving/collecting, not for routing itself)
 

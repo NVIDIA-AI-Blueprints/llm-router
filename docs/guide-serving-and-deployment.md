@@ -38,6 +38,7 @@ Use the router as a Python library. No server, no API keys. You get a model name
 ### Setup
 
 ```bash
+git lfs install && git lfs pull   # fetch checkpoint files (required once after clone)
 pip install -e '.[prefill]'
 ```
 
