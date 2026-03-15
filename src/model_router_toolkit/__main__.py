@@ -62,6 +62,8 @@ def _cmd_evaluate(args):
         kwargs["models"] = [m.strip() for m in args.models.split(",")]
     if args.features_from is not None:
         kwargs["features_from"] = args.features_from
+    if args.pricing is not None:
+        kwargs["pricing"] = args.pricing
 
     run_evaluate(args.config, args.checkpoint, args.data, **kwargs)
 
@@ -169,6 +171,7 @@ def main():
     eval_p.add_argument("--prefill-cache", default=None, help="Pre-extracted PrefillResult .pt file (skips extraction)")
     eval_p.add_argument("--models", default=None, help="Comma-separated model subset to evaluate (default: all)")
     eval_p.add_argument("--features-from", default=None, help="Pre-transformed features .pt file (skips extraction + transforms)")
+    eval_p.add_argument("--pricing", default=None, help="Pricing CSV (model, cost_per_m_input_tokens) to override config costs")
     eval_p.set_defaults(func=_cmd_evaluate)
 
     collect_p = subparsers.add_parser(
@@ -227,3 +230,7 @@ def main():
     except KeyboardInterrupt:
         print("\n  Interrupted.", file=sys.stderr)
         sys.exit(130)
+
+
+if __name__ == "__main__":
+    main()

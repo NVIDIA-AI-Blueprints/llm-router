@@ -37,7 +37,7 @@ class StubRouter(BaseRouter):
     def load(self, checkpoint_path):
         pass
 
-    def route(self, question: str, *, tolerance: float = 0.20) -> RoutingResult:
+    def route(self, question: str, *, tolerance: float = 0.20, models: list[str] | None = None) -> RoutingResult:
         n = len(self._model_names)
         return RoutingResult(
             model_names=self._model_names,

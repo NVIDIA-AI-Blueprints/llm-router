@@ -80,6 +80,31 @@ class TestCreateAppReal:
         assert "event:" in body
 
 
+class TestPythonM:
+    """Tests for ``python -m model_router_toolkit`` (the __main__.py guard)."""
+
+    def test_python_m_serve_config(self, project_root):
+        result = subprocess.run(
+            [sys.executable, "-m", "model_router_toolkit", "serve-config"],
+            capture_output=True, text=True, timeout=30,
+            cwd=str(project_root),
+        )
+        assert result.returncode == 0
+        assert "not yet available" in result.stdout, (
+            "python -m produced no stdout — __main__.py likely missing "
+            "'if __name__ == \"__main__\": main()' guard"
+        )
+
+    def test_python_m_help(self, project_root):
+        result = subprocess.run(
+            [sys.executable, "-m", "model_router_toolkit", "--help"],
+            capture_output=True, text=True, timeout=30,
+            cwd=str(project_root),
+        )
+        assert result.returncode == 0
+        assert "model-router" in result.stdout.lower() or "usage" in result.stdout.lower()
+
+
 @pytest.mark.slow
 class TestCLISubcommands:
     """Tests exercising CLI subcommands via subprocess."""

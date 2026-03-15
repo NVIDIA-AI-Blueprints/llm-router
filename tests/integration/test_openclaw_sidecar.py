@@ -20,7 +20,7 @@ def fake_config_path(tmp_path, sample_pool_config_dict):
 
 
 class FakeRouter:
-    def route(self, question, *, tolerance=0.20):
+    def route(self, question, *, tolerance=0.20, models=None):
         from model_router_toolkit.router import RoutingResult, CostEstimate
         return RoutingResult(
             model_names=["strong", "cheap"],

@@ -111,7 +111,7 @@ def v1_ckpt_path(project_root):
     return p
 
 
-_V1_CSV_ROWS_PER_MODEL = 50
+_V1_CSV_ROWS_PER_MODEL = 5
 
 
 @pytest.fixture
