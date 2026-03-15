@@ -42,62 +42,66 @@
 
     <div class="sidebar">
       <div class="sidebar-section">
-        <h3>Tolerance</h3>
-        <div class="explainer">How much accuracy to trade for cost savings. The router picks the cheapest model whose p(correct) is within this range of the best.</div>
-        <div class="tolerance-display">
-          <span class="tolerance-value" id="tolValue">0.20</span>
-          <span class="tolerance-label">accuracy tradeoff</span>
-        </div>
-        <input type="range" id="tolSlider" min="0" max="0.50" step="0.01" value="0.20">
-        <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-dim); margin-top:4px;">
-          <span>0.00 (best model)</span>
-          <span>0.50 (cheapest)</span>
-        </div>
-      </div>
-
-      <div class="sidebar-section">
-        <h3>Model Pool</h3>
-        <div class="explainer">Toggle models on or off. Disabling expensive models forces the router to choose cheaper alternatives.</div>
-        <div id="modelToggles"></div>
-      </div>
-
-      <div class="sidebar-section" id="reviewSection" style="display:none">
-        <h3>Auto Review</h3>
-        <div class="explainer">After each response, a judge model evaluates correctness. If incorrect, other models are tested to find a better answer.</div>
-        <div class="model-toggle">
-          <label class="toggle-switch">
-            <input type="checkbox" id="autoReviewToggle">
-            <span class="toggle-slider"></span>
-          </label>
-          <div class="model-toggle-info">
-            <div class="model-toggle-name">Enabled</div>
-            <div class="model-toggle-cost" id="reviewJudgeLabel">Judge model</div>
+        <h3 class="sidebar-section-header" onclick="Playground.toggleSection(this)"><span class="chevron">&#9662;</span> Tolerance <span class="info-tip" data-tip="How much accuracy to trade for cost savings. The router picks the cheapest model whose p(correct) is within this range of the best.">?</span></h3>
+        <div class="sidebar-section-body">
+          <div class="tolerance-display">
+            <span class="tolerance-value" id="tolValue">0.20</span>
+            <span class="tolerance-label">accuracy tradeoff</span>
+          </div>
+          <input type="range" id="tolSlider" min="0" max="0.50" step="0.01" value="0.20">
+          <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-dim); margin-top:4px;">
+            <span>0.00 (best model)</span>
+            <span>0.50 (cheapest)</span>
           </div>
         </div>
       </div>
 
       <div class="sidebar-section">
-        <h3>Session Stats</h3>
-        <div class="explainer">Running cost estimates for this session.</div>
-        <div class="stat-row">
-          <span class="stat-label">Queries</span>
-          <span class="stat-value" id="statQueries">0</span>
+        <h3 class="sidebar-section-header" onclick="Playground.toggleSection(this)"><span class="chevron">&#9662;</span> Model Pool <span class="info-tip" data-tip="Toggle models on or off. Disabling expensive models forces the router to choose cheaper alternatives.">?</span></h3>
+        <div class="sidebar-section-body">
+          <div id="modelToggles"></div>
         </div>
-        <div class="stat-row">
-          <span class="stat-label">Router cost</span>
-          <span class="stat-value" id="statRouterCost">--</span>
+      </div>
+
+      <div class="sidebar-section" id="reviewSection" style="display:none">
+        <h3 class="sidebar-section-header" onclick="Playground.toggleSection(this)"><span class="chevron">&#9662;</span> Auto Review <span class="info-tip" data-tip="After each response, a judge model evaluates correctness. If incorrect, other models are tested to find a better answer.">?</span></h3>
+        <div class="sidebar-section-body">
+          <div class="model-toggle">
+            <label class="toggle-switch">
+              <input type="checkbox" id="autoReviewToggle">
+              <span class="toggle-slider"></span>
+            </label>
+            <div class="model-toggle-info">
+              <div class="model-toggle-name">Enabled</div>
+              <div class="model-toggle-cost" id="reviewJudgeLabel">Judge model</div>
+            </div>
+          </div>
         </div>
-        <div class="stat-row">
-          <span class="stat-label">Without router</span>
-          <span class="stat-value" id="statMaxCost">--</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Savings</span>
-          <span class="stat-value green" id="statSavings">--</span>
-        </div>
-        <div style="margin-top:8px;">
-          <div style="font-size:10px; color:var(--text-dim); margin-bottom:4px;">Model usage</div>
-          <div id="modelUsage"></div>
+      </div>
+
+      <div class="sidebar-section collapsed" id="statsSection">
+        <h3 class="sidebar-section-header" onclick="Playground.toggleSection(this)"><span class="chevron">&#9662;</span> Session Stats <span class="info-tip" data-tip="Running cost estimates for this session.">?</span></h3>
+        <div class="sidebar-section-body">
+          <div class="stat-row">
+            <span class="stat-label">Queries</span>
+            <span class="stat-value" id="statQueries">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Router cost</span>
+            <span class="stat-value" id="statRouterCost">--</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Without router</span>
+            <span class="stat-value" id="statMaxCost">--</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Savings</span>
+            <span class="stat-value green" id="statSavings">--</span>
+          </div>
+          <div style="margin-top:8px;">
+            <div style="font-size:10px; color:var(--text-dim); margin-bottom:4px;">Model usage</div>
+            <div id="modelUsage"></div>
+          </div>
         </div>
       </div>
     </div>

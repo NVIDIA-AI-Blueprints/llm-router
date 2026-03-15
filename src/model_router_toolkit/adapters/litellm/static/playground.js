@@ -481,6 +481,9 @@ const Playground = (function () {
 
   // ── Session Stats ─────────────────────────────────────────────────────
   function updateStats() {
+    var statsEl = document.getElementById('statsSection');
+    if (statsEl && stats.queries === 1) statsEl.classList.remove('collapsed');
+
     document.getElementById('statQueries').textContent = stats.queries;
 
     var hasCost = stats.maxCost > 0;
@@ -626,10 +629,17 @@ const Playground = (function () {
     }
   }
 
+  // ── Collapsible Sections ──────────────────────────────────────────────
+  function toggleSection(headerEl) {
+    var section = headerEl.closest('.sidebar-section');
+    if (section) section.classList.toggle('collapsed');
+  }
+
   // ── Public API ────────────────────────────────────────────────────────
   init();
 
   return {
     usePrompt: usePrompt,
+    toggleSection: toggleSection,
   };
 })();
