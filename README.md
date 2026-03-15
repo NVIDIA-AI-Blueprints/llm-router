@@ -1,4 +1,4 @@
-# NVIDIA AI Blueprint: LLM Router v3 — Prefill Cost-Optimization
+# NVIDIA AI Blueprint: LLM Router v3 — Prefill-Based Optimization
 
 > **Branch: v3-prefill** — This branch contains LLM Router v3, a prefill complexity-based routing system that learns which models handle which queries and routes to the cheapest model above an accuracy threshold. For the intent/multimodal router (v2), see the [experimental](../../tree/experimental) branch. For the original BERT-based router (v1), see [main](../../tree/main).
 
@@ -75,7 +75,7 @@ questions.txt ──> Collect ──> train.csv ──> Train ──> checkpoint
                    judge correctness)
 ```
 
-1. **Collect**: Run every model in the pool on a set of questions. Judge correctness via majority vote or reference answers. Output: a CSV of `question, model, isCorrect, output_tokens`.
+1. **Collect**: Run every model in the pool on a set of questions. Judge correctness via LLM-as-judge (default), majority vote, or reference answers. Output: a CSV of `question, model, isCorrect, output_tokens`.
 2. **Train**: Pass each question through a lightweight encoder (Qwen3.5-0.8B, 0.8B params). Extract hidden state representations from the encoder's internal layers. These representations capture the "complexity signature" of each question. A small MLP learns to predict P(correct) for each model from these representations.
 
 ### Inference (Online, Per-Query)
@@ -428,7 +428,20 @@ Run every model in your pool on a set of questions and judge correctness. This p
 pip install -e '.[prefill,training]'
 export OPENROUTER_API_KEY=your-key
 
-# Majority vote judging (no ground truth needed)
+# LLM-as-judge (default) — a judge model evaluates each answer independently
+model-router collect \
+  --config configs/v1-9models-qwen08b.yaml \
+  --questions questions.txt \
+  --output data/collected.csv
+
+# Custom judge model (any litellm-compatible model)
+model-router collect \
+  --config configs/v1-9models-qwen08b.yaml \
+  --questions questions.txt \
+  --output data/collected.csv \
+  --judge-model openrouter/anthropic/claude-opus-4-6
+
+# Majority vote judging (no judge model needed, but fragile for open-ended answers)
 model-router collect \
   --config configs/v1-9models-qwen08b.yaml \
   --questions questions.txt \
@@ -442,6 +455,14 @@ model-router collect \
   --output data/collected.csv \
   --judge reference --references answers.csv
 ```
+
+**Judging methods**:
+
+| Method | Flag | Description |
+|--------|------|-------------|
+| `llm` (default) | `--judge llm` | A judge LLM evaluates each answer independently. Default judge: Nemotron 3 Super (free tier). Override with `--judge-model`. |
+| `vote` | `--judge vote` | Majority consensus across all models. No external judge needed, but unreliable for open-ended or creative answers. |
+| `reference` | `--judge reference --references answers.csv` | Exact match against ground-truth answers from a CSV with `question,answer` columns. |
 
 **Input**: `questions.txt` — one question per line.
 

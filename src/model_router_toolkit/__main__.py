@@ -62,6 +62,8 @@ def _cmd_collect(args):
     kwargs = {}
     if args.references is not None:
         kwargs["references_path"] = args.references
+    if args.judge_model is not None:
+        kwargs["judge_model"] = args.judge_model
 
     run_collect(args.config, args.questions, args.output, args.judge, **kwargs)
 
@@ -161,9 +163,13 @@ def main():
     collect_p.add_argument("--questions", required=True, help="Questions file (one per line)")
     collect_p.add_argument("--output", required=True, help="Output CSV path")
     collect_p.add_argument(
-        "--judge", default="vote",
-        choices=["vote", "llm", "reference"],
-        help="Judging method",
+        "--judge", default="llm",
+        choices=["llm", "vote", "reference"],
+        help="Judging method (default: llm)",
+    )
+    collect_p.add_argument(
+        "--judge-model", default=None,
+        help="LiteLLM model for LLM-as-judge (default: nemotron-3-super free tier)",
     )
     collect_p.add_argument("--references", default=None, help="Reference CSV for reference judging")
     collect_p.set_defaults(func=_cmd_collect)
