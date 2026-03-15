@@ -22,8 +22,6 @@ router_telemetry.db
 venv/
 
 data/*.csv
-!data/train_v1.csv
-!data/test_v1.csv
 data/*/
 
 cache/
@@ -32,5 +30,7 @@ logs/
 
 .DS_Store
 
-working/assets-from-research/
-working/v1-9models-pool/
+CLAUDE.md
+AGENTS.md
+
+working/

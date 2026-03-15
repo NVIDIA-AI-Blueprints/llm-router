@@ -28,8 +28,6 @@ def _resolve_api_key(litellm_model: str, api_base: str) -> str:
     if litellm_model.startswith("nvidia_nim/"):
         return os.environ.get("NVIDIA_API_KEY", "")
 
-    if "inference-api.nvidia" in api_base:
-        return os.environ.get("NVIDIA_INTERNAL_API_KEY_REDACTED", "") or os.environ.get("NVIDIA_API_KEY", "")
     if "nvidia" in api_base or "integrate.api.nvidia" in api_base:
         return os.environ.get("NVIDIA_API_KEY", "")
     if "openrouter" in api_base:
@@ -127,7 +125,6 @@ def create_app(
     review_available = bool(
         os.environ.get("OPENROUTER_API_KEY")
         or os.environ.get("NVIDIA_API_KEY")
-        or os.environ.get("NVIDIA_INTERNAL_API_KEY_REDACTED")
     )
     judge_model = max(config.models, key=lambda m: m.cost_per_m_output_tokens).display_name if config.models else None
 

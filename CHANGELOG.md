@@ -15,11 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - `adapters/http/auth.py` — webhook authentication middleware (HMAC-SHA256 + bearer token) for enterprise gateway integrations (Portkey, TrueFoundry, Cloudflare).
 - `plugins/openclaw/` — TypeScript plugin template for OpenClaw's `before_model_resolve` hook, calling the toolkit's HTTP sidecar for per-prompt routing.
-- `docs/quickstart.md` — 5-minute getting started guide.
-- `docs/configuration.md` — full pool config YAML reference + install extras matrix.
-- `docs/adapters.md` — using bundled adapters, writing custom adapters, API reference.
-- `docs/plugins.md` — OpenClaw plugin guide, writing plugins for other platforms.
-- `docs/extending.md` — custom routing methods, adding adapters, contributing guide.
+- `docs/guide-configuration.md` — full pool config YAML reference + install extras matrix.
+- `docs/guide-adapters-and-plugins.md` — using bundled adapters, writing custom adapters, OpenClaw plugin guide.
 - `tests/adapters/test_http.py` — unit tests for HTTP adapter + webhook auth (8 new tests).
 - `tests/adapters/test_litellm.py` — migrated strategy tests.
 - `tests/integration/test_openclaw_sidecar.py` — OpenClaw sidecar integration test.
@@ -53,6 +50,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Race condition on shared tolerance fixed with per-request contextvars scoping
 - Async routing now uses `asyncio.to_thread()` to avoid blocking the event loop
 - Security warnings added to all `pickle.load()` and `torch.load(weights_only=False)` sites
-- `trust_remote_code` parameter made configurable in `LocalEmbedClient`
 - API key fallback in proxy config bridge now logs a warning for unknown providers
 - Telemetry disabled by default (opt-in via `ROUTER_TELEMETRY_DB` env var)

@@ -212,11 +212,10 @@ async def review(request: Request, req: ReviewRequest):
     has_key = bool(
         os.environ.get("OPENROUTER_API_KEY")
         or os.environ.get("NVIDIA_API_KEY")
-        or os.environ.get("NVIDIA_INTERNAL_API_KEY_REDACTED")
     )
     if not has_key:
         async def _unavailable():
-            yield _sse_event("error", {"message": "Auto-review requires an API key (OPENROUTER_API_KEY, NVIDIA_API_KEY, or NVIDIA_INTERNAL_API_KEY_REDACTED)"})
+            yield _sse_event("error", {"message": "Auto-review requires an API key (OPENROUTER_API_KEY or NVIDIA_API_KEY)"})
 
         return StreamingResponse(
             _unavailable(),
