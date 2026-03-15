@@ -23,3 +23,13 @@ venv/
 
 checkpoints/smoke*/
 checkpoints/final_smoke/
+checkpoints/*.pt
+
+data/*.csv
+data/*/
+
+logs/
+
+.DS_Store
+
+working/assets-from-research/

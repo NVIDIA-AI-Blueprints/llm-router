@@ -104,7 +104,7 @@ The pipeline has 6 steps:
 3. **Sweep**: For each target model, searches over layer (ternary search), pooling mode (last-token vs mean), and PCA dimension to find the best configuration by 5-fold CV AUC
 4. **Fit transforms**: Fits StandardScaler + PCA on training data for each target's best configuration
 5. **Train trunk**: Trains a SharedTrunkNet MLP ensemble (10 seeds, keeps best 5) with BCEWithLogitsLoss and early stopping
-6. **Save checkpoint**: Writes a self-contained `.pt` file and a `serve.yaml`
+6. **Save checkpoint**: Writes a self-contained `.pt` file
 
 ### Options
 
@@ -173,10 +173,6 @@ model-router serve --config configs/prefill-qwen08b.yaml --port 8000
 ```
 
 The trained checkpoint is self-contained -- it includes the pool config, transforms, and MLP weights. The server loads the encoder model on first request, then caches it for subsequent calls.
-
-## KMeans Training
-
-KMeans training is not yet implemented. The `train_kmeans` function raises `NotImplementedError`. Use the prefill method for training.
 
 ## Config Reference
 

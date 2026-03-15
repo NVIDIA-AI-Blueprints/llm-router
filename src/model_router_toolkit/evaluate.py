@@ -1,10 +1,8 @@
 """Unified evaluation for routing checkpoints.
 
-For prefill routers, runs batch extraction and produces rich diagnostics:
+Runs batch prefill extraction and produces rich diagnostics:
 per-model AUC, oracle/router accuracy, agreement zones, near-miss
 analysis, and pairwise win rates.
-
-For kmeans routers, falls back to the per-question BaseRouter evaluation.
 """
 
 from __future__ import annotations
@@ -328,6 +326,7 @@ def _run_prefill_evaluate(
     prefill_dir: str | Path | None = None,
     prefill_cache: str | Path | None = None,
     hf_cache_dir: str | None = None,
+    features_from: str | Path | None = None,
     models: list[str] | None = None,
 ) -> dict[str, Any]:
     """Rich prefill evaluation: batch extraction + trunk + full metrics."""
@@ -351,10 +350,17 @@ def _run_prefill_evaluate(
 
     print(f"  Loaded {N} questions for {n_all} targets")
 
-    if prefill_cache:
+    if features_from:
+        print(f"  Loading pre-transformed features: {features_from}")
+        feat_data = torch.load(features_from, map_location="cpu", weights_only=False)
+        shared_feats = feat_data["features"]
+        if isinstance(shared_feats, torch.Tensor):
+            shared_feats = shared_feats.numpy()
+    elif prefill_cache:
         print(f"  Loading prefill cache: {prefill_cache}")
         pr = PrefillResult.load(prefill_cache)
         prefill_results = {mname: pr for mname in all_model_names}
+        shared_feats = _build_shared_features(ckpt, prefill_results, all_model_names)
     else:
         from model_router_toolkit.prefill.extract import extract_from_checkpoint
 
@@ -364,10 +370,9 @@ def _run_prefill_evaluate(
             device=device, batch_size=batch_size,
             cache_dir=prefill_dir, hf_cache_dir=hf_cache_dir,
         )
+        shared_feats = _build_shared_features(ckpt, prefill_results, all_model_names)
 
-    # Build features & run trunk on full pool
     print("  Running trunk inference...")
-    shared_feats = _build_shared_features(ckpt, prefill_results, all_model_names)
     trunk_nets = reconstruct_trunk(ckpt, device=device)
     probs_all = predict_proba(trunk_nets, shared_feats, device=device)
 
@@ -390,7 +395,7 @@ def _run_prefill_evaluate(
 
 
 # ---------------------------------------------------------------------------
-# Fallback: BaseRouter evaluation (for kmeans or generic)
+# Fallback: BaseRouter evaluation (generic)
 # ---------------------------------------------------------------------------
 
 def _run_baserouter_evaluate(

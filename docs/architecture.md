@@ -10,8 +10,6 @@ BaseRouter (abstract)
     |   has_model(model_name)       -> bool           # pool membership check
     |   resolve(model_name)         -> RoutingResult   # pin a model without ML inference
     |
-    +-- KMeansRouter      # Embedding-based clustering; no GPU required
-    |
     +-- PrefillRouter     # Prefill complexity scoring; CPU or GPU
 
 Adapters (platform integrations)
@@ -43,8 +41,8 @@ The core package has **zero framework dependencies** — only pydantic, numpy, s
 ```
 ┌──────────────────────────────────────────────────────┐
 │  Core (pip install model-router-toolkit)             │
-│  router.py, config.py, checkpoint.py, kmeans/,      │
-│  prefill/, train.py, evaluate.py, collect.py         │
+│  router.py, config.py, checkpoint.py, prefill/,     │
+│  train.py, evaluate.py, collect.py                   │
 │  Deps: pydantic, numpy, scikit-learn, requests, yaml │
 └──────────────┬───────────────────────┬───────────────┘
                │                       │
@@ -72,7 +70,7 @@ Install only what you need:
 
 | Extra | Installs | Enables |
 |-------|----------|---------|
-| *(none)* | Core only | `BaseRouter`, `RoutingResult`, config, KMeans routing |
+| *(none)* | Core only | `BaseRouter`, `RoutingResult`, config |
 | `[server]` | FastAPI, uvicorn | `adapters/http/` — router-only sidecar |
 | `[litellm]` | litellm, FastAPI, uvicorn | `adapters/litellm/` — strategy, serve mode |
 | `[proxy]` | litellm[proxy], packaging | LiteLLM Proxy injection (`model-router proxy`) |
@@ -125,23 +123,6 @@ TypeScript plugin for the OpenClaw gateway. Hooks into `before_model_resolve` to
 
 ## Inference Flow
 
-### KMeans Path
-
-```
-Question --> Embed API (build.nvidia.com) --> KMeansRouter --> Adapter dispatch
-                  |                              |
-                  v                              v
-          nvidia/llama-nemotron-         checkpoint.pkl
-          embed-1b-v2                  (centroids, Platt calibrators)
-```
-
-1. Question is embedded via API
-2. KMeansRouter assigns to nearest cluster, applies Platt calibration for P(correct) per model
-3. Selects cheapest model above tolerance threshold
-4. Adapter dispatches to selected provider (or returns decision only)
-
-### Prefill Path
-
 ```
 Question --> Encoder (Qwen3.5-0.8B) --> PrefillRouter --> Adapter dispatch
                   |                          |
@@ -172,7 +153,7 @@ train.csv --> Load Labels --> Batch Extract Prefill
                                     |
                               Train SharedTrunkNet Ensemble
                                     |
-                              Save .pt Checkpoint + serve.yaml
+                              Save .pt Checkpoint
 ```
 
 **Sweep**: For each target model, grid-searches over hidden state mode (last-token vs mean-pooled) and PCA dimension, with ternary search over encoder layers. Uses 5-fold CV AUC with logistic regression as the quality metric.
@@ -199,7 +180,7 @@ All behavior is config-driven:
 
 ```yaml
 routing:
-  method: prefill          # or kmeans
+  method: prefill
   checkpoint: path/to.pt   # trained checkpoint
   tolerance: 0.20          # accuracy-cost tradeoff
   encoder: Qwen/Qwen3.5-0.8B  # HF encoder for prefill

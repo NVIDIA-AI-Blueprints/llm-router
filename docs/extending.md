@@ -4,7 +4,7 @@ How to add custom routing methods, write new bundled adapters, and contribute to
 
 ## Part 1: Custom Routing Methods
 
-All routing methods implement the `BaseRouter` abstract class. The toolkit includes `KMeansRouter` and `PrefillRouter`; you can add your own.
+All routing methods implement the `BaseRouter` abstract class. The toolkit includes `PrefillRouter`; you can add your own.
 
 ### Step 1: Subclass BaseRouter
 
@@ -88,10 +88,7 @@ Add your method to `build_router_from_config()` in `config.py`:
 def build_router_from_config(config: PoolConfig):
     method = config.routing.method.lower()
 
-    if method == "kmeans":
-        from model_router_toolkit.kmeans.router import KMeansRouter
-        router = KMeansRouter(config=config)
-    elif method == "prefill":
+    if method == "prefill":
         from model_router_toolkit.prefill.router import PrefillRouter
         router = PrefillRouter(config=config)
     elif method == "my_method":

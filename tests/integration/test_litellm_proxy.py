@@ -58,7 +58,7 @@ class StubRouter(BaseRouter):
 
 def _pool_config() -> PoolConfig:
     return PoolConfig(
-        routing=RoutingConfig(method="kmeans", tolerance=0.20),
+        routing=RoutingConfig(method="prefill", tolerance=0.20),
         models=[
             ModelSpec(
                 name="model-a",

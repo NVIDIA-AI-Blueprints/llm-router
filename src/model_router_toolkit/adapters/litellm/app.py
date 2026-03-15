@@ -40,10 +40,9 @@ def _resolve_api_key(litellm_model: str, api_base: str) -> str:
 
 def _build_model_list(config: PoolConfig) -> list[dict]:
     model_list = []
-    embed_base = getattr(config.routing, "embed_api_base", "")
 
     for m in config.models:
-        api_base = m.api_base or embed_base
+        api_base = m.api_base or ""
         api_key = _resolve_api_key(m.litellm_model, api_base)
 
         litellm_model = m.litellm_model

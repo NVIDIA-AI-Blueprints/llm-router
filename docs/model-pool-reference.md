@@ -41,14 +41,6 @@ routing:
   encoder: Qwen/Qwen3.5-0.8B
 ```
 
-## Embedding Model (KMeans Routing)
-
-| Model | Availability | Notes |
-|-------|-------------|-------|
-| `nvidia/llama-nemotron-embed-1b-v2` | build.nvidia.com, OpenRouter | 1B parameter embedding model |
-
-Used for KMeans routing only (no GPU required -- embedding is done via API).
-
 ## Adding Models to the Pool
 
 Add entries to the `models` list in your config YAML:

@@ -1,4 +1,4 @@
-"""Model Router Toolkit -- intelligent LLM routing via KMeans or prefill strategies."""
+"""Model Router Toolkit -- intelligent LLM routing via prefill complexity analysis."""
 
 __version__ = "0.1.0"
 
@@ -16,9 +16,6 @@ def __getattr__(name: str):
                 "Install with: pip install 'model-router-toolkit[litellm]'"
             ) from None
         return ModelRoutingStrategy
-    if name == "KMeansRouter":
-        from model_router_toolkit.kmeans.router import KMeansRouter
-        return KMeansRouter
     if name == "PrefillRouter":
         from model_router_toolkit.prefill.router import PrefillRouter
         return PrefillRouter
@@ -33,6 +30,5 @@ __all__ = [
     "PoolConfig",
     "ModelSpec",
     "load_config",
-    "KMeansRouter",
     "PrefillRouter",
 ]

@@ -67,16 +67,7 @@ const Playground = (function () {
 
   function updateHowItWorks(method) {
     if (!howItWorksEl) return;
-    if (method === 'kmeans') {
-      howItWorksEl.innerHTML =
-        '<strong>How it works:</strong>' +
-        '<ol>' +
-        '<li>Your question is embedded into a high-dimensional vector</li>' +
-        '<li>KMeans assigns it to one of the learned clusters</li>' +
-        '<li>Per-cluster accuracy statistics produce p(correct) for each model</li>' +
-        '<li>The router picks the <strong>cheapest</strong> model above the accuracy threshold</li>' +
-        '</ol>';
-    } else if (method === 'prefill') {
+    if (method === 'prefill') {
       howItWorksEl.innerHTML =
         '<strong>How it works:</strong>' +
         '<ol>' +
@@ -192,11 +183,7 @@ const Playground = (function () {
 
     var steps = [];
 
-    if (method === 'KMEANS' && meta.cluster != null) {
-      steps.push({ label: method, value: routeLabel + 'ms', detail: 'Cluster ' + meta.cluster, active: true });
-    } else {
-      steps.push({ label: method, value: routeLabel + 'ms', detail: 'route decision', active: true });
-    }
+    steps.push({ label: method, value: routeLabel + 'ms', detail: 'route decision', active: true });
 
     var thresholdVal = meta.threshold != null ? meta.threshold.toFixed(3) : '--';
     steps.push({ label: 'Threshold', value: '\u2265 ' + thresholdVal, detail: 'p_max ' + (meta.p_max != null ? meta.p_max.toFixed(3) : '--'), active: true });

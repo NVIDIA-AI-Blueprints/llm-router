@@ -1,6 +1,6 @@
 # Pool Config Schema
 
-This document describes the YAML configuration schema for the Model Router Toolkit. Config files define the routing method, checkpoint, tolerance, embedding settings, and the model pool.
+This document describes the YAML configuration schema for the Model Router Toolkit. Config files define the routing method, checkpoint, tolerance, and the model pool.
 
 ## Top-Level Structure
 
@@ -18,15 +18,13 @@ models:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `method` | string | Yes | Routing strategy: `kmeans` (embedding-based clustering) or `prefill` (prefill complexity-based). |
-| `checkpoint` | string | Yes | Path to the trained router checkpoint. For KMeans: `.pkl` file (e.g. `checkpoints/kmeans_c100_db.pkl`). For prefill: `.pt` file (e.g. `checkpoints/prefill.pt`). |
-| `tolerance` | float | No | Accuracy tolerance threshold (0.0–1.0). Router selects the cheapest model that meets this accuracy target. Default varies by implementation. |
-| `embed_model` | string | No | HuggingFace model ID or API model name for embeddings. Used when `method` is `kmeans`. |
-| `embed_mode` | string | No | How embeddings are computed: `api` (remote API) or `local` (in-process). |
-| `embed_api_base` | string | No | Base URL for embedding API when `embed_mode` is `api`. Examples: `https://integrate.api.nvidia.com/v1`, `https://openrouter.ai/api/v1`. |
-| `encoder` | string | No | HuggingFace model ID for the prefill encoder. Used when `method` is `prefill`. |
-| `encoder_server` | string | No | URL of the encoder inference server for prefill extraction. Used when `method` is `prefill`. |
-| `training_mode` | string | No | Prefill training mode: `auto`, `per_model`, or `single`. Used when `method` is `prefill`. |
+| `method` | string | Yes | Routing strategy: `prefill` (prefill complexity-based routing via encoder hidden states). |
+| `checkpoint` | string | Yes | Path to the trained router checkpoint (`.pt` file, e.g. `checkpoints/prefill_router.pt`). |
+| `tolerance` | float | No | Accuracy tolerance threshold (0.0–1.0). Router selects the cheapest model that meets this accuracy target. Default: 0.20. |
+| `encoder` | string | No | HuggingFace model ID for the prefill encoder (e.g. `Qwen/Qwen3.5-0.8B`). |
+| `encoder_server` | string | No | URL of the encoder inference server for prefill extraction. |
+| `training_mode` | string | No | Prefill training mode: `auto`, `per_model`, or `single`. |
+| `encoder_backend` | string | No | Backend for encoder inference: `transformers` (local) or `server` (remote). |
 
 ---
 
@@ -51,6 +49,6 @@ The `models` key is a list of model entries. Each entry defines one model in the
 
 | File | Use Case |
 |------|----------|
-| `cloud-only.yaml` | build.nvidia.com only. No OpenRouter, no GPU. KMeans with NVIDIA embedding API. |
-| `openrouter-kmeans.yaml` | OpenRouter + KMeans. No GPU. Same model pool with `openrouter/` provider. |
+| `prefill-qwen08b.yaml` | Default config. Qwen3.5-0.8B encoder, OpenRouter model pool. |
 | `local-prefill.yaml` | Local GPU + prefill router. Encoder served locally; model pool uses OpenRouter plus optional local vLLM model. |
+| `smoke-test.yaml` | Quick 2-model test configuration. |

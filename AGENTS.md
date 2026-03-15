@@ -1,6 +1,6 @@
 # AGENTS.md -- Model Router Toolkit
 
-LLM routing toolkit. Learns which model handles which queries best, routes to the cheapest model above an accuracy threshold. Prefill complexity-based routing (primary, via Qwen3.5-0.8B encoder) and KMeans embedding-based routing behind a unified BaseRouter interface. Full collect/train/evaluate/serve pipeline via CLI.
+LLM routing toolkit. Learns which model handles which queries best, routes to the cheapest model above an accuracy threshold. Prefill complexity-based routing via Qwen3.5-0.8B encoder behind a unified BaseRouter interface. Full collect/train/evaluate/serve pipeline via CLI.
 
 ## Project Structure
 
@@ -10,16 +10,12 @@ src/model_router_toolkit/
 ├── __main__.py                # CLI entry point (model-router)
 ├── config.py                  # PoolConfig, ModelSpec, RoutingConfig (pydantic)
 ├── router.py                  # BaseRouter ABC, RoutingResult, CostEstimate, extract_user_text
-├── checkpoint.py              # Checkpoint load/save (pkl + pt)
+├── checkpoint.py              # Checkpoint load/save (.pt)
 ├── gpu.py                     # GPU detection + VRAM checks
 ├── train.py                   # Unified training dispatcher
-├── evaluate.py                # Unified evaluation (prefill: rich metrics, kmeans: basic)
+├── evaluate.py                # Unified evaluation (rich metrics)
 ├── collect.py                 # Data collection (run models + judge correctness)
 ├── telemetry.py               # SQLite session/chat logging
-├── kmeans/
-│   ├── router.py              # KMeansRouter(BaseRouter)
-│   ├── embed.py               # Embedding client (API + local)
-│   └── train.py               # KMeans training (NotImplementedError stub)
 ├── prefill/
 │   ├── router.py              # PrefillRouter(BaseRouter) -- inference path
 │   ├── scorer.py              # Prefill scoring wrapper (loads checkpoint, runs MLP)
@@ -54,10 +50,10 @@ src/model_router_toolkit/
 ```
 
 Key directories outside the package:
-- `configs/` -- Pool config YAMLs (prefill-qwen08b, smoke-test, cloud-only, etc.)
+- `configs/` -- Pool config YAMLs (prefill-qwen08b, smoke-test, etc.)
 - `data/` -- Training/test CSVs (gitignored, not tracked)
 - `checkpoints/` -- Trained routing checkpoints (gitignored)
-- `notebooks/` -- Quickstart notebooks (kmeans + prefill)
+- `notebooks/` -- Quickstart notebook (prefill)
 - `tests/` -- Unit tests; `tests/integration/` -- API integration tests
 - `docs/` -- Architecture, integration, quickstart, configuration, adapters, plugins, extending, training, evaluation
 
@@ -162,16 +158,14 @@ Uses `adapters/litellm/proxy.py` and `adapters/litellm/config_bridge.py`.
 
 | Config | Method | Provider | When to use |
 |--------|--------|----------|-------------|
-| `prefill-qwen08b.yaml` | Prefill | OpenRouter | Default — GPU available, best accuracy |
-| `cloud-only.yaml` | KMeans | NVIDIA NIM | No GPU, cloud embeddings |
+| `prefill-qwen08b.yaml` | Prefill | OpenRouter | Default — best accuracy |
 | `smoke-test.yaml` | Prefill | OpenRouter | Quick 2-model test |
 | `local-prefill.yaml` | Prefill | Local | Air-gapped / local-only |
 
 ## Architecture
 
-Two routing methods behind `BaseRouter`:
+One routing method behind `BaseRouter`:
 - **PrefillRouter**: encoder forward pass -> per-layer hidden states -> PCA -> SharedTrunkNet MLP -> P(correct) per model -> cheapest above tolerance
-- **KMeansRouter**: embed question -> cluster assignment -> Platt calibration -> P(correct) per model -> cheapest above tolerance
 
 Training and evaluation bypass BaseRouter (batch extraction + direct trunk inference). Inference/serving uses BaseRouter.
 
@@ -184,7 +178,7 @@ Training and evaluation bypass BaseRouter (batch extraction + direct trunk infer
 
 ```yaml
 routing:
-  method: prefill              # or kmeans
+  method: prefill
   checkpoint: checkpoints/prefill_router.pt
   tolerance: 0.20              # accuracy-cost tradeoff
   encoder: Qwen/Qwen3.5-0.8B  # HF model for prefill extraction

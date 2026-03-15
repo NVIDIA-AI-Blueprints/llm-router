@@ -1,6 +1,6 @@
 # Model Router Toolkit
 
-LLM routing toolkit that learns which model handles which queries best, then routes each query to the cheapest model above an accuracy threshold. Prefill complexity-based routing (primary) and KMeans embedding-based routing behind a unified `BaseRouter` interface.
+LLM routing toolkit that learns which model handles which queries best, then routes each query to the cheapest model above an accuracy threshold. Prefill complexity-based routing via a lightweight encoder (Qwen3.5-0.8B) behind a unified `BaseRouter` interface.
 
 ## Quickstart
 
@@ -31,7 +31,7 @@ result = router.route("What is the capital of France?", tolerance=0.20)
 print(result.selected_model, result.confidences)
 ```
 
-For notebooks, open `notebooks/quickstart.ipynb` (KMeans) or `notebooks/quickstart-prefill.ipynb` (prefill).
+For a notebook walkthrough, open `notebooks/quickstart-prefill.ipynb`.
 
 ## Install
 
@@ -39,7 +39,7 @@ Pick extras based on what you need:
 
 | Extra | What it adds | When you need it |
 |-------|-------------|-----------------|
-| *(none)* | Core routing engine | Library use, KMeans routing |
+| *(none)* | Core routing engine | Library use only |
 | `[server]` | FastAPI, uvicorn | Router-only HTTP sidecar |
 | `[litellm]` | litellm, FastAPI, uvicorn | Standalone server, LiteLLM SDK |
 | `[proxy]` | litellm[proxy] | LiteLLM Proxy injection |

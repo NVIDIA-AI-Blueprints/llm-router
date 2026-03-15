@@ -1,4 +1,4 @@
-"""Unified training dispatcher for KMeans and prefill routing methods."""
+"""Unified training dispatcher for prefill routing."""
 
 from __future__ import annotations
 
@@ -30,18 +30,13 @@ def run_train(
             raise ValueError("No training data found")
 
     method = config.routing.method.lower()
-    if method == "kmeans":
-        raise ValueError(
-            "KMeans training is not yet available. Use method: prefill in your config.\n"
-            "KMeans routing supports inference with pre-trained checkpoints (.pkl) only."
-        )
-    elif method == "prefill":
+    if method == "prefill":
         from model_router_toolkit.prefill.train import train_prefill
 
         checkpoint_path = train_prefill(config, data_path, output_dir, **kwargs)
     else:
         raise ValueError(
-            f"Unknown routing method: {method!r}. Use 'kmeans' or 'prefill'.",
+            f"Unknown routing method: {method!r}. Supported: 'prefill'.",
         )
 
     print(f"  Checkpoint: {checkpoint_path}")

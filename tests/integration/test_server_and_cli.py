@@ -96,15 +96,6 @@ class TestCLISubcommands:
         assert result.returncode == 0
         assert "not yet available" in result.stdout
 
-    def test_cli_kmeans_train_blocked(self, project_root, smoke_train_csv):
-        result = self._run_cli(
-            ["train", "--config", "configs/openrouter-kmeans.yaml",
-             "--data", str(smoke_train_csv)],
-            cwd=project_root,
-        )
-        assert result.returncode == 1
-        assert "not yet available" in result.stderr.lower() or "not yet available" in result.stdout.lower()
-
     @pytest.mark.requires_openrouter_api_key
     def test_cli_collect_smoke(self, project_root, smoke_config_path, smoke_questions_path, tmp_path):
         output_csv = tmp_path / "collected.csv"

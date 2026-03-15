@@ -77,7 +77,7 @@ def _make_config(models=None) -> PoolConfig:
             ),
         ]
     return PoolConfig(
-        routing=RoutingConfig(method="kmeans", tolerance=0.20),
+        routing=RoutingConfig(method="prefill", tolerance=0.20),
         models=models,
     )
 

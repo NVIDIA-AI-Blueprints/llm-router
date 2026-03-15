@@ -7,7 +7,7 @@ description: >
   collecting training data, deploying with LiteLLM proxy, integrating routing
   into an application, configuring routing tolerance/models/checkpoints, or anything
   involving the `model-router` CLI. Also use when the user discusses cost-quality
-  tradeoffs across multiple LLMs, intelligent model selection, or prefill/KMeans
+  tradeoffs across multiple LLMs, intelligent model selection, or prefill
   routing strategies.
 ---
 
@@ -19,10 +19,9 @@ The Model Router Toolkit is an LLM routing system that learns per-query model st
 
 **Core idea:** Given a pool of LLMs with different costs and capabilities, the router predicts P(correct) for each model on each incoming question, then picks the cheapest model whose confidence is within `tolerance` of the best.
 
-**Two routing methods:**
+**Routing method:**
 
-- **Prefill routing** (primary) — Runs a small encoder (Qwen3.5-0.8B, 0.8B params) on the question, extracts hidden-state features, and scores them through a trained MLP ensemble. Best accuracy. Requires CPU or GPU.
-- **KMeans routing** — Embeds the question via API, assigns to a learned cluster, and uses Platt-calibrated per-cluster accuracy. No GPU needed. Simpler but less precise.
+- **Prefill routing** — Runs a small encoder (Qwen3.5-0.8B, 0.8B params) on the question, extracts hidden-state features, and scores them through a trained MLP ensemble. Best accuracy. Requires CPU or GPU.
 
 **Key properties:**
 - OpenAI-compatible API (`/v1/chat/completions`) — drop-in replacement
@@ -38,9 +37,6 @@ The Model Router Toolkit is an LLM routing system that learns per-query model st
 ```bash
 # Recommended (includes prefill routing with local encoder)
 pip install -e '.[prefill]'
-
-# KMeans-only (no GPU, no torch)
-pip install -e .
 
 # Development (adds pytest, ruff, mypy)
 pip install -e '.[dev,prefill]'
@@ -79,16 +75,13 @@ All commands use a single YAML pool config. Two top-level sections: `routing` an
 
 | Field | Type | Required | Method | Description |
 |-------|------|----------|--------|-------------|
-| `method` | string | Yes | both | `prefill` or `kmeans` |
-| `checkpoint` | string | Yes | both | Path to trained checkpoint (`.pt` for prefill, `.pkl` for kmeans) |
-| `tolerance` | float | No | both | Accuracy-cost tradeoff, 0.0–1.0 (default: 0.20). Lower = cheaper, higher = more accurate |
-| `encoder` | string | Yes | prefill | HuggingFace model ID (e.g. `Qwen/Qwen3.5-0.8B`) |
-| `encoder_backend` | string | No | prefill | `transformers` (local, default) or `server` (remote) |
-| `encoder_server` | string | No | prefill | URL of remote encoder server (when `encoder_backend: server`) |
-| `training_mode` | string | No | prefill | `auto` (default), `per_model`, or `single` |
-| `embed_model` | string | Yes | kmeans | Embedding model ID (e.g. `nvidia/llama-nemotron-embed-1b-v2`) |
-| `embed_mode` | string | No | kmeans | `api` (remote, default) or `local` (in-process) |
-| `embed_api_base` | string | No | kmeans | Embedding API base URL |
+| `method` | string | Yes | — | `prefill` |
+| `checkpoint` | string | Yes | — | Path to trained checkpoint (`.pt`) |
+| `tolerance` | float | No | — | Accuracy-cost tradeoff, 0.0–1.0 (default: 0.20). Lower = cheaper, higher = more accurate |
+| `encoder` | string | Yes | — | HuggingFace model ID (e.g. `Qwen/Qwen3.5-0.8B`) |
+| `encoder_backend` | string | No | — | `transformers` (local, default) or `server` (remote) |
+| `encoder_server` | string | No | — | URL of remote encoder server (when `encoder_backend: server`) |
+| `training_mode` | string | No | — | `auto` (default), `per_model`, or `single` |
 
 ### Models Section
 
@@ -133,39 +126,19 @@ models:
     system_prompt: Answer directly and concisely.
 ```
 
-### Example: KMeans Config
-
-```yaml
-routing:
-  method: kmeans
-  checkpoint: checkpoints/kmeans_c100_db.pkl
-  tolerance: 0.20
-  embed_model: nvidia/llama-nemotron-embed-1b-v2
-  embed_mode: api
-  embed_api_base: https://integrate.api.nvidia.com/v1
-
-models:
-  - name: nem-think
-    litellm_model: nvidia_nim/nvidia/nvidia/Nemotron-3-Nano-30B-A3B
-    cost_per_m_input_tokens: 0.20
-    cost_per_m_output_tokens: 0.20
-```
-
 ### Starter Configs
 
 | Config | Method | Provider | When to use |
 |--------|--------|----------|-------------|
-| `configs/prefill-qwen08b.yaml` | Prefill | OpenRouter | Default — GPU available, best accuracy |
-| `configs/cloud-only.yaml` | KMeans | NVIDIA NIM | No GPU, cloud embeddings |
+| `configs/prefill-qwen08b.yaml` | Prefill | OpenRouter | Default — best accuracy |
 | `configs/smoke-test.yaml` | Prefill | OpenRouter | Quick 2-model test |
 | `configs/local-prefill.yaml` | Prefill | Local | Air-gapped / local-only |
-| `configs/openrouter-kmeans.yaml` | KMeans | OpenRouter | OpenRouter + KMeans, no GPU |
 
 Customize by copying: `cp configs/prefill-qwen08b.yaml configs/my-config.yaml`
 
 ## Routing Methods
 
-### Prefill (primary, best accuracy)
+### Prefill Routing
 
 1. Question runs through encoder (Qwen3.5-0.8B) — single forward pass with `output_hidden_states=True`
 2. Hidden states at the optimal layer are extracted (last-token or mean-pooled, per target model)
@@ -174,13 +147,6 @@ Customize by copying: `cp configs/prefill-qwen08b.yaml configs/my-config.yaml`
 5. Cheapest model with P(correct) within `tolerance` of the best is selected
 
 CPU: ~5s per question. GPU: <100ms.
-
-### KMeans (no GPU needed)
-
-1. Question is embedded via API (e.g. `nvidia/llama-nemotron-embed-1b-v2`)
-2. KMeansRouter assigns to nearest cluster
-3. Platt calibration produces P(correct) per model
-4. Cheapest model above tolerance threshold is selected
 
 ### Tolerance
 
@@ -290,7 +256,7 @@ model-router train \
 3. **Sweep** layer, pooling mode (last-token vs mean), and PCA dimension per target model — uses 5-fold CV AUC with logistic regression
 4. **Fit transforms** — StandardScaler + PCA per target
 5. **Train SharedTrunkNet MLP ensemble** — BCEWithLogitsLoss, Adam optimizer, early stopping. Trains `n_seeds` seeds, keeps top `n_keep` by validation loss
-6. **Save** `.pt` checkpoint + `serve.yaml`
+6. **Save** `.pt` checkpoint
 
 ### Smoke Test (fast verification)
 
@@ -327,7 +293,7 @@ model-router evaluate \
 | Flag | Required | Default | Description |
 |------|----------|---------|-------------|
 | `--config` | Yes | — | Pool config YAML |
-| `--checkpoint` | Yes | — | Trained checkpoint (`.pt` or `.pkl`) |
+| `--checkpoint` | Yes | — | Trained checkpoint (`.pt`) |
 | `--data` | Yes | — | Test CSV (question, model, isCorrect) |
 | `--device` | No | auto | `cpu`, `cuda`, or `mps` |
 | `--batch-size` | No | 4 | Encoder extraction batch size |
@@ -613,7 +579,7 @@ print(result.metadata)             # routing metadata (p_max, threshold)
 | All traffic to one model | Tolerance too high or insufficient training signal | Lower `routing.tolerance` (e.g. 0.10); collect more training data |
 | AUC near 0.50 | Router can't distinguish model quality | More training data, wider PCA sweep (`--pca-dims 50,100,200,300,400`), different encoder |
 | Router accuracy < best single | Routing is actively hurting | Check training data quality; verify CSV `model` names match config `models[].name` |
-| Slow prefill on CPU | Encoder running on CPU (~5s/question) | Use `--device cuda` or `--device mps`; or switch to KMeans method |
+| Slow prefill on CPU | Encoder running on CPU (~5s/question) | Use `--device cuda` or `--device mps` |
 | `CUDA out of memory` | Encoder too large for GPU | Lower `--batch-size` to 1 or 2; or use `--device cpu` |
 | Proxy startup warnings | Model name misalignment | Ensure pool config model names match LiteLLM proxy config `model_name` entries |
 

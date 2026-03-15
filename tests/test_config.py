@@ -8,7 +8,7 @@ from model_router_toolkit.config import PoolConfig, ModelSpec, RoutingConfig, lo
 class TestPoolConfig:
     def test_from_dict(self, sample_pool_config_dict):
         config = PoolConfig.model_validate(sample_pool_config_dict)
-        assert config.routing.method == "kmeans"
+        assert config.routing.method == "prefill"
         assert config.routing.tolerance == 0.20
         assert len(config.models) == 2
         assert config.model_names == ["nem-think", "gpt-5.2"]
@@ -22,20 +22,19 @@ class TestPoolConfig:
 
     def test_defaults(self):
         config = PoolConfig.model_validate({"routing": {}, "models": []})
-        assert config.routing.method == "kmeans"
+        assert config.routing.method == "prefill"
         assert config.routing.tolerance == 0.20
-        assert config.routing.embed_mode == "api"
 
     def test_model_spec_auto_display_name(self):
         m = ModelSpec(name="test-model")
         assert m.display_name == "test-model"
 
-    def test_load_yaml_file(self, project_root):
-        config_path = project_root / "configs" / "cloud-only.yaml"
+    def test_load_prefill_yaml_file(self, project_root):
+        config_path = project_root / "configs" / "prefill-qwen08b.yaml"
         if not config_path.exists():
-            pytest.skip("cloud-only.yaml not found")
+            pytest.skip("prefill-qwen08b.yaml not found")
         config = load_config(config_path)
-        assert config.routing.method == "kmeans"
+        assert config.routing.method == "prefill"
         assert len(config.models) > 0
 
     def test_prefill_config(self):

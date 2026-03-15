@@ -1,6 +1,6 @@
 """Base routing abstraction and result types.
 
-All routing methods (KMeans, prefill) implement BaseRouter.
+All routing methods implement BaseRouter.
 Downstream code (strategy, server, CLI) only depends on this interface.
 """
 
@@ -87,7 +87,7 @@ class BaseRouter(ABC):
 
     @abstractmethod
     def load(self, checkpoint_path: str | Path) -> None:
-        """Load a trained checkpoint (pkl or pt)."""
+        """Load a trained checkpoint (.pt)."""
         ...
 
     def unload(self) -> None:

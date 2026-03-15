@@ -6,25 +6,25 @@
 
 These items are referenced in docs or configs but require net-new implementation work beyond what's in this project:
 
-- [ ] **KMeans training pipeline** (`kmeans/train.py`) — Currently raises `NotImplementedError`. Planned pipeline: embed all questions, fit KMeans (n_clusters=100), compute per-cluster per-model accuracy, fit Platt calibrators, save pkl. Blocked at CLI with a clear message.
+- [x] ~~**KMeans training pipeline** (`kmeans/train.py`)~~ — Removed. KMeans method removed from the repo entirely; prefill is the sole routing method.
 - [x] ~~**Encoder server** (`scripts/serve-encoder.py`) — Stub that exits immediately.~~ Resolved: `server/router_app.py` + `model-router serve-router` CLI. Serves routing decisions only (no LLM inference) via `POST /v1/route`. Standalone script removed in favor of CLI subcommand.
 - [ ] **LLM-as-judge** (`collect.py`, `--judge llm`) — Not implemented. Would use a frontier model to evaluate answer correctness instead of majority vote. Requires prompt engineering and model selection logic.
-- [ ] **vLLM encoder backend** — Using HF transformers for extraction. vLLM integration would reduce prefill latency from ~5s (CPU) to <100ms (GPU). Requires vLLM client implementation in `prefill/extract.py`.
-- [ ] **Multi-encoder training** — Current training uses a single encoder. Supporting multiple encoders per model (e.g., different chat templates) would require config schema extension and changes to `prefill/train.py`.
-- [ ] **Expanded 7-model default checkpoint** — Current bundled pkl covers 3-4 models. A full default pool (nem-think, nem-nothink, nem-super, gptoss-20b, gptoss-120b, qwen-122b, gpt-5.2, claude-opus) requires collecting data and training a new checkpoint.
+- [x] ~~**Multi-encoder training**~~ — Out of scope. Single encoder is sufficient for current routing needs.
+- [x] ~~**Expanded default checkpoint**~~ — Done. Shipped 9-model default checkpoint (supersedes original 7-model plan).
 - [ ] **Pydantic request validation** for `/v1/chat/completions` — Currently uses raw `request.json()`. Should add a Pydantic model for proper 422 responses on malformed input. Requires understanding of OpenAI request schema + litellm extensions.
-- [ ] **Safetensors migration** — Multiple files use `pickle.load()` and `torch.load(weights_only=False)` which can execute arbitrary code. Migrating to safetensors requires changes to the checkpoint format and all save/load paths. Security warnings have been added in the interim.
+- [x] ~~**Safetensors migration**~~ — Won't fix. Users only load self-trained or shipped checkpoints; existing security warnings are sufficient. Migration cost (sklearn object serialization, split format, 6+ load sites) not justified.
 - [ ] **Update notebooks, scripts, default checkpoints, and datasets with extended model set results** — Refresh quickstart notebooks, CLI scripts, and bundled default checkpoints/datasets to reflect results from the extended model set experiments (larger model pools, updated P(correct) calibrations, new cost tables). Ensures shipped artifacts match the latest training runs.
 - [ ] **Add SOTA benchmarks and benchmarking data/scripts** — Introduce new state-of-the-art benchmark datasets and corresponding evaluation scripts using the existing collect/train/evaluate pipeline. Covers adding benchmark question sets, reference answers, and pre-computed baselines so users can reproduce published routing accuracy numbers out of the box.
 - [ ] **Update collection function based on Max's code** — Refactor `collect.py` to align with Max's implementation in the `max/running_eval` branch of `dl-tme/llmrouter` (https://gitlab-master.nvidia.com/dl-tme/llmrouter/-/tree/max/running_eval). Port relevant patterns and improvements.
 - [ ] **Split collection function into modular data collection + encoder output generation** — Decompose the monolithic collection function in `collect.py` so that (1) data collection (running models, judging correctness) and (2) encoder output generation (prefill extraction for training) are separate, composable modules. Both should remain accessible from the collection entrypoint but independently callable.
-- [ ] **Pretrained getting-started flow (skip extraction + sweep)** — Ship bundled training data, pre-extracted prefill cache, and pre-computed sweep results so users can train a router checkpoint without running the encoder or sweep. Requires: `SweepResult` serialization to/from JSON in `sweep.py`, `--sweep-config` and `--save-sweep` CLI flags, conditional sweep skip in `train_prefill()`, bundled data artifacts in `data/`. Plan: `working/prefill-pretrained-getting-started.md`.
+- [x] ~~**Pretrained getting-started flow (skip extraction + sweep)**~~ — Done. Bundled training data, pre-extracted prefill cache, and pre-computed sweep results so users can train a router checkpoint without running the encoder or sweep.
 - [ ] **Address remaining virtual review action items** — Continue working through the open items from `working/virtual-review.md`. Key remaining work: fix question format mismatch in `collect.py` (Tier 1.4), add review result persistence in telemetry (Tier 1.6), document `/api/review` endpoint (Tier 2.3), add `serve-router` to `architecture.md` (Tier 2.4), update `schema.md` (Tier 2.6), add routing failure fallback in `strategy.py` (Tier 3.1), add `--output` flag to evaluate (Tier 3.2), create monitoring guide (Tier 3.3), and replace `print()` with structured logging (Tier 3.5). See virtual review Tiers 1–3 for full priority list.
+- [ ] **vLLM encoder backend** (P2) — Using HF transformers for extraction. vLLM integration would reduce prefill latency from ~5s (CPU) to <100ms (GPU). Requires vLLM client implementation in `prefill/extract.py`. Will add if time permits.
 
 ### Polish Items (Can Be Done Incrementally)
 
 - [ ] **Replace `print()` with `logging`** throughout `evaluate.py`, `__main__.py`, `collect.py`
-- [ ] **Add `__init__.py` exports** in `kmeans/` and `prefill/` (currently just docstrings, no `__all__` or re-exports)
+- [ ] **Add `__init__.py` exports** in `prefill/` (currently just docstrings, no `__all__` or re-exports)
 - [ ] **API reference docs** — Public Python API (`BaseRouter`, `RoutingResult`, `ModelRoutingStrategy`, `PoolConfig`) has no reference documentation
 - [ ] **Deployment / performance guide** — No docs on recommended hardware, GPU vs CPU latency, scaling, cold start times
 - [ ] **Troubleshooting / FAQ** — Common issues (encoder download hangs, OpenRouter rate limits, checkpoint compatibility)
@@ -43,7 +43,7 @@ These items are referenced in docs or configs but require net-new implementation
 - [x] Phase 10: Integration docs
 - [x] Phase 11: Prefill router inference (Qwen3.5-0.8B encoder on CPU)
 - [x] Phase 12: Prefill quickstart notebook
-- [ ] Phase 13: Expanded model pool pkl (7-model default)
+- [x] Phase 13: Expanded model pool checkpoint (9-model default)
 - [x] Phase 14: Server Playground UI
 - [x] Phase 15: Prefill training, evaluation, and collection pipeline
 
@@ -152,7 +152,6 @@ These items are referenced in docs or configs but require net-new implementation
 - SharedTrunkNet ensemble training (`trunk.py`: train_mlp with BCEWithLogitsLoss + early stopping, train_ensemble with seed selection)
 - PCA transform fitting (`transforms.py`: fit_pca_pipeline)
 - Self-contained .pt checkpoint saving (compatible with existing scorer/router for inference)
-- Serve config generation (serve.yaml)
 
 **Evaluation pipeline** (`evaluate.py`):
 - Batch prefill extraction from checkpoint transforms (deduplicates by encoder)
@@ -199,15 +198,15 @@ These items are referenced in docs or configs but require net-new implementation
 - REWRITTEN: `.cursor/skills/integrate-app/SKILL.md` (4 integration paths: OpenAI SDK, env var, LiteLLM SDK, direct Python)
 
 ## Known Gaps
-1. **KMeans training**: Stub only (train_kmeans raises NotImplementedError). Pipeline defined but not coded.
+1. ~~**KMeans training**: Stub only.~~ Removed — KMeans method removed from the repo.
 2. ~~**Prefill training**: Stub only. Use experiments/prefill-complexity-router/ directly for training.~~ Resolved in Phase 15.
-3. **Expanded pkl**: Current pkl covers 3-4 models; need 7-model pkl for full default pool.
+3. ~~**Expanded pkl**~~: Done — 9-model default checkpoint shipped.
 4. ~~**Server UI**: Placeholder HTML; needs the full chat UI from litellm-kmeans-router.~~ Resolved in Phase 14.
 5. ~~**LLM-as-judge**: collect.py only implements majority vote; llm/reference stubs.~~ Reference judging added in Phase 15. LLM-as-judge still stub.
 6. ~~**Integration tests**: Not yet written (tests/integration/ is empty).~~ Resolved: 126 total tests (66 original + 60 new).
 7. **vLLM encoder backend**: Planned but not implemented (using HF transformers).
 8. **Prefill latency**: 5s per question on CPU is fine for evaluation but slow for production. GPU or vLLM would reduce to <100ms.
-9. **Multi-encoder training**: Current training supports single encoder. The sweep modes (per_model, single, auto) are functionally equivalent with one encoder. Multi-encoder would require config schema extension.
+9. ~~**Multi-encoder training**~~: Out of scope.
 
 ### 2026-03-08 -- Comprehensive Test Coverage
 

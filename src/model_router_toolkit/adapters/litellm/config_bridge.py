@@ -33,7 +33,7 @@ def generate_litellm_config(
     model_list = []
     for m in config.models:
         litellm_model = m.litellm_model
-        api_base = m.api_base or getattr(config.routing, "embed_api_base", "")
+        api_base = m.api_base
         env_var = _api_key_env_var(litellm_model, api_base)
 
         params: dict[str, Any] = {"model": litellm_model}

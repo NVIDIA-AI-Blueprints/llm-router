@@ -142,40 +142,6 @@ def _build_checkpoint(
     }
 
 
-def _write_serve_config(
-    config: PoolConfig,
-    transforms: dict[str, dict[str, Any]],
-    output_dir: Path,
-) -> Path:
-    """Write serve.yaml for inference deployment."""
-    import yaml
-
-    target_mapping = []
-    for mname, t in transforms.items():
-        entry: dict[str, Any] = {
-            "name": mname,
-            "encoder": t.get("encoder"),
-            "layer": t.get("layer"),
-            "mode": t.get("mode"),
-        }
-        tpl = t.get("chat_template_kwargs", {})
-        if tpl:
-            entry["chat_template_kwargs"] = dict(tpl)
-        target_mapping.append(entry)
-
-    cfg = {
-        "server": {"host": "0.0.0.0", "port": 8421, "hf_cache": None},
-        "encoders": [{"hf_path": config.routing.encoder}],
-        "targets": target_mapping,
-    }
-
-    out = output_dir / "serve.yaml"
-    with open(out, "w") as f:
-        yaml.dump(cfg, f, default_flow_style=False, sort_keys=False)
-    logger.info("  Wrote serve config: %s", out)
-    return out
-
-
 # ---------------------------------------------------------------------------
 # Main training entry point
 # ---------------------------------------------------------------------------
@@ -194,6 +160,7 @@ def train_prefill(
     prefill_cache: str | Path | None = None,
     hf_cache_dir: str | None = None,
     models: list[str] | None = None,
+    features_from: str | Path | None = None,
     pca_dims: list[int] | None = None,
     epochs: int = TRUNK_EPOCHS,
     patience: int = TRUNK_PATIENCE,
@@ -260,67 +227,84 @@ def train_prefill(
         if stats:
             cost_table[m.name] = stats
 
-    # ── 3. Extract prefill ────────────────────────────────────────────
-    print()
-    if prefill_cache:
-        from model_router_toolkit.prefill.extract import PrefillResult
-
-        print(f"  [2/6] Loading prefill cache: {prefill_cache}")
-        prefill = PrefillResult.load(prefill_cache)
+    # ── 3–5. Extract, sweep, transform (or load pre-transformed) ─────
+    if features_from:
+        print(f"  [2/6] Loading pre-transformed features: {features_from}")
+        feat_data = torch.load(features_from, map_location="cpu", weights_only=False)
+        shared_feats = feat_data["features"]
+        if isinstance(shared_feats, torch.Tensor):
+            shared_feats = shared_feats.numpy()
+        transforms = feat_data["transforms"]
+        for mname in model_names:
+            t = transforms[mname]
+            print(
+                f"         {mname}: L{t['layer']} {t['mode']} PCA{t['pca_dim']}",
+            )
+        print("  [3/6] Sweep skipped (pre-fitted transforms)")
+        print("  [4/6] Transforms loaded")
     else:
-        print("  [2/6] Extracting prefill features...")
-        prefill = run_extraction(
-            encoder, questions_raw,
-            chat_template_kwargs=encoder_tpl,
-            device=dev, batch_size=batch_size,
-            cache_dir=prefill_dir, hf_cache_dir=hf_cache_dir,
-        )
+        print()
+        if prefill_cache:
+            from model_router_toolkit.prefill.extract import PrefillResult
 
-    # ── 4. Sweep per model ────────────────────────────────────────────
-    print(flush=True)
-    print("  [3/6] Sweeping layer/mode/PCA per target...", flush=True)
-    sweep_results: dict[str, SweepResult] = {}
-    for mi, mname in enumerate(model_names):
-        sweep_results[mname] = sweep_model(
-            prefill, Y[:, mi], train_mask,
-            pca_dims=pca_dims,
-            target_name=mname,
-        )
+            print(f"  [2/6] Loading prefill cache: {prefill_cache}")
+            prefill = PrefillResult.load(prefill_cache)
+        else:
+            print("  [2/6] Extracting prefill features...")
+            prefill = run_extraction(
+                encoder, questions_raw,
+                chat_template_kwargs=encoder_tpl,
+                device=dev, batch_size=batch_size,
+                cache_dir=prefill_dir, hf_cache_dir=hf_cache_dir,
+            )
 
-    # ── 5. Fit transforms & build features ────────────────────────────
-    print()
-    print("  [4/6] Fitting transforms...")
-    transforms: dict[str, dict[str, Any]] = {}
-    feat_per_model: dict[str, np.ndarray] = {}
+        print(flush=True)
+        print("  [3/6] Sweeping layer/mode/PCA per target...", flush=True)
+        sweep_results: dict[str, SweepResult] = {}
+        for mi, mname in enumerate(model_names):
+            sweep_results[mname] = sweep_model(
+                prefill, Y[:, mi], train_mask,
+                pca_dims=pca_dims,
+                target_name=mname,
+            )
 
-    for mname in model_names:
-        sr = sweep_results[mname]
-        raw = raw_hidden(prefill, sr.layer, sr.mode)
-        scaler, pca, feats = fit_pca_pipeline(raw, train_mask, sr.pca_dim)
-        transforms[mname] = {
-            "scaler": scaler,
-            "pca": pca,
-            "layer": sr.layer,
-            "mode": sr.mode,
-            "pca_dim": sr.pca_dim,
-            "encoder": encoder,
-            "chat_template_kwargs": encoder_tpl,
-        }
-        feat_per_model[mname] = feats
-        print(
-            f"         {mname}: L{sr.layer} {sr.mode} PCA{sr.pca_dim} "
-            f"(AUC={sr.cv_auc:.4f})",
-        )
+        print()
+        print("  [4/6] Fitting transforms...")
+        transforms: dict[str, dict[str, Any]] = {}
+        feat_per_model: dict[str, np.ndarray] = {}
+
+        for mname in model_names:
+            sr = sweep_results[mname]
+            raw = raw_hidden(prefill, sr.layer, sr.mode)
+            scaler, pca, feats = fit_pca_pipeline(raw, train_mask, sr.pca_dim)
+            transforms[mname] = {
+                "scaler": scaler,
+                "pca": pca,
+                "layer": sr.layer,
+                "mode": sr.mode,
+                "pca_dim": sr.pca_dim,
+                "encoder": encoder,
+                "chat_template_kwargs": encoder_tpl,
+            }
+            feat_per_model[mname] = feats
+            print(
+                f"         {mname}: L{sr.layer} {sr.mode} PCA{sr.pca_dim} "
+                f"(AUC={sr.cv_auc:.4f})",
+            )
+
+        shared_feats = np.hstack([feat_per_model[m] for m in model_names])
 
     # ── 6. Train shared trunk ─────────────────────────────────────────
     print()
     print("  [5/6] Training shared trunk ensemble...")
-    shared_feats = np.hstack([feat_per_model[m] for m in model_names])
     d_shared = shared_feats.shape[1]
-    print(
-        f"         Shared input dim: {d_shared} "
-        f"({' + '.join(str(feat_per_model[m].shape[1]) for m in model_names)})",
-    )
+    if features_from:
+        print(f"         Shared input dim: {d_shared}")
+    else:
+        print(
+            f"         Shared input dim: {d_shared} "
+            f"({' + '.join(str(feat_per_model[m].shape[1]) for m in model_names)})",
+        )
 
     trunk_hidden = DEFAULT_TRUNK_HIDDEN
     trunk_nets = train_ensemble(
@@ -365,8 +349,6 @@ def train_prefill(
     torch.save(ckpt, ckpt_path)
     sz_mb = ckpt_path.stat().st_size / 1e6
     print(f"         Checkpoint: {ckpt_path} ({sz_mb:.1f} MB)")
-
-    _write_serve_config(config, transforms, output_dir)
 
     print()
     print("=" * 60)

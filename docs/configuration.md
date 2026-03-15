@@ -8,7 +8,7 @@ The core package has minimal dependencies. Install extras based on your needs:
 
 | Extra | Installs | Enables |
 |-------|----------|---------|
-| *(none)* | pydantic, numpy, scikit-learn, requests, PyYAML | Core routing, KMeans, config |
+| *(none)* | pydantic, numpy, scikit-learn, requests, PyYAML | Core routing, config |
 | `[server]` | FastAPI, uvicorn | Router-only HTTP sidecar (`adapters/http/`) |
 | `[litellm]` | litellm, FastAPI, uvicorn | LiteLLM strategy, standalone server (`adapters/litellm/`) |
 | `[proxy]` | litellm[proxy], packaging | LiteLLM Proxy injection (`model-router proxy`) |
@@ -26,16 +26,10 @@ pip install -e '.[all]'                  # Development
 
 ```yaml
 routing:
-  method: prefill                        # str — "prefill" or "kmeans"
+  method: prefill                        # str — "prefill"
   checkpoint: checkpoints/router.pt      # str — path to trained checkpoint
   tolerance: 0.20                        # float [0.0–1.0] — accuracy-cost tradeoff
 
-  # KMeans-specific
-  embed_model: nvidia/llama-nemotron-embed-1b-v2  # str — embedding model name
-  embed_mode: api                        # str — "api" or "local"
-  embed_api_base: https://integrate.api.nvidia.com/v1  # str — embedding API base URL
-
-  # Prefill-specific
   encoder: Qwen/Qwen3.5-0.8B            # str — HuggingFace encoder model
   encoder_server: ""                     # str — remote encoder URL (empty = local)
   training_mode: auto                    # str — "auto", "cpu", "cuda", "mps"
@@ -58,12 +52,9 @@ models:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `method` | `str` | `"kmeans"` | Routing algorithm: `"prefill"` or `"kmeans"` |
-| `checkpoint` | `str` | `""` | Path to trained checkpoint (`.pt` for prefill, `.pkl` for kmeans) |
+| `method` | `str` | `"prefill"` | Routing algorithm: `"prefill"` |
+| `checkpoint` | `str` | `""` | Path to trained checkpoint (`.pt`) |
 | `tolerance` | `float` | `0.20` | Accuracy-cost tradeoff. `0.0` = always pick best model. `1.0` = always pick cheapest. |
-| `embed_model` | `str` | `"nvidia/llama-nemotron-embed-1b-v2"` | Embedding model for KMeans routing |
-| `embed_mode` | `str` | `"api"` | `"api"` (remote) or `"local"` (in-process) embedding |
-| `embed_api_base` | `str` | `"https://integrate.api.nvidia.com/v1"` | API base for remote embeddings |
 | `encoder` | `str` | `""` | HuggingFace model ID for prefill encoder |
 | `encoder_server` | `str` | `""` | Remote encoder URL. Empty = load locally. |
 | `training_mode` | `str` | `"auto"` | Device for training: `"auto"`, `"cpu"`, `"cuda"`, `"mps"` |
@@ -115,8 +106,7 @@ The selection algorithm:
 
 | Config | Method | Provider | When to use |
 |--------|--------|----------|-------------|
-| `configs/prefill-qwen08b.yaml` | Prefill | OpenRouter | Default — GPU available, best accuracy |
-| `configs/cloud-only.yaml` | KMeans | NVIDIA NIM | No GPU, cloud embeddings |
+| `configs/prefill-qwen08b.yaml` | Prefill | OpenRouter | Default — best accuracy |
 | `configs/smoke-test.yaml` | Prefill | OpenRouter | Quick 2-model test |
 | `configs/local-prefill.yaml` | Prefill | Local | Air-gapped / local-only |
 
@@ -150,32 +140,6 @@ models:
     litellm_model: openrouter/nvidia/nemotron-3-nano-30b-a3b
     cost_per_m_input_tokens: 0.04
     cost_per_m_output_tokens: 0.16
-```
-
-## Annotated Example: KMeans Config
-
-```yaml
-routing:
-  method: kmeans
-  checkpoint: checkpoints/kmeans_c100_db.pkl
-
-  tolerance: 0.15
-
-  # API-based embedding — no local GPU needed
-  embed_model: nvidia/llama-nemotron-embed-1b-v2
-  embed_mode: api
-  embed_api_base: https://integrate.api.nvidia.com/v1
-
-models:
-  - name: strong
-    litellm_model: nvidia_nim/meta/llama-3.1-70b-instruct
-    cost_per_m_input_tokens: 0.35
-    cost_per_m_output_tokens: 0.40
-
-  - name: cheap
-    litellm_model: nvidia_nim/meta/llama-3.1-8b-instruct
-    cost_per_m_input_tokens: 0.10
-    cost_per_m_output_tokens: 0.10
 ```
 
 ## Annotated Example: Multi-Provider Pool

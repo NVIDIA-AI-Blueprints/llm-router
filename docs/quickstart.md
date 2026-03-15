@@ -12,7 +12,7 @@ Pick extras based on what you need:
 
 | Extra | What it adds | When you need it |
 |-------|-------------|-----------------|
-| *(none)* | Core routing engine | Library use only, KMeans routing |
+| *(none)* | Core routing engine | Library use only |
 | `[server]` | FastAPI, uvicorn | Router-only HTTP sidecar |
 | `[litellm]` | litellm, FastAPI, uvicorn | Standalone server, LiteLLM SDK integration |
 | `[proxy]` | litellm[proxy] | LiteLLM Proxy injection |

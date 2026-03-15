@@ -52,11 +52,9 @@ def pytest_collection_modifyitems(config, items):
 def sample_pool_config_dict():
     return {
         "routing": {
-            "method": "kmeans",
-            "checkpoint": "checkpoints/kmeans_c100_db.pkl",
+            "method": "prefill",
+            "checkpoint": "checkpoints/prefill_router.pt",
             "tolerance": 0.20,
-            "embed_model": "nvidia/llama-nemotron-embed-1b-v2",
-            "embed_mode": "api",
         },
         "models": [
             {
@@ -86,14 +84,6 @@ def tmp_dir():
 @pytest.fixture
 def project_root():
     return Path(__file__).parent.parent
-
-
-@pytest.fixture
-def pkl_path(project_root):
-    p = project_root / "checkpoints" / "kmeans_c100_db.pkl"
-    if not p.exists():
-        pytest.skip("kmeans_c100_db.pkl not found")
-    return p
 
 
 @pytest.fixture

@@ -29,16 +29,10 @@ class ModelSpec(BaseModel):
 
 
 class RoutingConfig(BaseModel):
-    method: str = "kmeans"
+    method: str = "prefill"
     checkpoint: str = ""
     tolerance: float = 0.20
 
-    # KMeans-specific
-    embed_model: str = "nvidia/llama-nemotron-embed-1b-v2"
-    embed_mode: str = "api"
-    embed_api_base: str = "https://integrate.api.nvidia.com/v1"
-
-    # Prefill-specific
     encoder: str = ""
     encoder_server: str = ""
     training_mode: str = "auto"
@@ -74,15 +68,7 @@ def build_router_from_config(config: PoolConfig):
 
     method = config.routing.method.lower()
 
-    if method == "kmeans":
-        from model_router_toolkit.kmeans.router import KMeansRouter
-
-        router = KMeansRouter(config=config)
-        if config.routing.checkpoint:
-            router.load(config.routing.checkpoint)
-        return router
-
-    elif method == "prefill":
+    if method == "prefill":
         from model_router_toolkit.prefill.router import PrefillRouter
 
         router = PrefillRouter(config=config)
@@ -91,4 +77,4 @@ def build_router_from_config(config: PoolConfig):
         return router
 
     else:
-        raise ValueError(f"Unknown routing method: {method!r}. Use 'kmeans' or 'prefill'.")
+        raise ValueError(f"Unknown routing method: {method!r}. Supported: 'prefill'.")

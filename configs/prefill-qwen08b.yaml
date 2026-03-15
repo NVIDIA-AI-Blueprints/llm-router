@@ -1,7 +1,7 @@
 # Prefill routing with Qwen3.5-0.8B encoder (default config).
 # Uses OpenRouter for model inference. Set OPENROUTER_API_KEY before serving.
 routing:
-  method: prefill                            # prefill (primary) or kmeans
+  method: prefill
   checkpoint: checkpoints/prefill_qwen08b.pt # trained router checkpoint
   tolerance: 0.20                            # accuracy-cost tradeoff (0=cheapest, 1=best)
   encoder: Qwen/Qwen3.5-0.8B                # HF model for prefill feature extraction

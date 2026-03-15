@@ -1,0 +1,54 @@
+# Prefill routing with Qwen3.5-0.8B encoder — 9-model parquet pool.
+# Smaller encoder for faster inference. Same model pool as v1-9models.yaml.
+routing:
+  method: prefill
+  checkpoint: checkpoints/prefill_router.pt
+  tolerance: 0.20
+  encoder: Qwen/Qwen3.5-0.8B
+  encoder_backend: transformers
+
+models:
+  - name: nemotron-3-nano-reasoning
+    display_name: Nemotron 3 Nano (Reasoning)
+    cost_per_m_input_tokens: 0.050
+    cost_per_m_output_tokens: 0.200
+
+  - name: gpt-oss-20b-high
+    display_name: GPT-OSS 20B High
+    cost_per_m_input_tokens: 0.052
+    cost_per_m_output_tokens: 0.245
+
+  - name: nemotron-3-super
+    display_name: Nemotron 3 Super
+    cost_per_m_input_tokens: 0.100
+    cost_per_m_output_tokens: 0.400
+
+  - name: gpt-oss-120b-high
+    display_name: GPT-OSS 120B High
+    cost_per_m_input_tokens: 0.113
+    cost_per_m_output_tokens: 0.431
+
+  - name: qwen-3-5-35b
+    display_name: Qwen 3.5 35B
+    cost_per_m_input_tokens: 0.1625
+    cost_per_m_output_tokens: 1.300
+
+  - name: qwen-3-5-122b
+    display_name: Qwen 3.5 122B
+    cost_per_m_input_tokens: 0.260
+    cost_per_m_output_tokens: 2.080
+
+  - name: gpt-5-2-high
+    display_name: GPT-5.2 High
+    cost_per_m_input_tokens: 0.844
+    cost_per_m_output_tokens: 14.000
+
+  - name: gpt-5-4-high
+    display_name: GPT-5.4 High
+    cost_per_m_input_tokens: 2.500
+    cost_per_m_output_tokens: 15.000
+
+  - name: claude-opus-4-6-high
+    display_name: Claude Opus 4.6 High
+    cost_per_m_input_tokens: 2.770
+    cost_per_m_output_tokens: 25.780

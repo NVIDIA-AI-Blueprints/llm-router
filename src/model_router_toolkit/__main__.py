@@ -40,6 +40,8 @@ def _cmd_train(args):
         kwargs["pca_dims"] = [int(x) for x in args.pca_dims.split(",")]
     if args.models is not None:
         kwargs["models"] = [m.strip() for m in args.models.split(",")]
+    if args.features_from is not None:
+        kwargs["features_from"] = args.features_from
 
     run_train(args.config, args.data, args.output_dir, **kwargs)
 
@@ -58,6 +60,8 @@ def _cmd_evaluate(args):
         kwargs["prefill_cache"] = args.prefill_cache
     if args.models is not None:
         kwargs["models"] = [m.strip() for m in args.models.split(",")]
+    if args.features_from is not None:
+        kwargs["features_from"] = args.features_from
 
     run_evaluate(args.config, args.checkpoint, args.data, **kwargs)
 
@@ -148,19 +152,21 @@ def main():
     train_p.add_argument("--patience", type=int, default=None, help="Early stopping patience")
     train_p.add_argument("--pca-dims", default=None, help="PCA dims to sweep, comma-separated (e.g. 50,100,200)")
     train_p.add_argument("--models", default=None, help="Comma-separated model subset to train on (default: all in config)")
+    train_p.add_argument("--features-from", default=None, help="Pre-transformed features .pt file (skips extraction + sweep)")
     train_p.set_defaults(func=_cmd_train)
 
     eval_p = subparsers.add_parser(
         "evaluate", help="Evaluate a trained router checkpoint",
     )
     eval_p.add_argument("--config", required=True, help="Pool config YAML")
-    eval_p.add_argument("--checkpoint", required=True, help="Trained checkpoint (.pt or .pkl)")
+    eval_p.add_argument("--checkpoint", required=True, help="Trained checkpoint (.pt)")
     eval_p.add_argument("--data", required=True, help="Test CSV (question, model, isCorrect)")
     eval_p.add_argument("--device", default=None, help="Device: cpu, cuda, mps")
     eval_p.add_argument("--batch-size", type=int, default=None, help="Extraction batch size")
     eval_p.add_argument("--prefill-dir", default=None, help="Cache dir for prefill features")
     eval_p.add_argument("--prefill-cache", default=None, help="Pre-extracted PrefillResult .pt file (skips extraction)")
     eval_p.add_argument("--models", default=None, help="Comma-separated model subset to evaluate (default: all)")
+    eval_p.add_argument("--features-from", default=None, help="Pre-transformed features .pt file (skips extraction + transforms)")
     eval_p.set_defaults(func=_cmd_evaluate)
 
     collect_p = subparsers.add_parser(
@@ -207,7 +213,7 @@ def main():
     sc_p.set_defaults(func=lambda _: print(
         "serve-config is not yet available.\n"
         "Copy and edit one of the example configs in configs/.\n"
-        "See configs/prefill-qwen08b.yaml (prefill) or configs/cloud-only.yaml (kmeans)."
+        "See configs/prefill-qwen08b.yaml for an example."
     ))
 
     args = parser.parse_args()

@@ -7,30 +7,6 @@ from model_router_toolkit.router import CostEstimate, RoutingResult
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-@pytest.fixture
-def mock_kmeans_router(pkl_path):
-    from model_router_toolkit.kmeans.router import KMeansRouter
-
-    router = KMeansRouter()
-    router.load(pkl_path)
-
-    class MockEmbed:
-        def embed(self, text):
-            np.random.seed(hash(text) % 2**31)
-            return np.random.randn(2048).astype(np.float32)
-
-    router.set_embed_client(MockEmbed())
-    router.set_cost_table({
-        m: {"cost": i * 0.1, "median_output_tokens": 500}
-        for i, m in enumerate(router.model_names)
-    })
-    return router
-
-
-# ---------------------------------------------------------------------------
 # BaseRouter / PrefillRouter subset tests
 # ---------------------------------------------------------------------------
 
@@ -99,32 +75,6 @@ class TestPrefillRouterSubset:
         single = [config.model_names[0]]
         result = router.route("Explain quantum entanglement", models=single)
         assert result.selected_model == single[0]
-
-
-# ---------------------------------------------------------------------------
-# KMeansRouter subset tests
-# ---------------------------------------------------------------------------
-
-class TestKMeansRouterSubset:
-    def test_route_no_filter(self, mock_kmeans_router):
-        result = mock_kmeans_router.route("What is gravity?")
-        assert result.selected_model in mock_kmeans_router.model_names
-
-    def test_route_with_subset(self, mock_kmeans_router):
-        pool = mock_kmeans_router.model_names
-        subset = pool[:2]
-        result = mock_kmeans_router.route("What is gravity?", models=subset)
-        assert result.selected_model in subset
-        assert len(result.model_names) == len(pool)
-
-    def test_route_single_model(self, mock_kmeans_router):
-        single = [mock_kmeans_router.model_names[-1]]
-        result = mock_kmeans_router.route("test", models=single)
-        assert result.selected_model == single[0]
-
-    def test_route_unknown_model_raises(self, mock_kmeans_router):
-        with pytest.raises(ValueError, match="not in pool"):
-            mock_kmeans_router.route("test", models=["fake-model-xyz"])
 
 
 # ---------------------------------------------------------------------------
