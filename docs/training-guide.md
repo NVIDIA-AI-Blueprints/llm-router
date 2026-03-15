@@ -113,7 +113,8 @@ The pipeline has 6 steps:
 | `--device` | auto | `cpu`, `cuda`, or `mps` |
 | `--n-seeds` | 10 | Number of ensemble seeds to train |
 | `--n-keep` | 5 | Number of best seeds to keep |
-| `--prefill-dir` | none | Directory to cache extracted prefill features |
+| `--prefill-dir` | `cache/` | Directory to cache extracted prefill features |
+| `--no-cache` | off | Disable automatic prefill caching |
 | `--pca-dims` | 50,100,150,200,300 | PCA dimensions to sweep (comma-separated) |
 | `--epochs` | 150 | Maximum MLP training epochs |
 | `--patience` | 15 | Early stopping patience |
@@ -121,27 +122,37 @@ The pipeline has 6 steps:
 
 ### Caching Prefill Features
 
-Extraction is the slowest step (~5s/question on CPU). Use `--prefill-dir` to cache features:
+Extraction is the slowest step (~5s/question on CPU). Caching is **enabled by default** — extracted features are saved to `cache/` and reused on subsequent runs with the same encoder and questions.
+
+To use a different cache directory:
 
 ```bash
 model-router train \
   --config configs/prefill-qwen08b.yaml \
   --data data/train.csv \
   --output-dir checkpoints/ \
-  --prefill-dir cache/
+  --prefill-dir my-cache/
 ```
 
-Subsequent runs with the same encoder and questions skip extraction entirely.
+To disable caching entirely:
 
-### Quick Smoke Test
+```bash
+model-router train \
+  --config configs/prefill-qwen08b.yaml \
+  --data data/train.csv \
+  --output-dir checkpoints/ \
+  --no-cache
+```
+
+### Quick Verification Run
 
 Verify the pipeline works before running on full data:
 
 ```bash
 model-router train \
-  --config configs/smoke-test.yaml \
-  --data data/smoke-train.csv \
-  --output-dir checkpoints/smoke/ \
+  --config configs/v1-9models-qwen08b.yaml \
+  --data data/train_v1.csv \
+  --output-dir checkpoints/ \
   --n-seeds 2 --n-keep 1 --device cpu \
   --epochs 5 --patience 3 --pca-dims 10,20
 ```

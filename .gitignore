@@ -21,8 +21,6 @@ router_telemetry.db
 .venv/
 venv/
 
-checkpoints/smoke*/
-checkpoints/final_smoke/
 checkpoints/*.pt
 
 data/*.csv
@@ -36,3 +34,4 @@ logs/
 .DS_Store
 
 working/assets-from-research/
+working/v1-9models-pool/

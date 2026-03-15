@@ -131,7 +131,7 @@ models:
 | Config | Method | Provider | When to use |
 |--------|--------|----------|-------------|
 | `configs/prefill-qwen08b.yaml` | Prefill | OpenRouter | Default — best accuracy |
-| `configs/smoke-test.yaml` | Prefill | OpenRouter | Quick 2-model test |
+| `configs/v1-9models-qwen08b.yaml` | Prefill | OpenRouter | Full 9-model v1 pool |
 | `configs/local-prefill.yaml` | Prefill | Local | Air-gapped / local-only |
 
 Customize by copying: `cp configs/prefill-qwen08b.yaml configs/my-config.yaml`
@@ -258,13 +258,13 @@ model-router train \
 5. **Train SharedTrunkNet MLP ensemble** — BCEWithLogitsLoss, Adam optimizer, early stopping. Trains `n_seeds` seeds, keeps top `n_keep` by validation loss
 6. **Save** `.pt` checkpoint
 
-### Smoke Test (fast verification)
+### Quick Verification Run
 
 ```bash
 model-router train \
-  --config configs/smoke-test.yaml \
-  --data data/smoke-train.csv \
-  --output-dir checkpoints/smoke/ \
+  --config configs/v1-9models-qwen08b.yaml \
+  --data data/train_v1.csv \
+  --output-dir checkpoints/ \
   --n-seeds 2 --n-keep 1 --device cpu \
   --epochs 5 --patience 3 --pca-dims 10,20
 ```

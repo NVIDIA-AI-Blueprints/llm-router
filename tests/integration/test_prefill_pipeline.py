@@ -1,7 +1,7 @@
 """Integration tests for the full prefill pipeline: extraction, scoring, routing.
 
 Tests marked 'slow' require the Qwen/Qwen3.5-0.8B encoder model (~1.6GB)
-and a smoke checkpoint. Run with: pytest --run-slow
+and a trained checkpoint. Run with: pytest --run-slow
 """
 
 import time
@@ -111,12 +111,12 @@ class TestExtractorWithRealEncoder:
 
 @pytest.mark.slow
 class TestScorerWithRealCheckpoint:
-    """Tests requiring encoder + smoke checkpoint."""
+    """Tests requiring encoder + trained checkpoint."""
 
-    def test_scorer_score_real_checkpoint(self, smoke_ckpt_path):
+    def test_scorer_score_real_checkpoint(self, v1_ckpt_path):
         from model_router_toolkit.prefill.scorer import PrefillScorer
 
-        scorer = PrefillScorer(smoke_ckpt_path)
+        scorer = PrefillScorer(v1_ckpt_path)
         scores = scorer.score("What is the capital of France?")
         assert len(scores.model_names) > 0
         assert len(scores.confidences) == len(scores.model_names)
@@ -125,11 +125,11 @@ class TestScorerWithRealCheckpoint:
         assert len(scores.costs) == len(scores.model_names)
         scorer.unload()
 
-    def test_prefill_router_route_real(self, smoke_ckpt_path):
+    def test_prefill_router_route_real(self, v1_ckpt_path):
         from model_router_toolkit.prefill.router import PrefillRouter
 
         router = PrefillRouter()
-        router.load(smoke_ckpt_path)
+        router.load(v1_ckpt_path)
         result = router.route("Explain quantum entanglement", tolerance=0.20)
         assert result.selected_model in result.model_names
         assert len(result.confidences) == len(result.model_names)
@@ -138,11 +138,11 @@ class TestScorerWithRealCheckpoint:
         assert "p_max" in result.metadata
         router.unload()
 
-    def test_prefill_router_unload_frees_memory(self, smoke_ckpt_path):
+    def test_prefill_router_unload_frees_memory(self, v1_ckpt_path):
         from model_router_toolkit.prefill.router import PrefillRouter
 
         router = PrefillRouter()
-        router.load(smoke_ckpt_path)
+        router.load(v1_ckpt_path)
         router.route("test", tolerance=0.5)
         router.unload()
         assert router._scorer is None

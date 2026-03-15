@@ -1,7 +1,7 @@
 """Integration tests for server factory, review endpoint, and CLI subcommands.
 
 Server tests require encoder model + checkpoint + API key.
-CLI tests exercise real subcommands with smoke data.
+CLI tests exercise real subcommands with v1 data.
 """
 
 import subprocess
@@ -15,21 +15,21 @@ class TestCreateAppReal:
     """Tests using create_app with a real config, checkpoint, and API key."""
 
     @pytest.mark.requires_openrouter_api_key
-    def test_create_app_real_config(self, smoke_config_path):
+    def test_create_app_real_config(self, v1_config_path):
         from model_router_toolkit.adapters.litellm.app import create_app
 
-        app = create_app(str(smoke_config_path))
+        app = create_app(str(v1_config_path))
         routes = [r.path for r in app.routes]
         assert "/health" in routes
         assert "/v1/chat/completions" in routes or any("/chat/completions" in r for r in routes)
 
     @pytest.mark.requires_openrouter_api_key
-    def test_health_endpoint_real_app(self, smoke_config_path):
+    def test_health_endpoint_real_app(self, v1_config_path):
         from fastapi.testclient import TestClient
 
         from model_router_toolkit.adapters.litellm.app import create_app
 
-        app = create_app(str(smoke_config_path))
+        app = create_app(str(v1_config_path))
         client = TestClient(app)
         resp = client.get("/health")
         assert resp.status_code == 200
@@ -38,12 +38,12 @@ class TestCreateAppReal:
         assert len(data["models"]) > 0
 
     @pytest.mark.requires_openrouter_api_key
-    def test_completions_real_api(self, smoke_config_path):
+    def test_completions_real_api(self, v1_config_path):
         from fastapi.testclient import TestClient
 
         from model_router_toolkit.adapters.litellm.app import create_app
 
-        app = create_app(str(smoke_config_path))
+        app = create_app(str(v1_config_path))
         client = TestClient(app)
         resp = client.post(
             "/v1/chat/completions",
@@ -60,19 +60,19 @@ class TestCreateAppReal:
         assert "content" in msg, f"Response message missing 'content': {msg}"
 
     @pytest.mark.requires_openrouter_api_key
-    def test_review_endpoint_judges_answer(self, smoke_config_path):
+    def test_review_endpoint_judges_answer(self, v1_config_path):
         from fastapi.testclient import TestClient
 
         from model_router_toolkit.adapters.litellm.app import create_app
 
-        app = create_app(str(smoke_config_path))
+        app = create_app(str(v1_config_path))
         client = TestClient(app)
         resp = client.post(
             "/api/review",
             json={
                 "question": "What is the capital of France?",
                 "answer": "London",
-                "selected_model": "nem-think",
+                "selected_model": "nemotron-3-nano-reasoning",
             },
         )
         assert resp.status_code == 200
@@ -97,16 +97,16 @@ class TestCLISubcommands:
         assert "not yet available" in result.stdout
 
     @pytest.mark.requires_openrouter_api_key
-    def test_cli_collect_smoke(self, project_root, smoke_config_path, smoke_questions_path, tmp_path):
+    def test_cli_collect_v1(self, project_root, v1_config_path, v1_questions, tmp_path):
         output_csv = tmp_path / "collected.csv"
         questions_3 = tmp_path / "q3.txt"
-        with open(smoke_questions_path) as f:
+        with open(v1_questions) as f:
             lines = [l for l in f if l.strip()][:2]
         questions_3.write_text("\n".join(lines))
 
         result = self._run_cli(
             ["collect",
-             "--config", str(smoke_config_path),
+             "--config", str(v1_config_path),
              "--questions", str(questions_3),
              "--output", str(output_csv),
              "--judge", "vote"],
@@ -115,12 +115,12 @@ class TestCLISubcommands:
         assert result.returncode == 0, f"collect failed: {result.stderr}"
         assert output_csv.exists()
 
-    def test_cli_evaluate_smoke(self, project_root, smoke_config_path, smoke_ckpt_path, smoke_test_csv):
+    def test_cli_evaluate_v1(self, project_root, v1_config_path, v1_ckpt_path, v1_test_csv_subset):
         result = self._run_cli(
             ["evaluate",
-             "--config", str(smoke_config_path),
-             "--checkpoint", str(smoke_ckpt_path),
-             "--data", str(smoke_test_csv),
+             "--config", str(v1_config_path),
+             "--checkpoint", str(v1_ckpt_path),
+             "--data", str(v1_test_csv_subset),
              "--device", "cpu"],
             cwd=project_root, timeout=600,
         )

@@ -19,15 +19,15 @@
 # Common inputs:
 #   data/train_v1.csv                Training labels (9 models)
 #   data/test_v1.csv                 Test labels (9 models)
-#   configs/v1-9models.yaml          Pool config
+#   configs/v1-9models-qwen35b.yaml   Pool config
 #
 # Output files:
-#   checkpoints/prefill_router.pt    Trained routing checkpoint
+#   checkpoints/prefill_router_qwen35b.pt   Trained routing checkpoint
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-CONFIG=configs/v1-9models.yaml
+CONFIG=configs/v1-9models-qwen35b.yaml
 TRAIN_CSV=data/train_v1.csv
 TEST_CSV=data/test_v1.csv
 OUTPUT_DIR=checkpoints
@@ -58,12 +58,13 @@ if [ "$LEAN" = true ]; then
         --features-from "$TRAIN_FEAT" \
         --output-dir "$OUTPUT_DIR" \
         --device cpu
+    mv "$OUTPUT_DIR/prefill_router.pt" "$OUTPUT_DIR/prefill_router_qwen35b.pt"
 
     echo ""
     echo "=== Evaluating ==="
     python -m model_router_toolkit evaluate \
         --config "$CONFIG" \
-        --checkpoint "$OUTPUT_DIR/prefill_router.pt" \
+        --checkpoint "$OUTPUT_DIR/prefill_router_qwen35b.pt" \
         --data "$TEST_CSV" \
         --prefill-cache "$TEST_FEAT" \
         --device cpu
@@ -88,12 +89,13 @@ else
         --prefill-cache "$TRAIN_CACHE" \
         --output-dir "$OUTPUT_DIR" \
         --device cpu
+    mv "$OUTPUT_DIR/prefill_router.pt" "$OUTPUT_DIR/prefill_router_qwen35b.pt"
 
     echo ""
     echo "=== Evaluating ==="
     python -m model_router_toolkit evaluate \
         --config "$CONFIG" \
-        --checkpoint "$OUTPUT_DIR/prefill_router.pt" \
+        --checkpoint "$OUTPUT_DIR/prefill_router_qwen35b.pt" \
         --data "$TEST_CSV" \
         --prefill-cache "$TEST_CACHE" \
         --device cpu
@@ -101,4 +103,4 @@ fi
 
 echo ""
 echo "=== Done ==="
-echo "  Checkpoint: $OUTPUT_DIR/prefill_router.pt"
+echo "  Checkpoint: $OUTPUT_DIR/prefill_router_qwen35b.pt"

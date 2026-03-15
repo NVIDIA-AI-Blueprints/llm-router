@@ -1,8 +1,9 @@
 # Prefill routing with Qwen3.5-0.8B encoder — 9-model parquet pool.
 # Smaller encoder for faster inference. Same model pool as v1-9models.yaml.
+# Uses OpenRouter for model inference. Set OPENROUTER_API_KEY before serving.
 routing:
   method: prefill
-  checkpoint: checkpoints/prefill_router.pt
+  checkpoint: checkpoints/prefill_router_qwen08b.pt
   tolerance: 0.20
   encoder: Qwen/Qwen3.5-0.8B
   encoder_backend: transformers
@@ -10,45 +11,67 @@ routing:
 models:
   - name: nemotron-3-nano-reasoning
     display_name: Nemotron 3 Nano (Reasoning)
+    litellm_model: openrouter/nvidia/nemotron-3-nano-30b-a3b
     cost_per_m_input_tokens: 0.050
     cost_per_m_output_tokens: 0.200
+    system_prompt: Think step-by-step before answering.
+    chat_template_kwargs:
+      enable_thinking: true
 
   - name: gpt-oss-20b-high
     display_name: GPT-OSS 20B High
+    litellm_model: openrouter/openai/gpt-oss-20b
     cost_per_m_input_tokens: 0.052
     cost_per_m_output_tokens: 0.245
+    chat_template_kwargs:
+      reasoning_effort: high
 
   - name: nemotron-3-super
     display_name: Nemotron 3 Super
+    litellm_model: openrouter/nvidia/nemotron-3-super-49b-v1
     cost_per_m_input_tokens: 0.100
     cost_per_m_output_tokens: 0.400
 
   - name: gpt-oss-120b-high
     display_name: GPT-OSS 120B High
+    litellm_model: openrouter/openai/gpt-oss-120b
     cost_per_m_input_tokens: 0.113
     cost_per_m_output_tokens: 0.431
+    chat_template_kwargs:
+      reasoning_effort: high
 
   - name: qwen-3-5-35b
     display_name: Qwen 3.5 35B
+    litellm_model: openrouter/qwen/qwen3.5-35b-a3b
     cost_per_m_input_tokens: 0.1625
     cost_per_m_output_tokens: 1.300
 
   - name: qwen-3-5-122b
     display_name: Qwen 3.5 122B
+    litellm_model: openrouter/qwen/qwen3.5-122b
     cost_per_m_input_tokens: 0.260
     cost_per_m_output_tokens: 2.080
 
   - name: gpt-5-2-high
     display_name: GPT-5.2 High
+    litellm_model: openrouter/openai/gpt-5.2
     cost_per_m_input_tokens: 0.844
     cost_per_m_output_tokens: 14.000
+    chat_template_kwargs:
+      reasoning_effort: high
 
   - name: gpt-5-4-high
     display_name: GPT-5.4 High
+    litellm_model: openrouter/openai/gpt-5.4
     cost_per_m_input_tokens: 2.500
     cost_per_m_output_tokens: 15.000
+    chat_template_kwargs:
+      reasoning_effort: high
 
   - name: claude-opus-4-6-high
     display_name: Claude Opus 4.6 High
+    litellm_model: openrouter/anthropic/claude-opus-4-6
     cost_per_m_input_tokens: 2.770
     cost_per_m_output_tokens: 25.780
+    chat_template_kwargs:
+      reasoning_effort: high

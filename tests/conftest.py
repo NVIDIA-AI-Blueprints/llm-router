@@ -1,3 +1,4 @@
+import csv
 import os
 import tempfile
 from pathlib import Path
@@ -95,43 +96,69 @@ def prefill_ckpt_path(project_root):
 
 
 @pytest.fixture
-def smoke_ckpt_path(project_root):
-    p = project_root / "checkpoints" / "smoke" / "prefill_router.pt"
+def v1_config_path(project_root):
+    p = project_root / "configs" / "v1-9models-qwen08b.yaml"
     if not p.exists():
-        pytest.skip("smoke/prefill_router.pt not found")
+        pytest.skip("configs/v1-9models-qwen08b.yaml not found")
     return p
 
 
 @pytest.fixture
-def smoke_train_csv(project_root):
-    p = project_root / "data" / "smoke-train.csv"
+def v1_ckpt_path(project_root):
+    p = project_root / "checkpoints" / "prefill_router_qwen08b.pt"
     if not p.exists():
-        pytest.skip("data/smoke-train.csv not found")
+        pytest.skip("checkpoints/prefill_router_qwen08b.pt not found")
     return p
+
+
+_V1_CSV_ROWS_PER_MODEL = 50
 
 
 @pytest.fixture
-def smoke_test_csv(project_root):
-    p = project_root / "data" / "smoke-test.csv"
-    if not p.exists():
-        pytest.skip("data/smoke-test.csv not found")
-    return p
+def v1_test_csv_subset(project_root, tmp_path):
+    """Read test_v1.csv and write a small subset (first N rows per model)."""
+    src = project_root / "data" / "test_v1.csv"
+    if not src.exists():
+        pytest.skip("data/test_v1.csv not found")
+
+    counts: dict[str, int] = {}
+    dest = tmp_path / "test_v1_subset.csv"
+    with open(src, newline="") as fin, open(dest, "w", newline="") as fout:
+        reader = csv.DictReader(fin)
+        writer = csv.DictWriter(
+            fout, fieldnames=["question", "model", "isCorrect", "output_tokens"],
+        )
+        writer.writeheader()
+        for row in reader:
+            model = row["model"]
+            if counts.get(model, 0) >= _V1_CSV_ROWS_PER_MODEL:
+                if all(v >= _V1_CSV_ROWS_PER_MODEL for v in counts.values()):
+                    break
+                continue
+            counts[model] = counts.get(model, 0) + 1
+            writer.writerow({
+                "question": row["question"],
+                "model": row["model"],
+                "isCorrect": row["isCorrect"],
+                "output_tokens": row["output_tokens"],
+            })
+    return dest
 
 
 @pytest.fixture
-def smoke_questions_path(project_root):
-    p = project_root / "data" / "smoke-questions.txt"
-    if not p.exists():
-        pytest.skip("data/smoke-questions.txt not found")
-    return p
-
-
-@pytest.fixture
-def smoke_config_path(project_root):
-    p = project_root / "configs" / "smoke-test.yaml"
-    if not p.exists():
-        pytest.skip("configs/smoke-test.yaml not found")
-    return p
+def v1_questions(v1_test_csv_subset, tmp_path):
+    """Extract unique questions from the v1 test subset."""
+    seen: set[str] = set()
+    questions: list[str] = []
+    with open(v1_test_csv_subset, newline="") as f:
+        for row in csv.DictReader(f):
+            q = row["question"].strip()
+            if q not in seen:
+                seen.add(q)
+                questions.append(q)
+    dest = tmp_path / "v1_questions.txt"
+    dest.write_text("\n".join(questions) + "\n")
+    return dest
 
 
 @pytest.fixture

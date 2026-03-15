@@ -50,7 +50,7 @@ src/model_router_toolkit/
 ```
 
 Key directories outside the package:
-- `configs/` -- Pool config YAMLs (prefill-qwen08b, smoke-test, etc.)
+- `configs/` -- Pool config YAMLs (prefill-qwen08b, v1-9models, etc.)
 - `data/` -- Training/test CSVs (gitignored, not tracked)
 - `checkpoints/` -- Trained routing checkpoints (gitignored)
 - `notebooks/` -- Quickstart notebook (prefill)
@@ -120,7 +120,7 @@ Pipeline: load labels -> extract prefill features (Qwen3.5-0.8B) -> sweep layer/
 Key options:
 - `--device cpu|cuda|mps` -- compute device (auto-detected if omitted)
 - `--n-seeds 10 --n-keep 5` -- ensemble size
-- `--prefill-dir cache/` -- cache extracted features to disk
+- `--prefill-dir cache/` -- cache dir for extracted features (default: `cache/`, disable with `--no-cache`)
 - `--pca-dims 50,100,200` -- PCA dimensions to sweep
 - `--epochs 150 --patience 15` -- MLP training
 
@@ -159,7 +159,7 @@ Uses `adapters/litellm/proxy.py` and `adapters/litellm/config_bridge.py`.
 | Config | Method | Provider | When to use |
 |--------|--------|----------|-------------|
 | `prefill-qwen08b.yaml` | Prefill | OpenRouter | Default — best accuracy |
-| `smoke-test.yaml` | Prefill | OpenRouter | Quick 2-model test |
+| `v1-9models-qwen08b.yaml` | Prefill | OpenRouter | Full 9-model v1 pool |
 | `local-prefill.yaml` | Prefill | Local | Air-gapped / local-only |
 
 ## Architecture

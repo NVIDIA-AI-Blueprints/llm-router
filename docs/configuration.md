@@ -107,7 +107,7 @@ The selection algorithm:
 | Config | Method | Provider | When to use |
 |--------|--------|----------|-------------|
 | `configs/prefill-qwen08b.yaml` | Prefill | OpenRouter | Default — best accuracy |
-| `configs/smoke-test.yaml` | Prefill | OpenRouter | Quick 2-model test |
+| `configs/v1-9models-qwen08b.yaml` | Prefill | OpenRouter | Full 9-model v1 pool |
 | `configs/local-prefill.yaml` | Prefill | Local | Air-gapped / local-only |
 
 ## Annotated Example: Prefill Config

@@ -13,17 +13,6 @@ Reference for models and encoder used with the Model Router Toolkit.
 
 Cost range: 50x between cheapest (nem-nothink) and most expensive (gpt-5.2).
 
-## Smoke Test Pool (2-model)
-
-For quick testing and development:
-
-| Name | Cost (in/out per M tokens) |
-|------|---------------------------|
-| nem-think | $0.20 / $0.20 |
-| nem-nothink | $0.04 / $0.16 |
-
-Config: `configs/smoke-test.yaml`
-
 ## Encoder Model (Prefill Routing)
 
 | Model | HuggingFace Path | Parameters | VRAM | CPU Time |

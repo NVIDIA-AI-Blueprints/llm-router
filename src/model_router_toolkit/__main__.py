@@ -28,7 +28,7 @@ def _cmd_train(args):
         kwargs["n_seeds"] = args.n_seeds
     if args.n_keep is not None:
         kwargs["n_keep"] = args.n_keep
-    if args.prefill_dir is not None:
+    if not args.no_cache and args.prefill_dir:
         kwargs["prefill_dir"] = args.prefill_dir
     if args.prefill_cache is not None:
         kwargs["prefill_cache"] = args.prefill_cache
@@ -54,7 +54,7 @@ def _cmd_evaluate(args):
         kwargs["device"] = args.device
     if args.batch_size is not None:
         kwargs["batch_size"] = args.batch_size
-    if args.prefill_dir is not None:
+    if not args.no_cache and args.prefill_dir:
         kwargs["prefill_dir"] = args.prefill_dir
     if args.prefill_cache is not None:
         kwargs["prefill_cache"] = args.prefill_cache
@@ -146,7 +146,8 @@ def main():
     train_p.add_argument("--batch-size", type=int, default=None, help="Extraction batch size")
     train_p.add_argument("--n-seeds", type=int, default=None, help="Ensemble seeds (default: 10)")
     train_p.add_argument("--n-keep", type=int, default=None, help="Ensemble models to keep (default: 5)")
-    train_p.add_argument("--prefill-dir", default=None, help="Cache dir for prefill features")
+    train_p.add_argument("--prefill-dir", default="cache/", help="Cache dir for prefill features (default: cache/)")
+    train_p.add_argument("--no-cache", action="store_true", help="Disable automatic prefill caching")
     train_p.add_argument("--prefill-cache", default=None, help="Pre-extracted PrefillResult .pt file (skips extraction)")
     train_p.add_argument("--epochs", type=int, default=None, help="Max training epochs")
     train_p.add_argument("--patience", type=int, default=None, help="Early stopping patience")
@@ -163,7 +164,8 @@ def main():
     eval_p.add_argument("--data", required=True, help="Test CSV (question, model, isCorrect)")
     eval_p.add_argument("--device", default=None, help="Device: cpu, cuda, mps")
     eval_p.add_argument("--batch-size", type=int, default=None, help="Extraction batch size")
-    eval_p.add_argument("--prefill-dir", default=None, help="Cache dir for prefill features")
+    eval_p.add_argument("--prefill-dir", default="cache/", help="Cache dir for prefill features (default: cache/)")
+    eval_p.add_argument("--no-cache", action="store_true", help="Disable automatic prefill caching")
     eval_p.add_argument("--prefill-cache", default=None, help="Pre-extracted PrefillResult .pt file (skips extraction)")
     eval_p.add_argument("--models", default=None, help="Comma-separated model subset to evaluate (default: all)")
     eval_p.add_argument("--features-from", default=None, help="Pre-transformed features .pt file (skips extraction + transforms)")

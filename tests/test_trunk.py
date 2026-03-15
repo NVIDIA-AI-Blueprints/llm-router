@@ -66,8 +66,8 @@ class TestTrunk:
         assert np.all(probs >= 0)
         assert np.all(probs <= 1)
 
-    def test_reconstruct_trunk_from_checkpoint(self, smoke_ckpt_path):
-        ckpt = torch.load(smoke_ckpt_path, map_location="cpu", weights_only=False)
+    def test_reconstruct_trunk_from_checkpoint(self, v1_ckpt_path):
+        ckpt = torch.load(v1_ckpt_path, map_location="cpu", weights_only=False)
         nets = reconstruct_trunk(ckpt, device="cpu")
         assert len(nets) > 0
         for net in nets:

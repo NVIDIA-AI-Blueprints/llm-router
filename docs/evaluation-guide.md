@@ -17,9 +17,10 @@ Options:
 |------|---------|-------------|
 | `--device` | auto | `cpu`, `cuda`, or `mps` |
 | `--batch-size` | 4 | Encoder extraction batch size |
-| `--prefill-dir` | none | Cache dir for extracted features |
+| `--prefill-dir` | `cache/` | Cache dir for extracted features |
+| `--no-cache` | off | Disable automatic prefill caching |
 
-Use `--prefill-dir` to cache extracted features and speed up repeated evaluations on the same test set.
+Prefill caching is **enabled by default** — extracted features are saved to `cache/` and reused automatically. Use `--no-cache` to disable.
 
 ## Test Data Format
 

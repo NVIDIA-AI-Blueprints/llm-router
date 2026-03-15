@@ -15,20 +15,20 @@ import pytest
 class TestRouterOnlyModeWithRealEncoder:
     """Tests using the HTTP adapter create_app with a real config and checkpoint."""
 
-    def test_create_app_router_only_loads(self, smoke_config_path):
+    def test_create_app_router_only_loads(self, v1_config_path):
         from model_router_toolkit.adapters.http.app import create_app
 
-        app = create_app(str(smoke_config_path))
+        app = create_app(str(v1_config_path))
         routes = [r.path for r in app.routes]
         assert "/health" in routes
         assert "/v1/route" in routes
 
-    def test_health_endpoint(self, smoke_config_path):
+    def test_health_endpoint(self, v1_config_path):
         from fastapi.testclient import TestClient
 
         from model_router_toolkit.adapters.http.app import create_app
 
-        app = create_app(str(smoke_config_path))
+        app = create_app(str(v1_config_path))
         client = TestClient(app)
         resp = client.get("/health")
         assert resp.status_code == 200
@@ -36,29 +36,29 @@ class TestRouterOnlyModeWithRealEncoder:
         assert data["status"] == "ok"
         assert data["mode"] == "router-only"
         assert data["method"] == "prefill"
-        assert len(data["models"]) >= 2
+        assert len(data["models"]) >= 9
 
-    def test_models_endpoint(self, smoke_config_path):
+    def test_models_endpoint(self, v1_config_path):
         from fastapi.testclient import TestClient
 
         from model_router_toolkit.adapters.http.app import create_app
 
-        app = create_app(str(smoke_config_path))
+        app = create_app(str(v1_config_path))
         client = TestClient(app)
         resp = client.get("/api/models")
         assert resp.status_code == 200
         models = resp.json()
-        assert len(models) >= 2
+        assert len(models) >= 9
         for m in models:
             assert "name" in m
             assert "cost_per_m_input_tokens" in m
 
-    def test_route_returns_routing_decision(self, smoke_config_path):
+    def test_route_returns_routing_decision(self, v1_config_path):
         from fastapi.testclient import TestClient
 
         from model_router_toolkit.adapters.http.app import create_app
 
-        app = create_app(str(smoke_config_path))
+        app = create_app(str(v1_config_path))
         client = TestClient(app)
         resp = client.post("/v1/route", json={
             "question": "What is the capital of France?",
@@ -70,12 +70,12 @@ class TestRouterOnlyModeWithRealEncoder:
         assert all(0.0 <= v <= 1.0 for v in data["confidences"].values())
         assert "route_ms" in data["metadata"]
 
-    def test_route_with_messages_format(self, smoke_config_path):
+    def test_route_with_messages_format(self, v1_config_path):
         from fastapi.testclient import TestClient
 
         from model_router_toolkit.adapters.http.app import create_app
 
-        app = create_app(str(smoke_config_path))
+        app = create_app(str(v1_config_path))
         client = TestClient(app)
         resp = client.post("/v1/route", json={
             "messages": [
@@ -87,12 +87,12 @@ class TestRouterOnlyModeWithRealEncoder:
         data = resp.json()
         assert data["selected_model"] in data["model_names"]
 
-    def test_route_includes_cost_estimates(self, smoke_config_path):
+    def test_route_includes_cost_estimates(self, v1_config_path):
         from fastapi.testclient import TestClient
 
         from model_router_toolkit.adapters.http.app import create_app
 
-        app = create_app(str(smoke_config_path))
+        app = create_app(str(v1_config_path))
         client = TestClient(app)
         resp = client.post("/v1/route", json={
             "question": "What is 2+2?",
@@ -103,25 +103,25 @@ class TestRouterOnlyModeWithRealEncoder:
             assert "model" in cost
             assert "estimated_total_cost" in cost
 
-    def test_no_inference_endpoints(self, smoke_config_path):
+    def test_no_inference_endpoints(self, v1_config_path):
         """Confirm that completions and chat endpoints are not registered."""
         from fastapi.testclient import TestClient
 
         from model_router_toolkit.adapters.http.app import create_app
 
-        app = create_app(str(smoke_config_path))
+        app = create_app(str(v1_config_path))
         client = TestClient(app)
         resp = client.post("/v1/chat/completions", json={
             "messages": [{"role": "user", "content": "Hello"}],
         })
         assert resp.status_code in (404, 405)
 
-    def test_tolerance_affects_routing(self, smoke_config_path):
+    def test_tolerance_affects_routing(self, v1_config_path):
         from fastapi.testclient import TestClient
 
         from model_router_toolkit.adapters.http.app import create_app
 
-        app = create_app(str(smoke_config_path))
+        app = create_app(str(v1_config_path))
         client = TestClient(app)
 
         resp_tight = client.post("/v1/route", json={

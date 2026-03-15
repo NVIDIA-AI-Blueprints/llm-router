@@ -33,7 +33,7 @@ class TestRunCollectRealAPI:
     """Integration tests calling real model APIs via LiteLLM."""
 
     @pytest.mark.requires_openrouter_api_key
-    def test_run_collect_vote_real_api(self, smoke_config_path, tmp_path):
+    def test_run_collect_vote_real_api(self, v1_config_path, tmp_path):
         from model_router_toolkit.collect import run_collect
 
         questions_file = tmp_path / "questions.txt"
@@ -44,7 +44,7 @@ class TestRunCollectRealAPI:
         output_file = tmp_path / "collected.csv"
 
         run_collect(
-            str(smoke_config_path),
+            str(v1_config_path),
             str(questions_file),
             str(output_file),
             judge_method="vote",
@@ -63,7 +63,7 @@ class TestRunCollectRealAPI:
             assert int(row["output_tokens"]) >= 0
 
     @pytest.mark.requires_openrouter_api_key
-    def test_run_collect_reference_real_api(self, smoke_config_path, tmp_path):
+    def test_run_collect_reference_real_api(self, v1_config_path, tmp_path):
         from model_router_toolkit.collect import run_collect
 
         questions_file = tmp_path / "questions.txt"
@@ -74,7 +74,7 @@ class TestRunCollectRealAPI:
 
         output_file = tmp_path / "collected.csv"
         run_collect(
-            str(smoke_config_path),
+            str(v1_config_path),
             str(questions_file),
             str(output_file),
             judge_method="reference",
@@ -91,13 +91,13 @@ class TestRunCollectRealAPI:
 class TestRunEvaluateReal:
     """Integration tests for evaluation with real encoder + checkpoint."""
 
-    def test_run_evaluate_smoke(self, smoke_config_path, smoke_ckpt_path, smoke_test_csv, capsys):
+    def test_run_evaluate_v1(self, v1_config_path, v1_ckpt_path, v1_test_csv_subset, capsys):
         from model_router_toolkit.evaluate import run_evaluate
 
         run_evaluate(
-            str(smoke_config_path),
-            str(smoke_ckpt_path),
-            str(smoke_test_csv),
+            str(v1_config_path),
+            str(v1_ckpt_path),
+            str(v1_test_csv_subset),
             device="cpu",
         )
         captured = capsys.readouterr()
