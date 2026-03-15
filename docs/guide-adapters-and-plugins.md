@@ -81,6 +81,10 @@ strategy.set_litellm_router(litellm_router)
 litellm_router.set_custom_routing_strategy(strategy)
 ```
 
+> **Important:** The litellm `model_list` must include entries for all models in the pool config.
+> If a routed model isn't in `model_list`, LiteLLM will silently fall back to default routing
+> and a warning will be logged.
+
 #### Key methods and properties
 
 | Method/Property | Description |
@@ -295,7 +299,7 @@ At least one of `messages`, `question`, or `model` must be provided.
 |-------|------|-------------|
 | `selected_model` | `str` | The chosen model name |
 | `model_names` | `list[str]` | All models in the pool |
-| `confidences` | `list[float]` | P(correct) per model |
+| `confidences` | `dict[str, float]` | P(correct) per model (model name → probability) |
 | `costs` | `list[dict]` | Cost estimates per model |
 | `metadata` | `dict` | Additional info (e.g., `{"pinned": true}`) |
 
@@ -491,6 +495,97 @@ async def webhook_route(request: Request):
 
 ---
 
+## Writing a Custom Routing Method
+
+If you need a routing strategy beyond `prefill`, you can implement your own `BaseRouter` subclass and register it in the config dispatch.
+
+### Step 1: Implement BaseRouter
+
+```python
+import random
+from pathlib import Path
+
+from model_router_toolkit.config import PoolConfig
+from model_router_toolkit.router import BaseRouter, CostEstimate, RoutingResult
+
+
+class RandomRouter(BaseRouter):
+    """Routes randomly — useful as a baseline or for testing."""
+
+    def __init__(self, config: PoolConfig):
+        self._config = config
+
+    def route(
+        self, question: str, *, tolerance: float = 0.20,
+        models: list[str] | None = None,
+    ) -> RoutingResult:
+        pool = models or self._config.model_names
+        selected = random.choice(pool)
+        n = len(self._config.model_names)
+        return RoutingResult(
+            model_names=self._config.model_names,
+            confidences=[1.0 / n] * n,
+            costs=[
+                CostEstimate(
+                    median_output_tokens=100,
+                    cost_per_m_input_tokens=m.cost_per_m_input_tokens,
+                    cost_per_m_output_tokens=m.cost_per_m_output_tokens,
+                )
+                for m in self._config.models
+            ],
+            selected_model=selected,
+            metadata={"method": "random"},
+        )
+
+    def load(self, checkpoint_path: str | Path) -> None:
+        pass  # no checkpoint needed
+
+    def has_model(self, model_name: str) -> bool:
+        return model_name in self._config.model_names
+```
+
+### Step 2: Register in config dispatch
+
+In `src/model_router_toolkit/config.py`, add a branch to `build_router_from_config()`:
+
+```python
+elif method == "random":
+    from my_module import RandomRouter
+    return RandomRouter(config=config)
+```
+
+### Step 3: Use in YAML config
+
+```yaml
+routing:
+  method: random
+  tolerance: 0.20
+
+models:
+  - name: cheap-model
+    litellm_model: openrouter/cheap
+    cost_per_m_input_tokens: 0.10
+    cost_per_m_output_tokens: 0.10
+  - name: expensive-model
+    litellm_model: openrouter/expensive
+    cost_per_m_input_tokens: 5.00
+    cost_per_m_output_tokens: 15.00
+```
+
+### Step 4: Verify
+
+```bash
+python -c "
+from model_router_toolkit.config import load_config, build_router_from_config
+config = load_config('configs/my-random-pool.yaml')
+router = build_router_from_config(config)
+result = router.route('test question', tolerance=0.20)
+print(f'Selected: {result.selected_model}')
+"
+```
+
+---
+
 ## API Reference: /v1/route
 
 The `/v1/route` endpoint is the standard routing API, used by the HTTP sidecar and consumed by the OpenClaw plugin. Any custom integration should target this API.
@@ -527,7 +622,7 @@ All fields are optional, but at least one of `messages`, `question`, or `model` 
 {
   "selected_model": "nemotron-3-nano-reasoning",
   "model_names": ["nemotron-3-nano-reasoning", "gpt-oss-20b-high", "..."],
-  "confidences": [0.92, 0.89, "..."],
+  "confidences": {"nemotron-3-nano-reasoning": 0.92, "gpt-oss-20b-high": 0.89, "...": 0.0},
   "costs": [
     {
       "median_output_tokens": 150,

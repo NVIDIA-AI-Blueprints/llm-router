@@ -14,12 +14,16 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import logging
 from typing import Any
 
 from model_router_toolkit.router import BaseRouter, RoutingResult, extract_user_text
 
+logger = logging.getLogger(__name__)
+
 _request_tolerance: contextvars.ContextVar[float | None] = contextvars.ContextVar(
-    "request_tolerance", default=None,
+    "request_tolerance",
+    default=None,
 )
 
 
@@ -49,7 +53,7 @@ class ModelRoutingStrategy:
     @classmethod
     def from_config(cls, config_path: str, **kwargs: Any) -> ModelRoutingStrategy:
         """Build a strategy from a pool_config.yaml file."""
-        from model_router_toolkit.config import load_config, build_router_from_config
+        from model_router_toolkit.config import build_router_from_config, load_config
 
         config = load_config(config_path)
         router = build_router_from_config(config)
@@ -145,13 +149,22 @@ class ModelRoutingStrategy:
         req_models = ((request_kwargs or {}).get("metadata") or {}).get("models")
         allowed = req_models or self._models
         result = self._router.route(
-            text, tolerance=self.effective_tolerance, models=allowed,
+            text,
+            tolerance=self.effective_tolerance,
+            models=allowed,
         )
         self._last_result = result
 
         dep = self._find_deployment(result.selected_model)
         if dep:
             return dep
+
+        logger.warning(
+            "Routed model %r not found in litellm model_list. "
+            "LiteLLM will fall back to default routing. "
+            "Ensure all pool models are in model_list.",
+            result.selected_model,
+        )
 
         if self._litellm_router:
             return self._litellm_router.model_list[0]
@@ -166,7 +179,11 @@ class ModelRoutingStrategy:
         request_kwargs: dict | None = None,
     ) -> dict:
         return await asyncio.to_thread(
-            self._route_and_select, model, messages, input, request_kwargs,
+            self._route_and_select,
+            model,
+            messages,
+            input,
+            request_kwargs,
         )
 
     def get_available_deployment(

@@ -20,7 +20,7 @@
       <div class="messages" id="messages">
         <div class="welcome" id="welcome">
           <h2>Model Router Playground</h2>
-          <p>Ask any question. The router will analyze it, predict which models can answer it correctly, and select the <span class="accent">cheapest model</span> that meets the accuracy threshold.</p>
+          <p>Ask any question. The router will analyze it, predict which models can answer it correctly, and select the <span class="accent">most efficient model</span> that meets the accuracy threshold.</p>
           <div class="how-it-works" id="howItWorks"></div>
           <p style="margin-top:12px; font-size:11px; color:var(--text-dim);">Configure the model pool and tolerance in the sidebar &rarr;</p>
         </div>
@@ -42,7 +42,7 @@
 
     <div class="sidebar">
       <div class="sidebar-section">
-        <h3 class="sidebar-section-header" onclick="Playground.toggleSection(this)"><span class="chevron">&#9662;</span> Tolerance <span class="info-tip" data-tip="How much accuracy to trade for cost savings. The router picks the cheapest model whose p(correct) is within this range of the best.">?</span></h3>
+        <h3 class="sidebar-section-header" onclick="Playground.toggleSection(this)"><span class="chevron">&#9662;</span> Tolerance <span class="info-tip" data-tip="How much accuracy to trade for efficiency. The router picks the most efficient model whose p(correct) is within this range of the best.">?</span></h3>
         <div class="sidebar-section-body">
           <div class="tolerance-display">
             <span class="tolerance-value" id="tolValue">0.20</span>
@@ -51,13 +51,13 @@
           <input type="range" id="tolSlider" min="0" max="0.50" step="0.01" value="0.20">
           <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-dim); margin-top:4px;">
             <span>0.00 (best model)</span>
-            <span>0.50 (cheapest)</span>
+            <span>0.50 (most efficient)</span>
           </div>
         </div>
       </div>
 
       <div class="sidebar-section">
-        <h3 class="sidebar-section-header" onclick="Playground.toggleSection(this)"><span class="chevron">&#9662;</span> Model Pool <span class="info-tip" data-tip="Toggle models on or off. Disabling expensive models forces the router to choose cheaper alternatives.">?</span></h3>
+        <h3 class="sidebar-section-header" onclick="Playground.toggleSection(this)"><span class="chevron">&#9662;</span> Model Pool <span class="info-tip" data-tip="Toggle models on or off. Disabling models restricts the router to the remaining pool.">?</span></h3>
         <div class="sidebar-section-body">
           <div id="modelToggles"></div>
         </div>

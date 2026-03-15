@@ -1,8 +1,6 @@
 import pytest
-import yaml
-from pathlib import Path
 
-from model_router_toolkit.config import PoolConfig, ModelSpec, RoutingConfig, load_config
+from model_router_toolkit.config import ModelSpec, PoolConfig, load_config
 
 
 class TestPoolConfig:
@@ -38,13 +36,15 @@ class TestPoolConfig:
         assert len(config.models) > 0
 
     def test_prefill_config(self):
-        config = PoolConfig.model_validate({
-            "routing": {
-                "method": "prefill",
-                "encoder": "Qwen/Qwen3.5-35B-A3B",
-                "encoder_server": "http://localhost:8421",
-            },
-            "models": [],
-        })
+        config = PoolConfig.model_validate(
+            {
+                "routing": {
+                    "method": "prefill",
+                    "encoder": "Qwen/Qwen3.5-35B-A3B",
+                    "encoder_server": "http://localhost:8421",
+                },
+                "models": [],
+            }
+        )
         assert config.routing.method == "prefill"
         assert config.routing.encoder == "Qwen/Qwen3.5-35B-A3B"

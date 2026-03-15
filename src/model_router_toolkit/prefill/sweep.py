@@ -50,12 +50,17 @@ def cv_auc(
         return 0.5
 
     skf = StratifiedKFold(
-        n_splits=n_folds, shuffle=True, random_state=RANDOM_STATE,
+        n_splits=n_folds,
+        shuffle=True,
+        random_state=RANDOM_STATE,
     )
     aucs: list[float] = []
     for tr, va in skf.split(X, y):
         lr = LogisticRegression(
-            max_iter=500, C=1.0, solver="lbfgs", random_state=RANDOM_STATE,
+            max_iter=500,
+            C=1.0,
+            solver="lbfgs",
+            random_state=RANDOM_STATE,
         )
         lr.fit(X[tr], y[tr])
         probs = lr.predict_proba(X[va])[:, 1]
@@ -98,7 +103,13 @@ def _ternary_search_layer(
         li = layers[idx]
         if li not in cache:
             cache[li] = _eval_layer(
-                prefill, li, mode, pca_dim, train_mask, y_train, n_folds,
+                prefill,
+                li,
+                mode,
+                pca_dim,
+                train_mask,
+                y_train,
+                n_folds,
             )
         return cache[li]
 
@@ -143,7 +154,11 @@ def sweep_model(
     tag = target_name or "sweep"
     logger.info(
         "  [%s] %d layers x %d modes x %d PCA = %d combos",
-        tag, len(layers), len(modes), len(pca_dims), n_combos,
+        tag,
+        len(layers),
+        len(modes),
+        len(pca_dims),
+        n_combos,
     )
 
     best_auc = 0.0
@@ -154,11 +169,23 @@ def sweep_model(
         for pi, pd in enumerate(pca_dims):
             step = mi * len(pca_dims) + pi + 1
             layer, auc = _ternary_search_layer(
-                prefill, layers, mode, pd, train_mask, y_train, n_folds,
+                prefill,
+                layers,
+                mode,
+                pd,
+                train_mask,
+                y_train,
+                n_folds,
             )
             logger.info(
                 "    [%s] %d/%d  L%02d %4s PCA%3d  AUC=%.4f",
-                tag, step, n_combos, layer, mode, pd, auc,
+                tag,
+                step,
+                n_combos,
+                layer,
+                mode,
+                pd,
+                auc,
             )
             if auc > best_auc:
                 best_auc = auc
@@ -170,8 +197,12 @@ def sweep_model(
 
     logger.info(
         "  [%s] done in %.1fs -> best L%d %s PCA%d AUC=%.4f",
-        tag, elapsed, best_cfg["layer"], best_cfg["mode"],
-        best_cfg["pca_dim"], best_auc,
+        tag,
+        elapsed,
+        best_cfg["layer"],
+        best_cfg["mode"],
+        best_cfg["pca_dim"],
+        best_auc,
     )
 
     return SweepResult(

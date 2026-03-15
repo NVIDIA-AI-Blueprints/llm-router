@@ -15,8 +15,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from model_router_toolkit.config import PoolConfig, build_router_from_config, load_config
 from model_router_toolkit.adapters.http._shared import health_dict, models_list, warmup_router
+from model_router_toolkit.config import PoolConfig, load_config
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,11 @@ def _resolve_api_key(litellm_model: str, api_base: str) -> str:
     if "openrouter" in api_base:
         return os.environ.get("OPENROUTER_API_KEY", "")
 
-    return os.environ.get("NVIDIA_API_KEY", "") or os.environ.get("OPENROUTER_API_KEY", "") or os.environ.get("OPENAI_API_KEY", "")
+    return (
+        os.environ.get("NVIDIA_API_KEY", "")
+        or os.environ.get("OPENROUTER_API_KEY", "")
+        or os.environ.get("OPENAI_API_KEY", "")
+    )
 
 
 def _build_model_list(config: PoolConfig) -> list[dict]:
@@ -44,9 +48,16 @@ def _build_model_list(config: PoolConfig) -> list[dict]:
         api_key = _resolve_api_key(m.litellm_model, api_base)
 
         litellm_model = m.litellm_model
-        has_provider = any(litellm_model.startswith(p) for p in (
-            "openrouter/", "nvidia_nim/", "openai/", "anthropic/", "ollama/",
-        ))
+        has_provider = any(
+            litellm_model.startswith(p)
+            for p in (
+                "openrouter/",
+                "nvidia_nim/",
+                "openai/",
+                "anthropic/",
+                "ollama/",
+            )
+        )
         if not has_provider:
             if "integrate.api.nvidia" in api_base:
                 litellm_model = f"nvidia_nim/{litellm_model}"
@@ -62,10 +73,12 @@ def _build_model_list(config: PoolConfig) -> list[dict]:
         if m.api_base:
             params["api_base"] = m.api_base
 
-        model_list.append({
-            "model_name": m.name,
-            "litellm_params": params,
-        })
+        model_list.append(
+            {
+                "model_name": m.name,
+                "litellm_params": params,
+            }
+        )
     return model_list
 
 
@@ -123,10 +136,13 @@ def create_app(
         return models_list(config)
 
     review_available = bool(
-        os.environ.get("OPENROUTER_API_KEY")
-        or os.environ.get("NVIDIA_API_KEY")
+        os.environ.get("OPENROUTER_API_KEY") or os.environ.get("NVIDIA_API_KEY")
     )
-    judge_model = max(config.models, key=lambda m: m.cost_per_m_output_tokens).display_name if config.models else None
+    judge_model = (
+        max(config.models, key=lambda m: m.cost_per_m_output_tokens).display_name
+        if config.models
+        else None
+    )
 
     @app.get("/api/config")
     async def get_config():

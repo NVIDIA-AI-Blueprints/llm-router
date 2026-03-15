@@ -1,7 +1,6 @@
 """Tests for prefill transform pipeline (pure math, no GPU needed)."""
 
 import numpy as np
-import pytest
 import torch
 
 from model_router_toolkit.prefill.extract import PrefillResult

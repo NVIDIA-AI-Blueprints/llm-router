@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "model-router-toolkit"
 version = "0.1.0"
-description = "LLM routing toolkit: learns which model handles which queries best, routes to the cheapest model above an accuracy threshold"
+description = "LLM routing toolkit: learns which model handles which queries best, routes to the most efficient and accurate model for every call"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 authors = [{name = "NVIDIA Corporation"}]
 requires-python = ">=3.10"
-keywords = ["llm", "routing", "model-selection", "cost-optimization", "litellm"]
+keywords = ["llm", "routing", "model-selection", "model-efficiency", "litellm"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -76,7 +76,7 @@ where = ["src"]
 target-version = "py310"
 line-length = 100
 select = ["E", "F", "I", "N", "W", "UP"]
-ignore = []
+ignore = ["N803", "N806"]  # ML convention: X, Y, N for matrices/counts
 
 [tool.ruff.isort]
 known-first-party = ["model_router_toolkit"]

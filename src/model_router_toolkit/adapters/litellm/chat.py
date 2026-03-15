@@ -35,7 +35,9 @@ async def _chat_stream(request: Request, req: ChatRequest):
 
     t0 = time.perf_counter()
     result = strategy.router.route(
-        req.message, tolerance=tolerance, models=req.enabled_models,
+        req.message,
+        tolerance=tolerance,
+        models=req.enabled_models,
     )
     route_ms = (time.perf_counter() - t0) * 1000
 
@@ -48,13 +50,16 @@ async def _chat_stream(request: Request, req: ChatRequest):
         full_messages.append({"role": "system", "content": system_prompt})
     full_messages.extend(messages)
 
-    yield _sse_event("routing", {
-        "selected_model": selected,
-        "model_names": result.model_names,
-        "confidences": result.confidences,
-        "metadata": result.metadata,
-        "route_ms": round(route_ms, 2),
-    })
+    yield _sse_event(
+        "routing",
+        {
+            "selected_model": selected,
+            "model_names": result.model_names,
+            "confidences": result.confidences,
+            "metadata": result.metadata,
+            "route_ms": round(route_ms, 2),
+        },
+    )
 
     t0 = time.perf_counter()
     tokens_sent = False

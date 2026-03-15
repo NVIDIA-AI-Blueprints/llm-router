@@ -1,6 +1,17 @@
-# NVIDIA AI Blueprint: LLM Router v3 — Prefill-Based Optimization
+# NVIDIA AI Blueprint: LLM Router v3 — Complexity-Based Optimization
 
-> **Branch: v3-prefill** — This branch contains LLM Router v3, a prefill complexity-based routing system that learns which models handle which queries and routes to the cheapest model above an accuracy threshold. For the intent/multimodal router (v2), see the [experimental](../../tree/experimental) branch. For the original BERT-based router (v1), see [main](../../tree/main).
+**Use the most efficient and accurate model for every LLM call.**
+
+Model Router Toolkit learns which models handle which types of queries well and routes each request to the most efficient model that meets your accuracy threshold. Instead of over-provisioning with a single expensive model or under-serving with a cheap one, the router matches query complexity to model capability automatically.
+
+The core insight: most queries don't need your most powerful model. A lightweight model produces the same correct answer on straightforward requests, while complex queries still get routed to stronger models. The router figures out which is which.
+
+> [!NOTE]
+> **Reference implementation only.** This branch is a reference implementation demonstrating prefill-based LLM routing. For production deployment, please fork this repository and leverage the relevant components for your use case. If you encounter issues or have questions, please [open an issue](../../issues/new).
+
+---
+
+> **Branch: v3-prefill** — This branch contains LLM Router v3, a prefill complexity-based routing system that learns which models handle which queries well and routes each request to the most efficient model that meets your accuracy threshold. For the intent/multimodal router (v2), see the [experimental](../../tree/experimental) branch. For the original BERT-based router (v1), see [main](../../tree/main).
 
 ### How This Branch Differs
 
@@ -13,14 +24,6 @@
 | **Multimodal** | No | Yes (images) | No (text only) |
 | **Proxying** | Yes | No (classification only) | Yes (routing + inference) |
 | **Deployment modes** | Docker | Docker | Library, server, sidecar, proxy, SDK |
-
----
-
-**Route every LLM call to the cheapest model that can answer it correctly.**
-
-Model Router Toolkit is a cost-optimization layer for LLM applications. Instead of always calling the most expensive model, it learns which models handle which types of queries well, then routes each incoming question to the cheapest model above an accuracy threshold you control.
-
-The core insight: for many queries, a $0.05/M-token model produces the same correct answer as a $25/M-token model. The router figures out which queries those are and saves you the difference.
 
 ---
 

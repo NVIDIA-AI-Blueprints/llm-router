@@ -86,7 +86,9 @@ class TestPythonM:
     def test_python_m_serve_config(self, project_root):
         result = subprocess.run(
             [sys.executable, "-m", "model_router_toolkit", "serve-config"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
             cwd=str(project_root),
         )
         assert result.returncode == 0
@@ -98,7 +100,9 @@ class TestPythonM:
     def test_python_m_help(self, project_root):
         result = subprocess.run(
             [sys.executable, "-m", "model_router_toolkit", "--help"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
             cwd=str(project_root),
         )
         assert result.returncode == 0
@@ -112,7 +116,9 @@ class TestCLISubcommands:
     def _run_cli(self, args, timeout=300, **kwargs):
         return subprocess.run(
             ["model-router"] + args,
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
             cwd=str(kwargs.get("cwd", ".")),
         )
 
@@ -126,34 +132,51 @@ class TestCLISubcommands:
         output_csv = tmp_path / "collected.csv"
         questions_3 = tmp_path / "q3.txt"
         with open(v1_questions) as f:
-            lines = [l for l in f if l.strip()][:2]
+            lines = [line for line in f if line.strip()][:2]
         questions_3.write_text("\n".join(lines))
 
         result = self._run_cli(
-            ["collect",
-             "--config", str(v1_config_path),
-             "--questions", str(questions_3),
-             "--output", str(output_csv),
-             "--judge", "vote"],
-            cwd=project_root, timeout=600,
+            [
+                "collect",
+                "--config",
+                str(v1_config_path),
+                "--questions",
+                str(questions_3),
+                "--output",
+                str(output_csv),
+                "--judge",
+                "vote",
+            ],
+            cwd=project_root,
+            timeout=600,
         )
         assert result.returncode == 0, f"collect failed: {result.stderr}"
         assert output_csv.exists()
 
     def test_cli_evaluate_v1(self, project_root, v1_config_path, v1_ckpt_path, v1_test_csv_subset):
         result = self._run_cli(
-            ["evaluate",
-             "--config", str(v1_config_path),
-             "--checkpoint", str(v1_ckpt_path),
-             "--data", str(v1_test_csv_subset),
-             "--device", "cpu"],
-            cwd=project_root, timeout=600,
+            [
+                "evaluate",
+                "--config",
+                str(v1_config_path),
+                "--checkpoint",
+                str(v1_ckpt_path),
+                "--data",
+                str(v1_test_csv_subset),
+                "--device",
+                "cpu",
+            ],
+            cwd=project_root,
+            timeout=600,
         )
         combined = result.stdout + result.stderr
         if result.returncode < 0:
             import signal as _sig
+
             sig = -result.returncode
-            sig_name = _sig.Signals(sig).name if sig in _sig.Signals._value2member_map_ else str(sig)
+            sig_name = (
+                _sig.Signals(sig).name if sig in _sig.Signals._value2member_map_ else str(sig)
+            )
             pytest.skip(
                 f"Encoder subprocess killed by signal {sig_name} — "
                 f"likely a torch/transformers crash on this platform"

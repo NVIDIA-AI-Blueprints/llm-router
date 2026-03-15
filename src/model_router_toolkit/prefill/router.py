@@ -29,7 +29,10 @@ class PrefillRouter(BaseRouter):
         self._model_names = self._scorer.model_names
 
     def route(
-        self, question: str, *, tolerance: float = 0.20,
+        self,
+        question: str,
+        *,
+        tolerance: float = 0.20,
         models: list[str] | None = None,
     ) -> RoutingResult:
         if self._scorer is None:
@@ -43,9 +46,7 @@ class PrefillRouter(BaseRouter):
         raw = self._scorer.score(question)
         allowed = set(models) if models else set(raw.model_names)
 
-        allowed_confs = [
-            c for m, c in zip(raw.model_names, raw.confidences) if m in allowed
-        ]
+        allowed_confs = [c for m, c in zip(raw.model_names, raw.confidences) if m in allowed]
         p_max = max(allowed_confs)
         threshold = p_max - tolerance
 
@@ -86,11 +87,13 @@ class PrefillRouter(BaseRouter):
         costs = []
         for m in model_names:
             spec = self._config.get_model(m) if self._config else None
-            costs.append(CostEstimate(
-                median_output_tokens=500,
-                cost_per_m_input_tokens=spec.cost_per_m_input_tokens if spec else 0,
-                cost_per_m_output_tokens=spec.cost_per_m_output_tokens if spec else 0,
-            ))
+            costs.append(
+                CostEstimate(
+                    median_output_tokens=500,
+                    cost_per_m_input_tokens=spec.cost_per_m_input_tokens if spec else 0,
+                    cost_per_m_output_tokens=spec.cost_per_m_output_tokens if spec else 0,
+                )
+            )
         return RoutingResult(
             model_names=model_names,
             confidences=confidences,

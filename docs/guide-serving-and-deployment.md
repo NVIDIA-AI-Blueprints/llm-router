@@ -97,7 +97,7 @@ router.unload()  # frees encoder memory
 |-------|------|-------------|
 | `selected_model` | `str` | The chosen model name |
 | `model_names` | `list[str]` | All models in the pool |
-| `confidences` | `list[float]` | P(correct) for each model |
+| `confidences` | `dict[str, float]` | P(correct) per model (model name → probability) |
 | `costs` | `list[CostEstimate]` | Cost estimates for each model |
 | `metadata` | `dict` | Additional info (e.g., `pinned`, `raw_scores`) |
 | `selected_confidence` | `float` | P(correct) for the selected model (property) |
@@ -158,7 +158,7 @@ Interactive web UI for testing routing. Features: chat interface, tolerance slid
 #### `GET /health` — Health check
 
 ```json
-{"status": "ok", "mode": "full", "routing_method": "prefill", "models": 9}
+{"status": "ok", "mode": "full", "method": "prefill", "models": ["nem-think", "nem-nano", "..."]}
 ```
 
 #### `GET /api/models` — List models
@@ -283,9 +283,9 @@ model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
 ```json
 {
   "selected_model": "nemotron-3-nano-reasoning",
-  "model_names": ["nemotron-3-nano-reasoning", "gpt-oss-20b-high", ...],
-  "confidences": [0.92, 0.89, ...],
-  "costs": [{"median_output_tokens": 150, "cost_per_m_input_tokens": 0.05, ...}],
+  "model_names": ["nemotron-3-nano-reasoning", "gpt-oss-20b-high", "..."],
+  "confidences": {"nemotron-3-nano-reasoning": 0.92, "gpt-oss-20b-high": 0.89, "...": 0.0},
+  "costs": [{"median_output_tokens": 150, "cost_per_m_input_tokens": 0.05, "...": 0}],
   "metadata": {}
 }
 ```
@@ -293,7 +293,7 @@ model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
 #### `GET /health` — Health check
 
 ```json
-{"status": "ok", "mode": "router-only", "routing_method": "prefill", "models": 9}
+{"status": "ok", "mode": "router-only", "method": "prefill", "models": ["nem-think", "nem-nano", "..."]}
 ```
 
 ### Authentication
@@ -324,6 +324,14 @@ curl -X POST http://localhost:8079/v1/route \
 ```
 
 The `/health` endpoint is exempt from auth.
+
+> **Interpreting Confidence Values**
+>
+> Confidence values in routing responses are *relative rankings*, not calibrated probabilities.
+> The routing algorithm selects the cheapest model whose score is within `tolerance` of the best.
+> A confidence of 0.05 vs 0.02 is meaningful — it means the first model is more likely correct
+> — even though both numbers look "low" in absolute terms. Use them to compare models within a
+> single request, not as absolute accuracy estimates.
 
 ### When to use
 

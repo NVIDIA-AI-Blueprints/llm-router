@@ -146,9 +146,13 @@ Builds and saves the `.pt` checkpoint containing:
 | `--config` | (required) | Pool config YAML path |
 | `--data` | (required) | Training CSV path |
 | `--output-dir` | (required) | Directory to save checkpoint |
-| `--device` | auto-detect | `cpu`, `cuda`, or `mps` |
+| `--device` | auto-detect | `cpu`, `cuda`, or `mps` (experimental) |
 | `--batch-size` | 4 | Encoder extraction batch size |
 | `--n-seeds` | 10 | Number of MLP seeds to train |
+
+> **Apple Silicon (MPS) Warning:** MPS GPU support is experimental and may cause
+> silent crashes (SIGSEGV) during training or evaluation. If you encounter crashes,
+> use `--device cpu` instead. CPU is slower but stable.
 | `--n-keep` | 5 | Number of best seeds to keep in ensemble |
 | `--pca-dims` | 50,100,150,200,300 | PCA dimensions to sweep (comma-separated) |
 | `--epochs` | 150 | Max MLP training epochs |
@@ -193,7 +197,7 @@ model-router evaluate \
 | `--config` | (required) | Pool config YAML path |
 | `--checkpoint` | (required) | Checkpoint `.pt` path |
 | `--data` | (required) | Test CSV path |
-| `--device` | auto-detect | `cpu`, `cuda`, or `mps` |
+| `--device` | auto-detect | `cpu`, `cuda`, or `mps` (experimental) |
 | `--batch-size` | 4 | Encoder extraction batch size |
 | `--models` | all | Model subset to evaluate |
 | `--pricing` | (none) | Pricing CSV override (`model,cost_per_m_input_tokens`) |
@@ -262,7 +266,7 @@ This tells you which encoder features are most informative for predicting each m
     claude-opus-4-6-high      : 144 ( 24.0%)  acc_when_chosen=0.9167
 ```
 
-This shows how traffic splits across models and the accuracy of each model on the questions it's chosen for. A good router sends easy questions to cheap models (with high accuracy there) and hard questions to expensive ones.
+This shows how traffic splits across models and the accuracy of each model on the questions it's chosen for. A good router sends straightforward questions to lightweight models (maintaining accuracy) and complex questions to more capable ones.
 
 #### Agreement Zones
 
@@ -270,7 +274,7 @@ Questions are grouped by how many models answer correctly:
 
 | Zone | Description | Why it matters |
 |------|-------------|----------------|
-| **All correct** | Every model in the pool gets it right | Routing to the cheapest model is optimal. Free cost savings. |
+| **All correct** | Every model in the pool gets it right | Routing to the most efficient model is optimal. Maximum efficiency, no accuracy tradeoff. |
 | **Disagree** | Some models right, some wrong | Where routing adds value. Router accuracy here is the key metric. |
 | **All wrong** | No model answers correctly | Nothing to save. Router accuracy is 0 by definition. |
 
@@ -345,7 +349,7 @@ Cost-coverage analysis at different tolerance levels:
 | All traffic to cheapest model | Tolerance too high | Lower tolerance (e.g., 0.10 instead of 0.20) |
 | All traffic to most expensive | Tolerance too low, or cheap models have very low AUC | Raise tolerance, or check if cheap models are genuinely bad |
 | High "all wrong" zone | Pool lacks a strong enough model for hard questions | Add a more capable model |
-| High "all correct" zone | Questions are too easy | The router is working perfectly — it routes to cheapest. But metrics look flat. |
+| High "all correct" zone | Questions are too easy | The router is working perfectly — it routes to the most efficient model. But metrics look flat. |
 | Many near-miss flippable errors | Router is close but not quite there | More training data, especially in the difficulty range where models disagree |
 
 ---

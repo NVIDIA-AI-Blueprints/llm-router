@@ -1,8 +1,7 @@
-import numpy as np
 import pytest
 
-from model_router_toolkit.router import BaseRouter, RoutingResult, CostEstimate
 from model_router_toolkit.adapters.litellm.strategy import ModelRoutingStrategy
+from model_router_toolkit.router import BaseRouter, CostEstimate, RoutingResult
 
 
 class FakeRouter(BaseRouter):
@@ -17,17 +16,25 @@ class FakeRouter(BaseRouter):
 
     def route(self, question, *, tolerance=0.10, models=None):
         allowed = set(models) if models else set(self._pool)
-        selected = self._selected if self._selected in allowed else next(
-            m for m in self._pool if m in allowed
+        selected = (
+            self._selected
+            if self._selected in allowed
+            else next(m for m in self._pool if m in allowed)
         )
         return RoutingResult(
             model_names=["model-a", "model-b"],
             confidences=[0.9, 0.7],
             costs=[
-                CostEstimate(median_output_tokens=100, cost_per_m_input_tokens=0.1,
-                             cost_per_m_output_tokens=0.1),
-                CostEstimate(median_output_tokens=200, cost_per_m_input_tokens=1.0,
-                             cost_per_m_output_tokens=1.0),
+                CostEstimate(
+                    median_output_tokens=100,
+                    cost_per_m_input_tokens=0.1,
+                    cost_per_m_output_tokens=0.1,
+                ),
+                CostEstimate(
+                    median_output_tokens=200,
+                    cost_per_m_input_tokens=1.0,
+                    cost_per_m_output_tokens=1.0,
+                ),
             ],
             selected_model=selected,
             metadata={"test": True, "allowed_models": sorted(allowed)},
@@ -43,10 +50,16 @@ class FakeRouter(BaseRouter):
             model_names=self._pool,
             confidences=[1.0 if m == model_name else 0.0 for m in self._pool],
             costs=[
-                CostEstimate(median_output_tokens=100, cost_per_m_input_tokens=0.1,
-                             cost_per_m_output_tokens=0.1),
-                CostEstimate(median_output_tokens=200, cost_per_m_input_tokens=1.0,
-                             cost_per_m_output_tokens=1.0),
+                CostEstimate(
+                    median_output_tokens=100,
+                    cost_per_m_input_tokens=0.1,
+                    cost_per_m_output_tokens=0.1,
+                ),
+                CostEstimate(
+                    median_output_tokens=200,
+                    cost_per_m_input_tokens=1.0,
+                    cost_per_m_output_tokens=1.0,
+                ),
             ],
             selected_model=model_name,
             metadata={"pinned": True},
@@ -56,12 +69,16 @@ class FakeRouter(BaseRouter):
 class TestModelRoutingStrategy:
     def test_sync_routing(self):
         strategy = ModelRoutingStrategy(FakeRouter("model-a"), tolerance=0.20)
-        strategy._litellm_router = type("R", (), {
-            "model_list": [
-                {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
-                {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
-            ]
-        })()
+        strategy._litellm_router = type(
+            "R",
+            (),
+            {
+                "model_list": [
+                    {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
+                    {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
+                ]
+            },
+        )()
 
         dep = strategy.get_available_deployment(
             model="test",
@@ -81,36 +98,47 @@ class TestModelRoutingStrategy:
     def test_empty_messages(self):
         strategy = ModelRoutingStrategy(FakeRouter(), tolerance=0.20)
         strategy._litellm_router = type("R", (), {"model_list": [{"model_name": "x"}]})()
-        dep = strategy.get_available_deployment(model="test", messages=[])
+        strategy.get_available_deployment(model="test", messages=[])
         assert strategy.last_result is None
 
     def test_extract_user_text(self):
         strategy = ModelRoutingStrategy(FakeRouter())
-        text = strategy._extract_user_text([
-            {"role": "system", "content": "You are helpful"},
-            {"role": "user", "content": "What is 2+2?"},
-        ])
+        text = strategy._extract_user_text(
+            [
+                {"role": "system", "content": "You are helpful"},
+                {"role": "user", "content": "What is 2+2?"},
+            ]
+        )
         assert text == "What is 2+2?"
 
     def test_extract_multipart_content(self):
         strategy = ModelRoutingStrategy(FakeRouter())
-        text = strategy._extract_user_text([
-            {"role": "user", "content": [
-                {"type": "text", "text": "Hello"},
-                {"type": "text", "text": "World"},
-            ]},
-        ])
+        text = strategy._extract_user_text(
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Hello"},
+                        {"type": "text", "text": "World"},
+                    ],
+                },
+            ]
+        )
         assert text == "Hello World"
 
     @pytest.mark.asyncio
     async def test_async_routing(self):
         strategy = ModelRoutingStrategy(FakeRouter("model-b"), tolerance=0.20)
-        strategy._litellm_router = type("R", (), {
-            "model_list": [
-                {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
-                {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
-            ]
-        })()
+        strategy._litellm_router = type(
+            "R",
+            (),
+            {
+                "model_list": [
+                    {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
+                    {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
+                ]
+            },
+        )()
 
         dep = await strategy.async_get_available_deployment(
             model="test",
@@ -121,12 +149,16 @@ class TestModelRoutingStrategy:
     def test_pin_model_metadata_bypasses_routing(self):
         """When request_kwargs has pin_model, skip ML and return pinned model."""
         strategy = ModelRoutingStrategy(FakeRouter("model-a"), tolerance=0.20)
-        strategy._litellm_router = type("R", (), {
-            "model_list": [
-                {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
-                {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
-            ]
-        })()
+        strategy._litellm_router = type(
+            "R",
+            (),
+            {
+                "model_list": [
+                    {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
+                    {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
+                ]
+            },
+        )()
 
         dep = strategy.get_available_deployment(
             model="model-a",
@@ -141,12 +173,16 @@ class TestModelRoutingStrategy:
     def test_pin_model_unknown_falls_through(self):
         """When pin_model is not in the pool, route normally via ML."""
         strategy = ModelRoutingStrategy(FakeRouter("model-a"), tolerance=0.20)
-        strategy._litellm_router = type("R", (), {
-            "model_list": [
-                {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
-                {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
-            ]
-        })()
+        strategy._litellm_router = type(
+            "R",
+            (),
+            {
+                "model_list": [
+                    {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
+                    {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
+                ]
+            },
+        )()
 
         dep = strategy.get_available_deployment(
             model="model-a",
@@ -159,12 +195,16 @@ class TestModelRoutingStrategy:
     def test_no_pin_model_routes_normally(self):
         """Without pin_model metadata, always route via ML even if model is a pool name."""
         strategy = ModelRoutingStrategy(FakeRouter("model-a"), tolerance=0.20)
-        strategy._litellm_router = type("R", (), {
-            "model_list": [
-                {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
-                {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
-            ]
-        })()
+        strategy._litellm_router = type(
+            "R",
+            (),
+            {
+                "model_list": [
+                    {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
+                    {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
+                ]
+            },
+        )()
 
         dep = strategy.get_available_deployment(
             model="model-b",
@@ -177,12 +217,16 @@ class TestModelRoutingStrategy:
     async def test_pin_model_async(self):
         """Async path also respects pin_model metadata."""
         strategy = ModelRoutingStrategy(FakeRouter("model-a"), tolerance=0.20)
-        strategy._litellm_router = type("R", (), {
-            "model_list": [
-                {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
-                {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
-            ]
-        })()
+        strategy._litellm_router = type(
+            "R",
+            (),
+            {
+                "model_list": [
+                    {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
+                    {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
+                ]
+            },
+        )()
 
         dep = await strategy.async_get_available_deployment(
             model="model-a",
@@ -195,12 +239,16 @@ class TestModelRoutingStrategy:
     def test_models_via_request_metadata(self):
         """Models subset passed via request metadata restricts routing."""
         strategy = ModelRoutingStrategy(FakeRouter("model-a"), tolerance=0.20)
-        strategy._litellm_router = type("R", (), {
-            "model_list": [
-                {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
-                {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
-            ]
-        })()
+        strategy._litellm_router = type(
+            "R",
+            (),
+            {
+                "model_list": [
+                    {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
+                    {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
+                ]
+            },
+        )()
 
         dep = strategy.get_available_deployment(
             model="test",
@@ -213,14 +261,20 @@ class TestModelRoutingStrategy:
     def test_models_server_default(self):
         """Server-wide models default restricts routing when no per-request override."""
         strategy = ModelRoutingStrategy(
-            FakeRouter("model-a"), tolerance=0.20, models=["model-b"],
+            FakeRouter("model-a"),
+            tolerance=0.20,
+            models=["model-b"],
         )
-        strategy._litellm_router = type("R", (), {
-            "model_list": [
-                {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
-                {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
-            ]
-        })()
+        strategy._litellm_router = type(
+            "R",
+            (),
+            {
+                "model_list": [
+                    {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
+                    {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
+                ]
+            },
+        )()
 
         dep = strategy.get_available_deployment(
             model="test",
@@ -231,14 +285,20 @@ class TestModelRoutingStrategy:
     def test_models_request_overrides_server_default(self):
         """Per-request models override the server-wide default."""
         strategy = ModelRoutingStrategy(
-            FakeRouter("model-a"), tolerance=0.20, models=["model-b"],
+            FakeRouter("model-a"),
+            tolerance=0.20,
+            models=["model-b"],
         )
-        strategy._litellm_router = type("R", (), {
-            "model_list": [
-                {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
-                {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
-            ]
-        })()
+        strategy._litellm_router = type(
+            "R",
+            (),
+            {
+                "model_list": [
+                    {"model_name": "model-a", "litellm_params": {"model": "openai/a"}},
+                    {"model_name": "model-b", "litellm_params": {"model": "openai/b"}},
+                ]
+            },
+        )()
 
         dep = strategy.get_available_deployment(
             model="test",

@@ -81,7 +81,7 @@ The encoder is not generating text. It's being used purely as a feature extracto
 
 Language models build increasingly abstract representations of input text as data flows through layers. Early layers capture surface-level features (syntax, word identity), while later layers capture semantic meaning (topic, complexity, reasoning requirements).
 
-Different target models have different strengths. A cheap model might handle questions where the answer is in the surface-level phrasing (factual recall), while an expensive model is needed when the question requires multi-step reasoning. The hidden states at the right layer capture exactly these distinctions.
+Different target models have different strengths. A lightweight model might handle questions where the answer is in the surface-level phrasing (factual recall), while a more capable model is needed when the question requires multi-step reasoning. The hidden states at the right layer capture exactly these distinctions.
 
 ### Chat template kwargs
 
@@ -196,7 +196,7 @@ Ensembling smooths out noise and improves calibration.
 
 ## Step 5: Model Selection
 
-Given P(correct) for each model and each model's cost, the selection algorithm picks the cheapest model that meets the accuracy threshold.
+Given P(correct) for each model and each model's cost, the selection algorithm picks the most efficient model that meets the accuracy threshold.
 
 ### Algorithm
 
@@ -210,15 +210,15 @@ selected = min(candidates, key=lambda m: cost[m])
 
 ### Tolerance explained
 
-The `tolerance` parameter is the maximum acceptable drop in P(correct) below the best model's confidence, in exchange for a cheaper model:
+The `tolerance` parameter is the maximum acceptable drop in P(correct) below the best model's confidence, in exchange for a more efficient model:
 
 | Tolerance | Behavior |
 |-----------|----------|
 | 0.00 | Always pick the model with the highest P(correct) — pure accuracy maximization |
-| 0.05 | Allow models within 5pp of the best — mild cost savings |
-| 0.20 | Allow models within 20pp of the best — aggressive cost savings (default) |
-| 0.50 | Very aggressive — large accuracy drops acceptable for cost |
-| 1.00 | Always pick the cheapest model regardless of confidence |
+| 0.05 | Allow models within 5pp of the best — mild efficiency gain |
+| 0.20 | Allow models within 20pp of the best — balanced efficiency (default) |
+| 0.50 | Very aggressive — large accuracy drops acceptable for efficiency |
+| 1.00 | Always pick the lowest-cost model regardless of confidence |
 
 ### Cost ranking
 

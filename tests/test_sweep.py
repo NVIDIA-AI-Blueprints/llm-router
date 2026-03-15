@@ -1,7 +1,6 @@
 """Tests for hyperparameter sweep module."""
 
 import numpy as np
-import pytest
 import torch
 
 from model_router_toolkit.prefill.extract import PrefillResult
@@ -31,8 +30,14 @@ class TestSweep:
         layers = list(range(half, n_layers))
 
         rng = np.random.default_rng(42)
-        hidden_last = {li: torch.from_numpy(rng.standard_normal((n_samples, hidden_dim)).astype(np.float32)) for li in layers}
-        hidden_mean = {li: torch.from_numpy(rng.standard_normal((n_samples, hidden_dim)).astype(np.float32)) for li in layers}
+        hidden_last = {
+            li: torch.from_numpy(rng.standard_normal((n_samples, hidden_dim)).astype(np.float32))
+            for li in layers
+        }
+        hidden_mean = {
+            li: torch.from_numpy(rng.standard_normal((n_samples, hidden_dim)).astype(np.float32))
+            for li in layers
+        }
 
         result = PrefillResult(
             hidden_last=hidden_last,
@@ -45,8 +50,12 @@ class TestSweep:
         train_mask[:60] = True
 
         sr = sweep_model(
-            result, labels, train_mask,
-            layers=layers, modes=["last"], pca_dims=[16, 32],
+            result,
+            labels,
+            train_mask,
+            layers=layers,
+            modes=["last"],
+            pca_dims=[16, 32],
         )
         assert isinstance(sr, SweepResult)
         assert sr.layer in layers

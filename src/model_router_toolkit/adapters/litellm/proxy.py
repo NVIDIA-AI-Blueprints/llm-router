@@ -43,8 +43,7 @@ def _check_proxy_available() -> None:
         from litellm.proxy import proxy_server  # noqa: F401
     except ImportError:
         raise ImportError(
-            "litellm proxy extras are not installed. "
-            "Run: pip install 'litellm[proxy]'"
+            "litellm proxy extras are not installed. Run: pip install 'litellm[proxy]'"
         ) from None
 
 
@@ -99,11 +98,31 @@ def start_proxy(
 
     @litellm_app.on_event("startup")
     async def _register_routing_strategy():
-        _inject_strategy(router_config_abs)
+        import asyncio
+
+        import litellm.proxy.proxy_server as proxy_module
+
+        max_attempts = 30
+        for attempt in range(1, max_attempts + 1):
+            if proxy_module.llm_router is not None:
+                _inject_strategy(router_config_abs)
+                return
+            logger.info(
+                "Waiting for litellm proxy router to initialize... (%d/%d)",
+                attempt,
+                max_attempts,
+            )
+            await asyncio.sleep(1.0)
+
+        logger.error(
+            "litellm proxy router did not initialize after %ds. "
+            "Routing strategy was NOT registered. Check your litellm config.",
+            max_attempts,
+        )
 
     import uvicorn
 
-    print(f"\nStarting LiteLLM Proxy with Model Router Toolkit")
+    print("\nStarting LiteLLM Proxy with Model Router Toolkit")
     print(f"  LiteLLM config : {litellm_config}")
     print(f"  Router config  : {router_config_abs}")
     print(f"  Listening on   : http://{host}:{port}\n")

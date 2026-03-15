@@ -6,7 +6,6 @@ and a trained checkpoint. Run with: pytest --run-slow
 
 import time
 
-import numpy as np
 import pytest
 import torch
 
@@ -41,6 +40,33 @@ class TestExtractUtilities:
         assert p.name.startswith("prefill_Qwen_Qwen3.5-0.8B_")
         assert p.suffix == ".pt"
 
+    def test_cache_path_different_for_different_questions(self, tmp_path):
+        path_a = prefill_cache_path(tmp_path, "enc", {}, ["q1", "q2"])
+        path_b = prefill_cache_path(tmp_path, "enc", {}, ["q3", "q4"])
+        assert path_a != path_b
+
+    def test_cache_path_same_for_same_questions(self, tmp_path):
+        path_a = prefill_cache_path(tmp_path, "enc", {}, ["q1", "q2"])
+        path_b = prefill_cache_path(tmp_path, "enc", {}, ["q1", "q2"])
+        assert path_a == path_b
+
+    def test_cache_path_stable_regardless_of_order(self, tmp_path):
+        path_a = prefill_cache_path(tmp_path, "enc", {}, ["q2", "q1"])
+        path_b = prefill_cache_path(tmp_path, "enc", {}, ["q1", "q2"])
+        assert path_a == path_b
+
+    def test_cache_path_stable_regardless_of_whitespace(self, tmp_path):
+        path_a = prefill_cache_path(tmp_path, "enc", {}, ["  What  is  2+2? "])
+        path_b = prefill_cache_path(tmp_path, "enc", {}, ["What is 2+2?"])
+        assert path_a == path_b
+
+    def test_cache_path_without_questions_backward_compat(self, tmp_path):
+        path_no_q = prefill_cache_path(tmp_path, "enc", {})
+        path_with_q = prefill_cache_path(tmp_path, "enc", {}, ["q1"])
+        assert path_no_q != path_with_q
+        assert len(path_no_q.stem.split("_")) == 3  # prefill_enc_hash
+        assert len(path_with_q.stem.split("_")) == 4  # prefill_enc_hash_qhash
+
     def test_detect_device(self):
         device = detect_device()
         assert device in ("cuda", "mps", "cpu")
@@ -52,8 +78,10 @@ class TestPrefillResultSerialization:
         hidden_last = {li: torch.randn(5, 64) for li in layers}
         hidden_mean = {li: torch.randn(5, 64) for li in layers}
         original = PrefillResult(
-            hidden_last=hidden_last, hidden_mean=hidden_mean,
-            n_layers=24, hidden_dim=64,
+            hidden_last=hidden_last,
+            hidden_mean=hidden_mean,
+            n_layers=24,
+            hidden_dim=64,
         )
 
         save_path = tmp_path / "test_prefill.pt"
@@ -76,7 +104,9 @@ class TestExtractorWithRealEncoder:
         extractor = PrefillExtractor("Qwen/Qwen3.5-0.8B", device="cpu")
         questions = ["What is 2+2?", "Prove P=NP"]
         result = extractor.extract_batch(
-            questions, batch_size=2, show_progress=False,
+            questions,
+            batch_size=2,
+            show_progress=False,
         )
         assert isinstance(result, PrefillResult)
         assert result.hidden_dim > 0
@@ -92,15 +122,19 @@ class TestExtractorWithRealEncoder:
 
         t0 = time.time()
         result1 = run_extraction(
-            "Qwen/Qwen3.5-0.8B", questions,
-            device="cpu", cache_dir=str(cache_dir),
+            "Qwen/Qwen3.5-0.8B",
+            questions,
+            device="cpu",
+            cache_dir=str(cache_dir),
         )
         first_time = time.time() - t0
 
         t0 = time.time()
         result2 = run_extraction(
-            "Qwen/Qwen3.5-0.8B", questions,
-            device="cpu", cache_dir=str(cache_dir),
+            "Qwen/Qwen3.5-0.8B",
+            questions,
+            device="cpu",
+            cache_dir=str(cache_dir),
         )
         cached_time = time.time() - t0
 

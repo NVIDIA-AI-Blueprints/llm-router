@@ -2,8 +2,8 @@
 
 __version__ = "0.1.0"
 
-from model_router_toolkit.config import PoolConfig, ModelSpec, load_config
-from model_router_toolkit.router import BaseRouter, RoutingResult, CostEstimate
+from model_router_toolkit.config import ModelSpec, PoolConfig, load_config
+from model_router_toolkit.router import BaseRouter, CostEstimate, RoutingResult
 
 
 def __getattr__(name: str):
@@ -18,6 +18,7 @@ def __getattr__(name: str):
         return ModelRoutingStrategy
     if name == "PrefillRouter":
         from model_router_toolkit.prefill.router import PrefillRouter
+
         return PrefillRouter
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

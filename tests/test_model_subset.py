@@ -3,12 +3,10 @@
 import numpy as np
 import pytest
 
-from model_router_toolkit.router import CostEstimate, RoutingResult
-
-
 # ---------------------------------------------------------------------------
 # BaseRouter / PrefillRouter subset tests
 # ---------------------------------------------------------------------------
+
 
 class TestPrefillRouterSubset:
     def test_unknown_model_raises_without_scoring(self, prefill_ckpt_path, prefill_config_path):
@@ -80,6 +78,7 @@ class TestPrefillRouterSubset:
 # ---------------------------------------------------------------------------
 # Evaluation subset tests
 # ---------------------------------------------------------------------------
+
 
 class TestEvalSubsetFiltering:
     """Test the column-slicing logic used in _run_prefill_evaluate."""

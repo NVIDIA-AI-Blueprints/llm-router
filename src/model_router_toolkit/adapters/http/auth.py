@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
-from typing import Callable
+from collections.abc import Callable
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -41,9 +41,13 @@ class WebhookAuthMiddleware(BaseHTTPMiddleware):
 
         hmac_sig = request.headers.get(self.HMAC_HEADER)
         if hmac_sig:
+            if hmac_sig.startswith("sha256="):
+                hmac_sig = hmac_sig[7:]
             body = await request.body()
             expected = hmac.new(
-                self.secret.encode(), body, hashlib.sha256,
+                self.secret.encode(),
+                body,
+                hashlib.sha256,
             ).hexdigest()
             if not hmac.compare_digest(hmac_sig, expected):
                 return JSONResponse(
@@ -54,7 +58,7 @@ class WebhookAuthMiddleware(BaseHTTPMiddleware):
 
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith(self.BEARER_PREFIX):
-            token = auth_header[len(self.BEARER_PREFIX):]
+            token = auth_header[len(self.BEARER_PREFIX) :]
             if hmac.compare_digest(token, self.secret):
                 return await call_next(request)
             return JSONResponse(
@@ -64,5 +68,8 @@ class WebhookAuthMiddleware(BaseHTTPMiddleware):
 
         return JSONResponse(
             status_code=401,
-            content={"error": "Missing authentication. Provide X-Webhook-Signature or Authorization: Bearer <token>"},
+            content={
+                "error": "Missing authentication. "
+                "Provide X-Webhook-Signature or Authorization: Bearer <token>"
+            },
         )

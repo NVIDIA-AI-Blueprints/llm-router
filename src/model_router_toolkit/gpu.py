@@ -20,9 +20,12 @@ def detect_gpus() -> list[GPUInfo]:
     """Detect available NVIDIA GPUs and their VRAM."""
     try:
         import subprocess
+
         result = subprocess.run(
             ["nvidia-smi", "--query-gpu=index,name,memory.total", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode != 0:
             return []
@@ -33,11 +36,13 @@ def detect_gpus() -> list[GPUInfo]:
                 continue
             parts = [p.strip() for p in line.split(",")]
             if len(parts) >= 3:
-                gpus.append(GPUInfo(
-                    index=int(parts[0]),
-                    name=parts[1],
-                    vram_mb=int(parts[2]),
-                ))
+                gpus.append(
+                    GPUInfo(
+                        index=int(parts[0]),
+                        name=parts[1],
+                        vram_mb=int(parts[2]),
+                    )
+                )
         return gpus
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return []

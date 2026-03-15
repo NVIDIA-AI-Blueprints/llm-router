@@ -47,6 +47,7 @@ TRUNK_PATIENCE = 15
 # Label loading
 # ---------------------------------------------------------------------------
 
+
 def _load_labels(csv_path: str | Path) -> dict[str, dict[str, Any]]:
     """Read labeled CSV -> ``{normalized_question: {model: isCorrect, ...}}``."""
     rows: dict[str, dict[str, Any]] = {}
@@ -93,6 +94,7 @@ def _compute_output_token_stats(
 # ---------------------------------------------------------------------------
 # Checkpoint building
 # ---------------------------------------------------------------------------
+
 
 def _build_checkpoint(
     config: PoolConfig,
@@ -146,6 +148,7 @@ def _build_checkpoint(
 # Main training entry point
 # ---------------------------------------------------------------------------
 
+
 def train_prefill(
     config: PoolConfig,
     data_path: str | Path,
@@ -174,8 +177,7 @@ def train_prefill(
     encoder = config.routing.encoder
     if not encoder:
         raise ValueError(
-            "Config routing.encoder must be set for prefill training "
-            "(e.g., 'Qwen/Qwen3.5-0.8B')"
+            "Config routing.encoder must be set for prefill training (e.g., 'Qwen/Qwen3.5-0.8B')"
         )
     encoder_tpl: dict[str, Any] = {}
     all_model_names = config.model_names
@@ -227,9 +229,11 @@ def train_prefill(
     print()
     print("  [2/6] Extracting prefill features...")
     prefill = run_extraction(
-        encoder, questions_raw,
+        encoder,
+        questions_raw,
         chat_template_kwargs=encoder_tpl,
-        device=dev, batch_size=batch_size,
+        device=dev,
+        batch_size=batch_size,
         cache_dir="cache/",
     )
 
@@ -238,7 +242,9 @@ def train_prefill(
     sweep_results: dict[str, SweepResult] = {}
     for mi, mname in enumerate(model_names):
         sweep_results[mname] = sweep_model(
-            prefill, Y[:, mi], train_mask,
+            prefill,
+            Y[:, mi],
+            train_mask,
             pca_dims=pca_dims,
             target_name=mname,
         )
@@ -263,8 +269,7 @@ def train_prefill(
         }
         feat_per_model[mname] = feats
         print(
-            f"         {mname}: L{sr.layer} {sr.mode} PCA{sr.pca_dim} "
-            f"(AUC={sr.cv_auc:.4f})",
+            f"         {mname}: L{sr.layer} {sr.mode} PCA{sr.pca_dim} (AUC={sr.cv_auc:.4f})",
         )
 
     shared_feats = np.hstack([feat_per_model[m] for m in model_names])
@@ -313,8 +318,12 @@ def train_prefill(
     }
 
     ckpt = _build_checkpoint(
-        config, model_names, transforms,
-        trunk_state_dicts, trunk_config, cost_table,
+        config,
+        model_names,
+        transforms,
+        trunk_state_dicts,
+        trunk_config,
+        cost_table,
     )
 
     ckpt_path = output_dir / "prefill_router.pt"

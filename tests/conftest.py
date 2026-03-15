@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Skip markers
 # ---------------------------------------------------------------------------
@@ -24,6 +23,7 @@ requires_openrouter_api_key = pytest.mark.skipif(
 def _has_torch() -> bool:
     try:
         import torch  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -48,6 +48,7 @@ def pytest_collection_modifyitems(config, items):
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def sample_pool_config_dict():
@@ -126,7 +127,8 @@ def v1_test_csv_subset(project_root, tmp_path):
     with open(src, newline="") as fin, open(dest, "w", newline="") as fout:
         reader = csv.DictReader(fin)
         writer = csv.DictWriter(
-            fout, fieldnames=["question", "model", "isCorrect", "output_tokens"],
+            fout,
+            fieldnames=["question", "model", "isCorrect", "output_tokens"],
         )
         writer.writeheader()
         for row in reader:
@@ -136,12 +138,14 @@ def v1_test_csv_subset(project_root, tmp_path):
                     break
                 continue
             counts[model] = counts.get(model, 0) + 1
-            writer.writerow({
-                "question": row["question"],
-                "model": row["model"],
-                "isCorrect": row["isCorrect"],
-                "output_tokens": row["output_tokens"],
-            })
+            writer.writerow(
+                {
+                    "question": row["question"],
+                    "model": row["model"],
+                    "isCorrect": row["isCorrect"],
+                    "output_tokens": row["output_tokens"],
+                }
+            )
     return dest
 
 

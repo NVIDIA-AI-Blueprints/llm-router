@@ -12,9 +12,7 @@ from pathlib import Path
 from typing import Any
 
 _DB_PATH: Path | None = (
-    Path(os.environ["ROUTER_TELEMETRY_DB"])
-    if os.environ.get("ROUTER_TELEMETRY_DB")
-    else None
+    Path(os.environ["ROUTER_TELEMETRY_DB"]) if os.environ.get("ROUTER_TELEMETRY_DB") else None
 )
 _conn: sqlite3.Connection | None = None
 
@@ -27,9 +25,7 @@ def enabled() -> bool:
 def _get_conn() -> sqlite3.Connection:
     global _conn
     if _DB_PATH is None:
-        raise RuntimeError(
-            "Telemetry not enabled. Set ROUTER_TELEMETRY_DB env var to a file path."
-        )
+        raise RuntimeError("Telemetry not enabled. Set ROUTER_TELEMETRY_DB env var to a file path.")
     if _conn is None:
         _conn = sqlite3.connect(str(_DB_PATH))
         _conn.execute("""
@@ -72,8 +68,13 @@ def log_chat(
 ) -> int:
     """Log a chat event and return its ID."""
     conn = _get_conn()
+    sql = (
+        "INSERT INTO chat_events"
+        " (session_id, question, selected_model, latency_ms, created_at)"
+        " VALUES (?, ?, ?, ?, ?)"
+    )
     cur = conn.execute(
-        "INSERT INTO chat_events (session_id, question, selected_model, latency_ms, created_at) VALUES (?, ?, ?, ?, ?)",
+        sql,
         (session_id, question, selected_model, latency_ms, datetime.now(timezone.utc).isoformat()),
     )
     conn.commit()

@@ -91,11 +91,11 @@ How it works: the router finds the model with the highest P(correct) (`p_max`), 
 | Value | Behavior |
 |-------|----------|
 | `0.00` | Always pick the highest-confidence model (pure accuracy) |
-| `0.05` | Mild cost savings, very conservative |
-| `0.10` | Moderate cost savings |
-| `0.20` | Aggressive cost savings (default) |
+| `0.05` | Mild efficiency gain, very conservative |
+| `0.10` | Moderate efficiency gain |
+| `0.20` | Balanced efficiency (default) |
 | `0.50` | Very aggressive, large accuracy drops acceptable |
-| `1.00` | Always pick the cheapest model |
+| `1.00` | Always pick the lowest-cost model |
 
 This can be overridden per-request in all adapters.
 
@@ -279,11 +279,11 @@ routing:
   encoder: Qwen/Qwen3.5-0.8B
 
 models:
-  - name: cheap
+  - name: lightweight
     cost_per_m_input_tokens: 0.05
     cost_per_m_output_tokens: 0.20
 
-  - name: expensive
+  - name: capable
     cost_per_m_input_tokens: 2.50
     cost_per_m_output_tokens: 15.00
 ```
@@ -340,13 +340,13 @@ models:
     api_base: https://integrate.api.nvidia.com/v1
 ```
 
-### High-tolerance cost optimization
+### High-tolerance efficiency mode
 
 ```yaml
 routing:
   method: prefill
   checkpoint: checkpoints/prefill_router.pt
-  tolerance: 0.35  # aggressive — prioritize cost savings
+  tolerance: 0.35  # aggressive — prioritize efficiency
   encoder: Qwen/Qwen3.5-0.8B
 
 models:

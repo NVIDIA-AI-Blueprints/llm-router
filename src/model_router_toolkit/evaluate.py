@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # Cost-coverage curve helpers (ported from prefill-complexity-router)
 # ---------------------------------------------------------------------------
 
+
 def _pareto_frontier(
     points: list[tuple[float, float]],
 ) -> list[tuple[float, float]]:
@@ -81,8 +82,7 @@ def _build_routing_curve(
         if key not in seen:
             seen.add(key)
             counts = np.bincount(choices, minlength=len(model_names))
-            dist = {mn: round(float(counts[mi]) / N, 6)
-                    for mi, mn in enumerate(model_names)}
+            dist = {mn: round(float(counts[mi]) / N, 6) for mi, mn in enumerate(model_names)}
             dist["_tol"] = float(tol)
             curve.append((avg_cost, acc))
             dists.append(dist)
@@ -183,6 +183,7 @@ def _load_pricing_csv(
 # Shared data loading
 # ---------------------------------------------------------------------------
 
+
 def _load_labels(
     data_path: str | Path,
 ) -> tuple[list[str], dict[str, dict[str, Any]]]:
@@ -214,6 +215,7 @@ def _load_labels(
 # Prefill evaluation (batch extraction + trunk)
 # ---------------------------------------------------------------------------
 
+
 def _build_shared_features(
     ckpt: dict[str, Any],
     prefill_results: dict,
@@ -228,15 +230,16 @@ def _build_shared_features(
         pr = prefill_results.get(mname)
         if pr is None:
             raise RuntimeError(
-                f"No prefill result for target '{mname}' "
-                f"(encoder='{t.get('encoder', '?')}')"
+                f"No prefill result for target '{mname}' (encoder='{t.get('encoder', '?')}')"
             )
         if t["mode"] == "mean":
             import torch
+
             raw = pr.hidden_mean[t["layer"]]
             raw = raw.float().numpy() if isinstance(raw, torch.Tensor) else raw
         else:
             import torch
+
             raw = pr.hidden_last[t["layer"]]
             raw = raw.float().numpy() if isinstance(raw, torch.Tensor) else raw
         feat[mname] = apply_pipeline(raw, t["scaler"], t["pca"])
@@ -294,8 +297,7 @@ def _print_eval_report(
         tc = ckpt["trunk_config"]
         trunk_size = len(ckpt.get("shared_trunk", []))
         print(
-            f"  Trunk:      d_in={tc['d_in']}, "
-            f"hidden={tc['hidden']}, ensemble={trunk_size}",
+            f"  Trunk:      d_in={tc['d_in']}, hidden={tc['hidden']}, ensemble={trunk_size}",
         )
 
     # Transforms summary
@@ -307,8 +309,7 @@ def _print_eval_report(
             enc = t.get("encoder", "")
             enc_short = enc.split("/")[-1] if enc else ""
             print(
-                f"    {mname:20s}: L{t['layer']} {t['mode']} "
-                f"PCA{t['pca_dim']} ({enc_short})",
+                f"    {mname:20s}: L{t['layer']} {t['mode']} PCA{t['pca_dim']} ({enc_short})",
             )
 
     # Per-model metrics
@@ -317,8 +318,7 @@ def _print_eval_report(
     print(f"  {'-' * 20}  {'-' * 8}  {'-' * 7}")
     for mi, mname in enumerate(model_names):
         print(
-            f"  {mname:20s}  {Y[:, mi].mean():8.4f}  "
-            f"{per_model_auc[mname]:7.4f}",
+            f"  {mname:20s}  {Y[:, mi].mean():8.4f}  {per_model_auc[mname]:7.4f}",
         )
 
     # Summary
@@ -327,7 +327,7 @@ def _print_eval_report(
     print(f"  Best single:  {best_acc:.4f} ({best_name})")
     print(f"  Headroom:     {(oracle_acc - best_acc) * 100:.1f}pp")
     print()
-    print(f"  Router (argmax):")
+    print("  Router (argmax):")
     print(
         f"    Accuracy:     {router_acc:.4f} ({lift * 100:+.2f}pp, "
         f"{pct_headroom:.1f}% headroom captured)",
@@ -340,8 +340,7 @@ def _print_eval_report(
         pct = n_routed / N * 100
         local_acc = Y[choices == mi, mi].mean() if n_routed > 0 else 0
         print(
-            f"      {mname:20s}: {n_routed:4d} ({pct:5.1f}%)  "
-            f"acc_when_chosen={local_acc:.4f}",
+            f"      {mname:20s}: {n_routed:4d} ({pct:5.1f}%)  acc_when_chosen={local_acc:.4f}",
         )
 
     # Agreement zones
@@ -362,9 +361,7 @@ def _print_eval_report(
             np.mean([zone_Y[i, zone_choices[i]] for i in range(zn)]),
         )
         zone_dist = np.bincount(zone_choices, minlength=n_models)
-        dist_str = "  ".join(
-            f"{m}={zone_dist[mi]}" for mi, m in enumerate(model_names)
-        )
+        dist_str = "  ".join(f"{m}={zone_dist[mi]}" for mi, m in enumerate(model_names))
         print(
             f"    {zone_name:15s} ({zn:4d}, {zn / N * 100:5.1f}%): "
             f"acc={zone_acc:.4f}  [{dist_str}]",
@@ -379,8 +376,7 @@ def _print_eval_report(
 
     if pricing:
         pricing_costs = _load_pricing_csv(pricing)
-        costs_map = {mn: pricing_costs[mn] for mn in model_names
-                     if mn in pricing_costs} or None
+        costs_map = {mn: pricing_costs[mn] for mn in model_names if mn in pricing_costs} or None
         if costs_map and not all(mn in costs_map for mn in model_names):
             missing = [mn for mn in model_names if mn not in costs_map]
             logger.warning("Pricing CSV missing models: %s", missing)
@@ -394,8 +390,7 @@ def _print_eval_report(
         floor_acc = float(Y[:, cheapest_mi].mean())
 
         model_points = [
-            (costs_map[mn], float(Y[:, mi].mean()))
-            for mi, mn in enumerate(model_names)
+            (costs_map[mn], float(Y[:, mi].mean())) for mi, mn in enumerate(model_names)
         ]
         routing_curve, _ = _build_routing_curve(Y, probs, model_names, costs_map)
         pareto_curve = _pareto_frontier(model_points)
@@ -404,7 +399,10 @@ def _print_eval_report(
         p_auccc = _padded_auc(routing_curve, c_min, c_max, floor_acc)
         pareto_auccc = _padded_auc(pareto_curve, c_min, c_max, floor_acc)
         combined_pareto_auccc = _padded_auc(
-            combined_pareto_curve, c_min, c_max, floor_acc,
+            combined_pareto_curve,
+            c_min,
+            c_max,
+            floor_acc,
         )
         pdp_auccc = combined_pareto_auccc - p_auccc
         mdp_auccc = p_auccc - pareto_auccc
@@ -479,22 +477,19 @@ def _print_deep_analysis(
         n_flippable = int((gaps_arr < 0.05).sum())
         n_tiny = int((gaps_arr < 0.02).sum())
         print()
-        print(f"  Near-miss (disagree zone, wrong routing):")
+        print("  Near-miss (disagree zone, wrong routing):")
         print(
-            f"    Wrong decisions: {n_wrong}/{dz_n} "
-            f"({n_wrong / dz_n * 100:.1f}%)",
+            f"    Wrong decisions: {n_wrong}/{dz_n} ({n_wrong / dz_n * 100:.1f}%)",
         )
         print(
             f"    Confidence gap (chosen_wrong - best_correct): "
             f"mean={gaps_arr.mean():.4f}  median={np.median(gaps_arr):.4f}",
         )
         print(
-            f"    Flippable (gap < 0.05): {n_flippable} "
-            f"({n_flippable / n_wrong * 100:.1f}%)",
+            f"    Flippable (gap < 0.05): {n_flippable} ({n_flippable / n_wrong * 100:.1f}%)",
         )
         print(
-            f"    Tiny gap   (gap < 0.02): {n_tiny} "
-            f"({n_tiny / n_wrong * 100:.1f}%)",
+            f"    Tiny gap   (gap < 0.02): {n_tiny} ({n_tiny / n_wrong * 100:.1f}%)",
         )
 
     # Pairwise win rates (only for small model pools)
@@ -502,7 +497,7 @@ def _print_deep_analysis(
         print()
         print("  Pairwise confidence win rates (disagree zone):")
         print(
-            f"  When A correct & B wrong, P(conf_A > conf_B):",
+            "  When A correct & B wrong, P(conf_A > conf_B):",
         )
         header = f"    {'':20s}"
         for mname in model_names:
@@ -534,6 +529,7 @@ def _run_prefill_evaluate(
     batch_size: int = 4,
     models: list[str] | None = None,
     pricing: str | Path | None = None,
+    output: str | Path | None = None,
 ) -> dict[str, Any]:
     """Rich prefill evaluation: batch extraction + trunk + full metrics."""
     import torch
@@ -558,8 +554,10 @@ def _run_prefill_evaluate(
 
     print("  Extracting prefill features...")
     prefill_results = extract_from_checkpoint(
-        ckpt, questions_raw,
-        device=device, batch_size=batch_size,
+        ckpt,
+        questions_raw,
+        device=device,
+        batch_size=batch_size,
         cache_dir="cache/",
     )
     shared_feats = _build_shared_features(ckpt, prefill_results, all_model_names)
@@ -583,14 +581,32 @@ def _run_prefill_evaluate(
         Y = Y_all
         probs = probs_all
 
-    return _print_eval_report(
-        model_names, Y, probs, ckpt, config=config, pricing=pricing,
+    report = _print_eval_report(
+        model_names,
+        Y,
+        probs,
+        ckpt,
+        config=config,
+        pricing=pricing,
     )
+
+    if output:
+        import json as _json
+
+        serializable = {
+            k: (v if not isinstance(v, np.ndarray) else v.tolist()) for k, v in report.items()
+        }
+        Path(output).parent.mkdir(parents=True, exist_ok=True)
+        Path(output).write_text(_json.dumps(serializable, indent=2, default=str))
+        print(f"\n  Report written to {output}")
+
+    return report
 
 
 # ---------------------------------------------------------------------------
 # Fallback: BaseRouter evaluation (generic)
 # ---------------------------------------------------------------------------
+
 
 def _run_baserouter_evaluate(
     config_path: str | Path,
@@ -617,7 +633,9 @@ def _run_baserouter_evaluate(
             q = row.get("question", "").strip()
             model = row.get("model", "").strip()
             is_correct = str(row.get("isCorrect", "0")).lower() in (
-                "1", "true", "yes",
+                "1",
+                "true",
+                "yes",
             )
             out_tokens = 0
             try:
@@ -665,20 +683,25 @@ def _run_baserouter_evaluate(
 # Public entry point
 # ---------------------------------------------------------------------------
 
+
 def run_evaluate(
     config_path: str | Path,
     checkpoint_path: str | Path,
     data_path: str | Path,
     **kwargs,
-) -> None:
+) -> dict | None:
     """Evaluate a routing checkpoint. Dispatches by method."""
     config = load_config(config_path)
     method = config.routing.method.lower()
 
     if method == "prefill":
-        _run_prefill_evaluate(checkpoint_path, data_path, config=config, **kwargs)
+        return _run_prefill_evaluate(checkpoint_path, data_path, config=config, **kwargs)
     else:
         models = kwargs.get("models")
         _run_baserouter_evaluate(
-            config_path, checkpoint_path, data_path, models=models,
+            config_path,
+            checkpoint_path,
+            data_path,
+            models=models,
         )
+        return None

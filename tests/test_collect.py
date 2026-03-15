@@ -3,18 +3,14 @@
 from __future__ import annotations
 
 import csv
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from model_router_toolkit.collect import (
-    DEFAULT_JUDGE_MODEL,
     _JUDGE_SYSTEM_PROMPT,
+    DEFAULT_JUDGE_MODEL,
     _judge_llm,
     _parse_judge_response,
 )
-
 
 # ---------------------------------------------------------------------------
 # _parse_judge_response
@@ -174,8 +170,11 @@ class TestRunCollectLlmJudge:
         mock_judge_llm.side_effect = [True, False, True, False]
 
         run_collect(
-            config_path, questions_path, output_path,
-            judge_method="llm", judge_model="test-judge",
+            config_path,
+            questions_path,
+            output_path,
+            judge_method="llm",
+            judge_model="test-judge",
         )
 
         with open(output_path) as f:
@@ -202,8 +201,11 @@ class TestRunCollectLlmJudge:
         mock_judge_llm.return_value = True
 
         run_collect(
-            config_path, questions_path, output_path,
-            judge_method="llm", judge_model="my-custom-judge",
+            config_path,
+            questions_path,
+            output_path,
+            judge_method="llm",
+            judge_model="my-custom-judge",
         )
 
         for call in mock_judge_llm.call_args_list:
@@ -212,7 +214,10 @@ class TestRunCollectLlmJudge:
     @patch("model_router_toolkit.collect._judge_llm")
     @patch("model_router_toolkit.collect._call_model")
     def test_judge_failure_defaults_incorrect(
-        self, mock_call_model, mock_judge_llm, tmp_path,
+        self,
+        mock_call_model,
+        mock_judge_llm,
+        tmp_path,
     ):
         from model_router_toolkit.collect import run_collect
 
@@ -225,8 +230,11 @@ class TestRunCollectLlmJudge:
         mock_judge_llm.side_effect = RuntimeError("API down")
 
         run_collect(
-            str(config_path), str(qf), output_path,
-            judge_method="llm", judge_model="broken-judge",
+            str(config_path),
+            str(qf),
+            output_path,
+            judge_method="llm",
+            judge_model="broken-judge",
         )
 
         with open(output_path) as f:
@@ -248,7 +256,9 @@ class TestRunCollectLlmJudge:
         mock_judge_llm.return_value = True
 
         run_collect(
-            config_path, questions_path, output_path,
+            config_path,
+            questions_path,
+            output_path,
             judge_method="llm",
         )
 

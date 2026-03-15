@@ -74,7 +74,7 @@ const Playground = (function () {
         '<li>Your question is run through an encoder model (single forward pass)</li>' +
         '<li>Hidden state features are extracted and transformed</li>' +
         '<li>An MLP ensemble scores p(correct) for each model</li>' +
-        '<li>The router picks the <strong>cheapest</strong> model above the accuracy threshold</li>' +
+        '<li>The router picks the <strong>most efficient</strong> model above the accuracy threshold</li>' +
         '</ol>';
     } else {
       howItWorksEl.innerHTML =
@@ -82,7 +82,7 @@ const Playground = (function () {
         '<ol>' +
         '<li>Your question is analyzed by the routing model</li>' +
         '<li>Each model receives a p(correct) confidence score</li>' +
-        '<li>The router picks the <strong>cheapest</strong> model above the accuracy threshold</li>' +
+        '<li>The router picks the <strong>most efficient</strong> model above the accuracy threshold</li>' +
         '</ol>';
     }
   }
@@ -292,7 +292,7 @@ const Playground = (function () {
       '<div id="' + probsId + '" class="collapsed" style="margin-top:6px;">' +
       '<div style="margin-bottom:4px; font-size:10px; color:var(--text-dim);">\u2605 = highest probability, \u2190 = selected model</div>' +
       probsHtml +
-      '<div class="routing-summary"><strong>Selected: ' + dn(selected) + '</strong> \u2014 cheapest model with p(correct) \u2265 ' + thresholdStr + '</div>' +
+      '<div class="routing-summary"><strong>Selected: ' + dn(selected) + '</strong> \u2014 most efficient model with p(correct) \u2265 ' + thresholdStr + '</div>' +
       '</div></div></div></div>';
   }
 

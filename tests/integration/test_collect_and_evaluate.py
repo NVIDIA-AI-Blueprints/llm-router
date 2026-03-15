@@ -37,10 +37,7 @@ class TestRunCollectRealAPI:
         from model_router_toolkit.collect import run_collect
 
         questions_file = tmp_path / "questions.txt"
-        questions_file.write_text(
-            "What is the capital of France?\n"
-            "What is 2+2?\n"
-        )
+        questions_file.write_text("What is the capital of France?\nWhat is 2+2?\n")
         output_file = tmp_path / "collected.csv"
 
         run_collect(

@@ -86,6 +86,16 @@ async def route(request: Request, req: RouteRequest):
     result = app_router.route(question, tolerance=req.tolerance, models=allowed)
     route_ms = (time.perf_counter() - t0) * 1000
 
+    from model_router_toolkit import telemetry
+
+    if telemetry.enabled():
+        telemetry.log_chat(
+            session_id=None,
+            question=question,
+            selected_model=result.selected_model,
+            latency_ms=route_ms,
+        )
+
     response = _result_to_response(result)
     response.metadata["route_ms"] = round(route_ms, 2)
     return response

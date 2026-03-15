@@ -11,10 +11,10 @@ from model_router_toolkit.evaluate import (
     _route_at_tolerance,
 )
 
-
 # ---------------------------------------------------------------------------
 # _pareto_frontier
 # ---------------------------------------------------------------------------
+
 
 class TestParetoFrontier:
     def test_single_point(self):
@@ -50,21 +50,26 @@ class TestParetoFrontier:
 # _route_at_tolerance
 # ---------------------------------------------------------------------------
 
+
 class TestRouteAtTolerance:
     def test_zero_tolerance_picks_most_confident(self):
-        probs = np.array([
-            [0.9, 0.3],
-            [0.4, 0.8],
-        ])
+        probs = np.array(
+            [
+                [0.9, 0.3],
+                [0.4, 0.8],
+            ]
+        )
         costs = np.array([1.0, 2.0])
         choices = _route_at_tolerance(probs, costs, tol=0.0)
         np.testing.assert_array_equal(choices, [0, 1])
 
     def test_high_tolerance_picks_cheapest(self):
-        probs = np.array([
-            [0.9, 0.3],
-            [0.4, 0.8],
-        ])
+        probs = np.array(
+            [
+                [0.9, 0.3],
+                [0.4, 0.8],
+            ]
+        )
         costs = np.array([1.0, 2.0])
         choices = _route_at_tolerance(probs, costs, tol=1.0)
         np.testing.assert_array_equal(choices, [0, 0])
@@ -85,6 +90,7 @@ class TestRouteAtTolerance:
 # ---------------------------------------------------------------------------
 # _build_routing_curve
 # ---------------------------------------------------------------------------
+
 
 class TestBuildRoutingCurve:
     def test_returns_sorted_curve(self):
@@ -142,6 +148,7 @@ class TestBuildRoutingCurve:
 # _padded_auc
 # ---------------------------------------------------------------------------
 
+
 class TestPaddedAuc:
     def test_flat_curve_returns_zero(self):
         curve = [(1.0, 0.5), (2.0, 0.5)]
@@ -173,10 +180,16 @@ class TestPaddedAuc:
 
     def test_monotonic_lift(self):
         low = _padded_auc(
-            [(1.0, 0.6), (2.0, 0.7)], c_min=1.0, c_max=2.0, floor_acc=0.5,
+            [(1.0, 0.6), (2.0, 0.7)],
+            c_min=1.0,
+            c_max=2.0,
+            floor_acc=0.5,
         )
         high = _padded_auc(
-            [(1.0, 0.9), (2.0, 0.95)], c_min=1.0, c_max=2.0, floor_acc=0.5,
+            [(1.0, 0.9), (2.0, 0.95)],
+            c_min=1.0,
+            c_max=2.0,
+            floor_acc=0.5,
         )
         assert high > low
 
@@ -184,6 +197,7 @@ class TestPaddedAuc:
 # ---------------------------------------------------------------------------
 # _build_cost_map
 # ---------------------------------------------------------------------------
+
 
 class TestBuildCostMap:
     def test_from_checkpoint_pool_config(self):
@@ -254,6 +268,7 @@ class TestBuildCostMap:
 # End-to-end: metrics from known data
 # ---------------------------------------------------------------------------
 
+
 class TestEndToEndMetrics:
     """Verify the full pipeline produces sensible metrics on synthetic data."""
 
@@ -292,10 +307,7 @@ class TestEndToEndMetrics:
         c_min, c_max = 0.5, 2.0
         floor_acc = float(Y[:, 0].mean())
 
-        model_points = [
-            (costs[mn], float(Y[:, mi].mean()))
-            for mi, mn in enumerate(model_names)
-        ]
+        model_points = [(costs[mn], float(Y[:, mi].mean())) for mi, mn in enumerate(model_names)]
         curve, _ = _build_routing_curve(Y, probs, model_names, costs)
         pareto_curve = _pareto_frontier(model_points)
 
@@ -309,10 +321,7 @@ class TestEndToEndMetrics:
         c_min, c_max = 0.5, 2.0
         floor_acc = float(Y[:, 0].mean())
 
-        model_points = [
-            (costs[mn], float(Y[:, mi].mean()))
-            for mi, mn in enumerate(model_names)
-        ]
+        model_points = [(costs[mn], float(Y[:, mi].mean())) for mi, mn in enumerate(model_names)]
         curve, _ = _build_routing_curve(Y, probs, model_names, costs)
         combined_pareto = _pareto_frontier(model_points + curve)
 
@@ -326,10 +335,7 @@ class TestEndToEndMetrics:
         c_min, c_max = 0.5, 2.0
         floor_acc = float(Y[:, 0].mean())
 
-        model_points = [
-            (costs[mn], float(Y[:, mi].mean()))
-            for mi, mn in enumerate(model_names)
-        ]
+        model_points = [(costs[mn], float(Y[:, mi].mean())) for mi, mn in enumerate(model_names)]
         curve, _ = _build_routing_curve(Y, probs, model_names, costs)
         pareto_curve = _pareto_frontier(model_points)
 

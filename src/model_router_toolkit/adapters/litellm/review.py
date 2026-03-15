@@ -83,7 +83,9 @@ def _parse_json_response(text: str) -> dict:
         return {"correct": None, "confidence": "low", "explanation": cleaned[:200]}
 
 
-JUDGE_PROMPT = """You are an expert evaluator. Given a question and an AI model's answer, determine if the answer is correct, accurate, and reasonably complete.
+JUDGE_PROMPT = """\
+You are an expert evaluator. Given a question and an AI model's answer, \
+determine if the answer is correct, accurate, and reasonably complete.
 
 Question: {question}
 
@@ -182,19 +184,25 @@ async def _review_stream(request: Request, req: ReviewRequest):
                 if model_verdict.get("correct"):
                     any_correct = True
 
-                yield _sse_event("model-result", {
-                    "model": model_name,
-                    "display_name": display_name,
-                    "correct": model_verdict.get("correct"),
-                    "explanation": model_verdict.get("explanation", ""),
-                })
+                yield _sse_event(
+                    "model-result",
+                    {
+                        "model": model_name,
+                        "display_name": display_name,
+                        "correct": model_verdict.get("correct"),
+                        "explanation": model_verdict.get("explanation", ""),
+                    },
+                )
             except Exception as e:
-                yield _sse_event("model-result", {
-                    "model": model_name,
-                    "display_name": display_name,
-                    "correct": None,
-                    "explanation": f"Error: {str(e)[:100]}",
-                })
+                yield _sse_event(
+                    "model-result",
+                    {
+                        "model": model_name,
+                        "display_name": display_name,
+                        "correct": None,
+                        "explanation": f"Error: {str(e)[:100]}",
+                    },
+                )
 
         summary = (
             "Other models answered correctly — routing may have been suboptimal"
@@ -209,13 +217,17 @@ async def _review_stream(request: Request, req: ReviewRequest):
 
 @router.post("/review")
 async def review(request: Request, req: ReviewRequest):
-    has_key = bool(
-        os.environ.get("OPENROUTER_API_KEY")
-        or os.environ.get("NVIDIA_API_KEY")
-    )
+    has_key = bool(os.environ.get("OPENROUTER_API_KEY") or os.environ.get("NVIDIA_API_KEY"))
     if not has_key:
+
         async def _unavailable():
-            yield _sse_event("error", {"message": "Auto-review requires an API key (OPENROUTER_API_KEY or NVIDIA_API_KEY)"})
+            yield _sse_event(
+                "error",
+                {
+                    "message": "Auto-review requires an API key "
+                    "(OPENROUTER_API_KEY or NVIDIA_API_KEY)"
+                },
+            )
 
         return StreamingResponse(
             _unavailable(),

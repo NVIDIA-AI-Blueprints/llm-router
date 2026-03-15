@@ -162,14 +162,14 @@ def run_collect(
     if judge_method == "reference":
         if not references_path:
             raise ValueError(
-                "Reference judging requires --references CSV "
-                "with columns: question, answer",
+                "Reference judging requires --references CSV with columns: question, answer",
             )
         references = _load_references(references_path)
         print(f"  Loaded {len(references)} reference answers")
 
     try:
         from tqdm import tqdm
+
         iterator = tqdm(questions, desc="  Collecting")
     except ImportError:
         iterator = questions
@@ -192,7 +192,9 @@ def run_collect(
             except Exception:
                 logger.warning(
                     "Model %s failed on question: %.80s...",
-                    model_spec.name, q, exc_info=True,
+                    model_spec.name,
+                    q,
+                    exc_info=True,
                 )
                 outputs_by_model[model_spec.name] = ("", 0)
 
@@ -201,12 +203,14 @@ def run_collect(
             majority = _judge_vote(all_outputs)
             for model_name, (content, out_tokens) in outputs_by_model.items():
                 is_correct = _normalize(content) == majority
-                rows.append({
-                    "question": q,
-                    "model": model_name,
-                    "isCorrect": int(is_correct),
-                    "output_tokens": out_tokens,
-                })
+                rows.append(
+                    {
+                        "question": q,
+                        "model": model_name,
+                        "isCorrect": int(is_correct),
+                        "output_tokens": out_tokens,
+                    }
+                )
                 model_total[model_name] = model_total.get(model_name, 0) + 1
                 if is_correct:
                     model_correct[model_name] = model_correct.get(model_name, 0) + 1
@@ -214,12 +218,14 @@ def run_collect(
         elif judge_method == "reference":
             for model_name, (content, out_tokens) in outputs_by_model.items():
                 is_correct = _judge_reference(content, q, references)
-                rows.append({
-                    "question": q,
-                    "model": model_name,
-                    "isCorrect": int(is_correct),
-                    "output_tokens": out_tokens,
-                })
+                rows.append(
+                    {
+                        "question": q,
+                        "model": model_name,
+                        "isCorrect": int(is_correct),
+                        "output_tokens": out_tokens,
+                    }
+                )
                 model_total[model_name] = model_total.get(model_name, 0) + 1
                 if is_correct:
                     model_correct[model_name] = model_correct.get(model_name, 0) + 1
@@ -231,22 +237,27 @@ def run_collect(
                 except Exception:
                     logger.warning(
                         "Judge failed for model %s on question: %.80s...",
-                        model_name, q, exc_info=True,
+                        model_name,
+                        q,
+                        exc_info=True,
                     )
                     is_correct = False
-                rows.append({
-                    "question": q,
-                    "model": model_name,
-                    "isCorrect": int(is_correct),
-                    "output_tokens": out_tokens,
-                })
+                rows.append(
+                    {
+                        "question": q,
+                        "model": model_name,
+                        "isCorrect": int(is_correct),
+                        "output_tokens": out_tokens,
+                    }
+                )
                 model_total[model_name] = model_total.get(model_name, 0) + 1
                 if is_correct:
                     model_correct[model_name] = model_correct.get(model_name, 0) + 1
 
     with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(
-            f, fieldnames=["question", "model", "isCorrect", "output_tokens"],
+            f,
+            fieldnames=["question", "model", "isCorrect", "output_tokens"],
         )
         writer.writeheader()
         writer.writerows(rows)

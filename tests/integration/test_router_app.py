@@ -60,9 +60,12 @@ class TestRouterOnlyModeWithRealEncoder:
 
         app = create_app(str(v1_config_path))
         client = TestClient(app)
-        resp = client.post("/v1/route", json={
-            "question": "What is the capital of France?",
-        })
+        resp = client.post(
+            "/v1/route",
+            json={
+                "question": "What is the capital of France?",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["selected_model"] in data["model_names"]
@@ -77,12 +80,15 @@ class TestRouterOnlyModeWithRealEncoder:
 
         app = create_app(str(v1_config_path))
         client = TestClient(app)
-        resp = client.post("/v1/route", json={
-            "messages": [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "Prove sqrt(2) is irrational"},
-            ],
-        })
+        resp = client.post(
+            "/v1/route",
+            json={
+                "messages": [
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": "Prove sqrt(2) is irrational"},
+                ],
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["selected_model"] in data["model_names"]
@@ -94,9 +100,12 @@ class TestRouterOnlyModeWithRealEncoder:
 
         app = create_app(str(v1_config_path))
         client = TestClient(app)
-        resp = client.post("/v1/route", json={
-            "question": "What is 2+2?",
-        })
+        resp = client.post(
+            "/v1/route",
+            json={
+                "question": "What is 2+2?",
+            },
+        )
         data = resp.json()
         assert len(data["costs"]) == len(data["model_names"])
         for cost in data["costs"]:
@@ -111,9 +120,12 @@ class TestRouterOnlyModeWithRealEncoder:
 
         app = create_app(str(v1_config_path))
         client = TestClient(app)
-        resp = client.post("/v1/chat/completions", json={
-            "messages": [{"role": "user", "content": "Hello"}],
-        })
+        resp = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+        )
         assert resp.status_code in (404, 405)
 
     def test_tolerance_affects_routing(self, v1_config_path):
@@ -124,14 +136,20 @@ class TestRouterOnlyModeWithRealEncoder:
         app = create_app(str(v1_config_path))
         client = TestClient(app)
 
-        resp_tight = client.post("/v1/route", json={
-            "question": "Explain quantum entanglement in detail",
-            "tolerance": 0.01,
-        })
-        resp_loose = client.post("/v1/route", json={
-            "question": "Explain quantum entanglement in detail",
-            "tolerance": 0.99,
-        })
+        resp_tight = client.post(
+            "/v1/route",
+            json={
+                "question": "Explain quantum entanglement in detail",
+                "tolerance": 0.01,
+            },
+        )
+        resp_loose = client.post(
+            "/v1/route",
+            json={
+                "question": "Explain quantum entanglement in detail",
+                "tolerance": 0.99,
+            },
+        )
         assert resp_tight.status_code == 200
         assert resp_loose.status_code == 200
 
@@ -143,7 +161,9 @@ class TestServeRouterCLI:
     def test_serve_router_help(self):
         result = subprocess.run(
             ["model-router", "serve-router", "--help"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         assert result.returncode == 0
         assert "router-only" in result.stdout.lower() or "router" in result.stdout.lower()

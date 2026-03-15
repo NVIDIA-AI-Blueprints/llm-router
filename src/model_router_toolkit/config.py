@@ -64,7 +64,6 @@ def load_config(path: str | Path) -> PoolConfig:
 
 def build_router_from_config(config: PoolConfig):
     """Construct the appropriate BaseRouter from config."""
-    from model_router_toolkit.router import BaseRouter
 
     method = config.routing.method.lower()
 

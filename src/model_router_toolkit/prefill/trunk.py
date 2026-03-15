@@ -55,7 +55,9 @@ def reconstruct_trunk(ckpt: dict, device: str = "cpu") -> list[SharedTrunkNet]:
     nets = []
     for sd in ckpt["shared_trunk"]:
         net = SharedTrunkNet(
-            tcfg["d_in"], tcfg["n_outputs"], hidden=tuple(tcfg["hidden"]),
+            tcfg["d_in"],
+            tcfg["n_outputs"],
+            hidden=tuple(tcfg["hidden"]),
         )
         net.load_state_dict(sd)
         net = net.to(device).eval()
@@ -87,6 +89,7 @@ def predict_proba(
 # Training
 # ---------------------------------------------------------------------------
 
+
 def train_mlp(
     net: nn.Module,
     X: np.ndarray,
@@ -105,8 +108,7 @@ def train_mlp(
     if seed is not None:
         torch.manual_seed(seed)
         net.apply(
-            lambda m: m.reset_parameters()
-            if hasattr(m, "reset_parameters") else None,
+            lambda m: m.reset_parameters() if hasattr(m, "reset_parameters") else None,
         )
 
     net = net.to(device)
@@ -127,7 +129,7 @@ def train_mlp(
         net.train()
         perm = torch.randperm(n_tr)
         for i in range(0, n_tr, batch_size):
-            batch = tr_idx[perm[i: i + batch_size]]
+            batch = tr_idx[perm[i : i + batch_size]]
             logits = net(Xt[batch])
             loss = loss_fn(logits, yt[batch])
             opt.zero_grad()

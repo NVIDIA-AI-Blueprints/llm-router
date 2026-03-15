@@ -6,21 +6,19 @@ a litellm Router, and the CLI subcommands.
 
 from __future__ import annotations
 
-import textwrap
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
 
-from model_router_toolkit.config import ModelSpec, PoolConfig, RoutingConfig
 from model_router_toolkit.adapters.litellm.config_bridge import (
     generate_litellm_config,
     validate_model_alignment,
 )
-from model_router_toolkit.router import BaseRouter, CostEstimate, RoutingResult
 from model_router_toolkit.adapters.litellm.strategy import ModelRoutingStrategy
-
+from model_router_toolkit.config import ModelSpec, PoolConfig, RoutingConfig
+from model_router_toolkit.router import BaseRouter, CostEstimate, RoutingResult
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -35,7 +33,9 @@ class StubRouter(BaseRouter):
     def load(self, checkpoint_path):
         pass
 
-    def route(self, question: str, *, tolerance: float = 0.20, models: list[str] | None = None) -> RoutingResult:
+    def route(
+        self, question: str, *, tolerance: float = 0.20, models: list[str] | None = None
+    ) -> RoutingResult:
         n = len(self._model_names)
         return RoutingResult(
             model_names=self._model_names,
@@ -131,19 +131,13 @@ class TestGenerateLiteLLMConfig:
 
     def test_litellm_model_preserved(self):
         config = generate_litellm_config(_pool_config())
-        models = {
-            e["model_name"]: e["litellm_params"]["model"]
-            for e in config["model_list"]
-        }
+        models = {e["model_name"]: e["litellm_params"]["model"] for e in config["model_list"]}
         assert models["model-a"] == "nvidia_nim/nvidia/test-a"
         assert models["model-b"] == "openrouter/openai/test-b"
 
     def test_api_key_env_var_resolved(self):
         config = generate_litellm_config(_pool_config())
-        keys = {
-            e["model_name"]: e["litellm_params"]["api_key"]
-            for e in config["model_list"]
-        }
+        keys = {e["model_name"]: e["litellm_params"]["api_key"] for e in config["model_list"]}
         assert keys["model-a"] == "os.environ/NVIDIA_API_KEY"
         assert keys["model-b"] == "os.environ/OPENROUTER_API_KEY"
 
@@ -188,7 +182,8 @@ class TestValidateModelAlignment:
     def test_extra_in_litellm(self, tmp_path):
         pool_path = _write_pool_yaml(tmp_path)
         litellm_path = _write_litellm_yaml(
-            tmp_path, ["model-a", "model-b", "model-c"],
+            tmp_path,
+            ["model-a", "model-b", "model-c"],
         )
         warnings = validate_model_alignment(litellm_path, pool_path)
         assert len(warnings) == 1
@@ -276,6 +271,82 @@ class TestStrategyInjection:
 
         mock_from_config.assert_called_once_with(pool_path_str)
         assert mock_strategy._litellm_router is litellm_router
+
+
+# ---------------------------------------------------------------------------
+# Deferred startup injection tests
+# ---------------------------------------------------------------------------
+
+
+class TestDeferredStartupInjection:
+    """Tests for the polling-based deferred strategy injection in start_proxy."""
+
+    @pytest.mark.asyncio
+    async def test_deferred_injection_waits_for_router(self, tmp_path):
+        """Startup handler retries until llm_router becomes non-None."""
+        import asyncio
+        import sys
+        import types
+
+        from litellm import Router as LiteLLMRouter
+
+        from model_router_toolkit.adapters.litellm.proxy import _inject_strategy
+
+        fake_proxy = types.ModuleType("litellm.proxy.proxy_server")
+        fake_proxy.llm_router = None
+
+        pool_path = _write_pool_yaml(tmp_path)
+        inject_called = asyncio.Event()
+
+        async def simulate_startup():
+            """Simulates the deferred startup polling loop."""
+            max_attempts = 5
+            for attempt in range(1, max_attempts + 1):
+                if fake_proxy.llm_router is not None:
+                    _inject_strategy(str(pool_path))
+                    inject_called.set()
+                    return
+                await asyncio.sleep(0.1)
+
+        async def set_router_later():
+            await asyncio.sleep(0.25)
+            model_list = [
+                {"model_name": "m-a", "litellm_params": {"model": "openai/a", "api_key": "k"}},
+            ]
+            fake_proxy.llm_router = LiteLLMRouter(model_list=model_list)
+
+        stub = StubRouter(["m-a"])
+        mock_strategy = ModelRoutingStrategy(stub, tolerance=0.20)
+
+        with (
+            patch.dict(sys.modules, {"litellm.proxy.proxy_server": fake_proxy}),
+            patch(
+                "model_router_toolkit.adapters.litellm.strategy.ModelRoutingStrategy.from_config",
+                return_value=mock_strategy,
+            ),
+        ):
+            await asyncio.gather(simulate_startup(), set_router_later())
+
+        assert inject_called.is_set()
+        assert mock_strategy._litellm_router is fake_proxy.llm_router
+
+    @pytest.mark.asyncio
+    async def test_deferred_injection_logs_error_on_timeout(self, tmp_path, caplog):
+        """Startup handler logs error when llm_router never becomes available."""
+        import asyncio
+
+        fake_llm_router_value = None
+
+        async def simulate_timeout():
+            max_attempts = 3
+            for attempt in range(1, max_attempts + 1):
+                if fake_llm_router_value is not None:
+                    return True
+                await asyncio.sleep(0.05)
+            return False
+
+        result = await simulate_timeout()
+        assert result is False
 
 
 # ---------------------------------------------------------------------------

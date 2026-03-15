@@ -6,23 +6,21 @@ and response formatting without loading any encoder or checkpoint.
 
 import hashlib
 import hmac as hmac_mod
-import tempfile
-from pathlib import Path
+import os
 from unittest.mock import patch
 
 import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from model_router_toolkit.config import PoolConfig
-from model_router_toolkit.router import BaseRouter, CostEstimate, RoutingResult
 from model_router_toolkit.adapters.http.app import create_app
+from model_router_toolkit.adapters.http.auth import WebhookAuthMiddleware
 from model_router_toolkit.adapters.http.route import (
     RouteRequest,
     _extract_question,
     _result_to_response,
 )
-from model_router_toolkit.adapters.http.auth import WebhookAuthMiddleware
+from model_router_toolkit.router import BaseRouter, CostEstimate, RoutingResult
 
 
 class FakeRouter(BaseRouter):
@@ -61,7 +59,9 @@ class FakeRouter(BaseRouter):
             ],
             selected_model=selected,
             metadata={
-                "p_max": 0.92, "threshold": 0.72, "tolerance": tolerance,
+                "p_max": 0.92,
+                "threshold": 0.72,
+                "tolerance": tolerance,
                 "allowed_models": sorted(allowed),
             },
         )
@@ -153,24 +153,29 @@ def authed_client(fake_config_path):
 # Helper function tests
 # ---------------------------------------------------------------------------
 
+
 class TestExtractQuestion:
     def test_from_question_field(self):
         req = RouteRequest(question="What is 2+2?")
         assert _extract_question(req) == "What is 2+2?"
 
     def test_from_messages(self):
-        req = RouteRequest(messages=[
-            {"role": "system", "content": "You are helpful"},
-            {"role": "user", "content": "What is gravity?"},
-        ])
+        req = RouteRequest(
+            messages=[
+                {"role": "system", "content": "You are helpful"},
+                {"role": "user", "content": "What is gravity?"},
+            ]
+        )
         assert _extract_question(req) == "What is gravity?"
 
     def test_last_user_message(self):
-        req = RouteRequest(messages=[
-            {"role": "user", "content": "First question"},
-            {"role": "assistant", "content": "Answer"},
-            {"role": "user", "content": "Follow-up question"},
-        ])
+        req = RouteRequest(
+            messages=[
+                {"role": "user", "content": "First question"},
+                {"role": "assistant", "content": "Answer"},
+                {"role": "user", "content": "Follow-up question"},
+            ]
+        )
         assert _extract_question(req) == "Follow-up question"
 
     def test_question_field_takes_priority(self):
@@ -185,9 +190,11 @@ class TestExtractQuestion:
         assert _extract_question(req) == ""
 
     def test_no_user_message(self):
-        req = RouteRequest(messages=[
-            {"role": "system", "content": "System prompt"},
-        ])
+        req = RouteRequest(
+            messages=[
+                {"role": "system", "content": "System prompt"},
+            ]
+        )
         assert _extract_question(req) == ""
 
 
@@ -224,6 +231,7 @@ class TestResultToResponse:
 # ---------------------------------------------------------------------------
 # Endpoint tests
 # ---------------------------------------------------------------------------
+
 
 class TestHealthEndpoint:
     def test_health_returns_ok(self, client):
@@ -272,18 +280,24 @@ class TestRouteEndpoint:
         assert "route_ms" in data["metadata"]
 
     def test_route_with_messages(self, client):
-        resp = client.post("/v1/route", json={
-            "messages": [{"role": "user", "content": "Hello world"}],
-        })
+        resp = client.post(
+            "/v1/route",
+            json={
+                "messages": [{"role": "user", "content": "Hello world"}],
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["selected_model"] == "model-a"
 
     def test_route_with_tolerance(self, client):
-        resp = client.post("/v1/route", json={
-            "question": "Hard question",
-            "tolerance": 0.05,
-        })
+        resp = client.post(
+            "/v1/route",
+            json={
+                "question": "Hard question",
+                "tolerance": 0.05,
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["metadata"]["tolerance"] == 0.05
@@ -317,10 +331,13 @@ class TestRouteEndpoint:
         assert data["metadata"].get("pinned") is True
 
     def test_route_model_pin_unknown_falls_through(self, client):
-        resp = client.post("/v1/route", json={
-            "model": "unknown-model",
-            "question": "What is 2+2?",
-        })
+        resp = client.post(
+            "/v1/route",
+            json={
+                "model": "unknown-model",
+                "question": "What is 2+2?",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["selected_model"] == "model-a"
@@ -328,10 +345,13 @@ class TestRouteEndpoint:
 
     def test_route_model_pin_ignores_question(self, client):
         """When model is a known pool model, question text is irrelevant."""
-        resp = client.post("/v1/route", json={
-            "model": "model-b",
-            "question": "This text should be ignored",
-        })
+        resp = client.post(
+            "/v1/route",
+            json={
+                "model": "model-b",
+                "question": "This text should be ignored",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["selected_model"] == "model-b"
@@ -342,9 +362,12 @@ class TestNoInferenceEndpoints:
     """Verify that inference endpoints from the full server are NOT present."""
 
     def test_no_completions_endpoint(self, client):
-        resp = client.post("/v1/chat/completions", json={
-            "messages": [{"role": "user", "content": "Hello"}],
-        })
+        resp = client.post(
+            "/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+        )
         assert resp.status_code in (404, 405)
 
     def test_no_chat_endpoint(self, client):
@@ -359,6 +382,7 @@ class TestNoInferenceEndpoints:
 # ---------------------------------------------------------------------------
 # Webhook auth middleware tests
 # ---------------------------------------------------------------------------
+
 
 class TestWebhookAuth:
     """Tests for adapters/http/auth.py WebhookAuthMiddleware."""
@@ -436,6 +460,30 @@ class TestWebhookAuth:
             resp = client.post("/v1/route", json={"question": "Test"})
             assert resp.status_code == 200
 
+    def test_hmac_sha256_prefix_accepted(self, authed_client):
+        """HMAC with sha256= prefix (as documented) should be accepted."""
+        import json
+
+        body = json.dumps({"question": "What is 2+2?"}).encode()
+        sig = "sha256=" + self._sign(body)
+        resp = authed_client.post(
+            "/v1/route",
+            content=body,
+            headers={"Content-Type": "application/json", "X-Webhook-Signature": sig},
+        )
+        assert resp.status_code == 200
+
+    def test_hmac_sha256_prefix_invalid_still_rejected(self, authed_client):
+        import json
+
+        body = json.dumps({"question": "What is 2+2?"}).encode()
+        resp = authed_client.post(
+            "/v1/route",
+            content=body,
+            headers={"Content-Type": "application/json", "X-Webhook-Signature": "sha256=bad"},
+        )
+        assert resp.status_code == 401
+
     def test_health_bypasses_auth(self, authed_client):
         resp = authed_client.get("/health")
         assert resp.status_code == 200
@@ -455,10 +503,13 @@ class TestRouteModelsFilter:
             yield TestClient(app)
 
     def test_route_with_models_filter(self, client):
-        resp = client.post("/v1/route", json={
-            "question": "What is 2+2?",
-            "models": ["model-b"],
-        })
+        resp = client.post(
+            "/v1/route",
+            json={
+                "question": "What is 2+2?",
+                "models": ["model-b"],
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["selected_model"] == "model-b"
@@ -470,10 +521,13 @@ class TestRouteModelsFilter:
         assert data["selected_model"] == "model-a"
 
     def test_route_models_still_returns_all_confidences(self, client):
-        resp = client.post("/v1/route", json={
-            "question": "What is 2+2?",
-            "models": ["model-b"],
-        })
+        resp = client.post(
+            "/v1/route",
+            json={
+                "question": "What is 2+2?",
+                "models": ["model-b"],
+            },
+        )
         data = resp.json()
         assert set(data["confidences"].keys()) == {"model-a", "model-b"}
 
@@ -495,9 +549,80 @@ class TestRouteModelsFilter:
         ):
             app = create_app(fake_config_path, warmup=False, models=["model-b"])
             client = TestClient(app)
-            resp = client.post("/v1/route", json={
-                "question": "What is 2+2?",
-                "models": ["model-a"],
-            })
+            resp = client.post(
+                "/v1/route",
+                json={
+                    "question": "What is 2+2?",
+                    "models": ["model-a"],
+                },
+            )
             assert resp.status_code == 200
             assert resp.json()["selected_model"] == "model-a"
+
+
+# ---------------------------------------------------------------------------
+# create_app auth wiring tests
+# ---------------------------------------------------------------------------
+
+
+class TestCreateAppAuthWiring:
+    """Verify that create_app automatically wires WebhookAuthMiddleware
+    when ROUTER_WEBHOOK_SECRET is set in the environment."""
+
+    def test_create_app_wires_auth_when_env_set(self, fake_config_path):
+        with (
+            patch(
+                "model_router_toolkit.adapters.http.app.build_router_from_config",
+                return_value=FakeRouter(),
+            ),
+            patch.dict(os.environ, {"ROUTER_WEBHOOK_SECRET": "auto-secret"}),
+        ):
+            app = create_app(fake_config_path, warmup=False)
+            client = TestClient(app)
+            resp = client.post("/v1/route", json={"question": "test"})
+            assert resp.status_code == 401
+
+    def test_create_app_no_auth_when_env_unset(self, fake_config_path):
+        env = os.environ.copy()
+        env.pop("ROUTER_WEBHOOK_SECRET", None)
+        with (
+            patch(
+                "model_router_toolkit.adapters.http.app.build_router_from_config",
+                return_value=FakeRouter(),
+            ),
+            patch.dict(os.environ, env, clear=True),
+        ):
+            app = create_app(fake_config_path, warmup=False)
+            client = TestClient(app)
+            resp = client.post("/v1/route", json={"question": "test"})
+            assert resp.status_code == 200
+
+    def test_create_app_health_bypasses_auto_auth(self, fake_config_path):
+        with (
+            patch(
+                "model_router_toolkit.adapters.http.app.build_router_from_config",
+                return_value=FakeRouter(),
+            ),
+            patch.dict(os.environ, {"ROUTER_WEBHOOK_SECRET": "auto-secret"}),
+        ):
+            app = create_app(fake_config_path, warmup=False)
+            client = TestClient(app)
+            resp = client.get("/health")
+            assert resp.status_code == 200
+
+    def test_create_app_bearer_works_with_auto_auth(self, fake_config_path):
+        with (
+            patch(
+                "model_router_toolkit.adapters.http.app.build_router_from_config",
+                return_value=FakeRouter(),
+            ),
+            patch.dict(os.environ, {"ROUTER_WEBHOOK_SECRET": "auto-secret"}),
+        ):
+            app = create_app(fake_config_path, warmup=False)
+            client = TestClient(app)
+            resp = client.post(
+                "/v1/route",
+                json={"question": "test"},
+                headers={"Authorization": "Bearer auto-secret"},
+            )
+            assert resp.status_code == 200

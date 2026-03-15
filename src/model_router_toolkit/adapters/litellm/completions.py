@@ -8,6 +8,8 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from model_router_toolkit.router import extract_user_text
+
 router = APIRouter()
 
 
@@ -43,6 +45,7 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
         kwargs["metadata"] = metadata
 
     if stream:
+
         async def sse_stream():
             response_stream = await litellm_router.acompletion(**kwargs)
             async for chunk in response_stream:
@@ -68,12 +71,24 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
     if strategy.last_result:
         result_data["routing"] = {
             "selected_model": strategy.last_result.selected_model,
-            "confidences": dict(zip(
-                strategy.last_result.model_names,
-                strategy.last_result.confidences,
-            )),
+            "confidences": dict(
+                zip(
+                    strategy.last_result.model_names,
+                    strategy.last_result.confidences,
+                )
+            ),
             "metadata": strategy.last_result.metadata,
         }
+
+    from model_router_toolkit import telemetry
+
+    if telemetry.enabled() and strategy.last_result:
+        user_text = extract_user_text(messages)
+        telemetry.log_chat(
+            session_id=None,
+            question=user_text,
+            selected_model=strategy.last_result.selected_model,
+        )
 
     return JSONResponse(content=result_data)
 

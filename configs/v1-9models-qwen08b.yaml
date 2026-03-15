@@ -28,9 +28,9 @@ models:
 
   - name: nemotron-3-super
     display_name: Nemotron 3 Super
-    litellm_model: openrouter/nvidia/nemotron-3-super-49b-v1
-    cost_per_m_input_tokens: 0.100
-    cost_per_m_output_tokens: 0.400
+    litellm_model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+    cost_per_m_input_tokens: 0.000
+    cost_per_m_output_tokens: 0.000
 
   - name: gpt-oss-120b-high
     display_name: GPT-OSS 120B High
@@ -48,7 +48,7 @@ models:
 
   - name: qwen-3-5-122b
     display_name: Qwen 3.5 122B
-    litellm_model: openrouter/qwen/qwen3.5-122b
+    litellm_model: openrouter/qwen/qwen3.5-122b-a10b
     cost_per_m_input_tokens: 0.260
     cost_per_m_output_tokens: 2.080
 

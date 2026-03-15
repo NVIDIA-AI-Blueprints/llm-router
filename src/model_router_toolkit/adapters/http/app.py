@@ -13,8 +13,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from model_router_toolkit.config import build_router_from_config, load_config
 from model_router_toolkit.adapters.http._shared import health_dict, models_list, warmup_router
+from model_router_toolkit.config import build_router_from_config, load_config
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,12 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    secret = os.environ.get("ROUTER_WEBHOOK_SECRET")
+    if secret:
+        from model_router_toolkit.adapters.http.auth import WebhookAuthMiddleware
+
+        app.add_middleware(WebhookAuthMiddleware, secret=secret)
 
     app.state.router = base_router
     app.state.config = config

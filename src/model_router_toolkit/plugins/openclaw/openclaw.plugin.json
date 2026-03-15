@@ -1,7 +1,7 @@
 {
   "id": "model-router",
   "name": "Model Router",
-  "description": "Intelligent per-prompt model routing based on query complexity. Routes easy prompts to cheap models and hard prompts to capable models.",
+  "description": "Intelligent per-prompt model routing based on query complexity. Routes each prompt to the most efficient model that meets your accuracy threshold.",
   "version": "0.1.0",
   "kind": "agent",
   "configSchema": {
@@ -17,7 +17,7 @@
         "default": 0.20,
         "minimum": 0.0,
         "maximum": 1.0,
-        "description": "Accuracy-cost tradeoff. Higher = more cost savings, lower = more quality."
+        "description": "Accuracy–efficiency tradeoff. Higher = more efficiency, lower = more accuracy."
       },
       "enabled": {
         "type": "boolean",
@@ -35,7 +35,7 @@
         "items": {
           "type": "object",
           "properties": {
-            "routerName": { "type": "string", "description": "Model name in router config (e.g. 'strong', 'cheap')" },
+            "routerName": { "type": "string", "description": "Model name in router config (e.g. 'strong', 'efficient')" },
             "provider": { "type": "string", "description": "OpenClaw provider ID (e.g. 'anthropic', 'ollama')" },
             "model": { "type": "string", "description": "OpenClaw model ID (e.g. 'claude-sonnet-4-5', 'llama3.3')" }
           },

@@ -122,6 +122,7 @@ def _api_key_env_var(litellm_model: str, api_base: str) -> str:
     logger.warning(
         "Could not determine API key env var for model %r (api_base=%r); "
         "falling back to OPENAI_API_KEY",
-        litellm_model, api_base,
+        litellm_model,
+        api_base,
     )
     return "OPENAI_API_KEY"

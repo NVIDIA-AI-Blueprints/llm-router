@@ -3,7 +3,7 @@
  *
  * Uses the before_model_resolve hook to call a model-router-toolkit sidecar
  * (POST /v1/route) before each LLM call, overriding the model selection with
- * the router's cost-aware decision.
+ * the router's efficiency-aware decision.
  *
  * Setup:
  *   1. Start the sidecar: model-router serve-router --config pool.yaml --port 8079

@@ -24,7 +24,7 @@ The router predicts, for each question, which models will answer correctly and w
 
 Each training example says: "For question Q, model M produced a correct/incorrect answer."
 
-The more examples, and the more diverse the questions, the better the router learns to distinguish easy questions (where cheap models suffice) from hard ones (where expensive models are needed).
+The more examples, and the more diverse the questions, the better the router learns to distinguish straightforward questions (where lightweight models maintain accuracy) from complex ones (where more capable models are needed).
 
 ---
 

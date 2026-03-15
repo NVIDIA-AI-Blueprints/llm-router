@@ -21,8 +21,10 @@ def warmup_router(router: BaseRouter, config: PoolConfig) -> None:
         elapsed = time.time() - t0
         print(f"  Warmup complete in {elapsed:.1f}s")
         print(f"  Models: {result.model_names}")
-        print(f"  Test route -> {result.selected_model} "
-              f"(confidences: {', '.join(f'{c:.3f}' for c in result.confidences)})")
+        print(
+            f"  Test route -> {result.selected_model} "
+            f"(confidences: {', '.join(f'{c:.3f}' for c in result.confidences)})"
+        )
     except Exception as e:
         elapsed = time.time() - t0
         print(f"  Warmup failed after {elapsed:.1f}s: {e}")

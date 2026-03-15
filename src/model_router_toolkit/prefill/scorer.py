@@ -13,10 +13,10 @@ from typing import Any
 import numpy as np
 import torch
 
-from model_router_toolkit.router import CostEstimate
 from model_router_toolkit.prefill.extract import PrefillExtractor, PrefillResult
 from model_router_toolkit.prefill.transforms import build_features
-from model_router_toolkit.prefill.trunk import SharedTrunkNet, reconstruct_trunk, predict_proba
+from model_router_toolkit.prefill.trunk import SharedTrunkNet, predict_proba, reconstruct_trunk
+from model_router_toolkit.router import CostEstimate
 
 
 @dataclass
@@ -110,15 +110,17 @@ class PrefillScorer:
             est_out_cost = median_out * rate_out / 1_000_000
             est_in_cost = est_in_tokens * rate_in / 1_000_000
 
-            costs.append(CostEstimate(
-                median_output_tokens=median_out,
-                cost_per_m_input_tokens=rate_in,
-                cost_per_m_output_tokens=rate_out,
-                estimated_input_tokens=est_in_tokens,
-                estimated_output_cost=est_out_cost,
-                estimated_input_cost=est_in_cost,
-                estimated_total_cost=est_in_cost + est_out_cost,
-            ))
+            costs.append(
+                CostEstimate(
+                    median_output_tokens=median_out,
+                    cost_per_m_input_tokens=rate_in,
+                    cost_per_m_output_tokens=rate_out,
+                    estimated_input_tokens=est_in_tokens,
+                    estimated_output_cost=est_out_cost,
+                    estimated_input_cost=est_in_cost,
+                    estimated_total_cost=est_in_cost + est_out_cost,
+                )
+            )
 
         return RawScores(
             model_names=self.model_names,

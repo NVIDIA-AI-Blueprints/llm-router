@@ -11,11 +11,15 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import torch
+
+warnings.filterwarnings("ignore", message=".*torchvision.*")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +29,7 @@ RANDOM_STATE = 42
 # ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------
+
 
 def normalize_question(q: str) -> str:
     """Normalize whitespace and case for question deduplication."""
@@ -41,10 +46,16 @@ def prefill_cache_path(
     prefill_dir: str | Path,
     encoder: str,
     chat_template_kwargs: dict[str, Any],
+    questions: list[str] | None = None,
 ) -> Path:
-    """Cache filename keyed by (encoder, template)."""
+    """Cache filename keyed by (encoder, template, questions)."""
     safe_enc = encoder.replace("/", "_").replace(" ", "_")
     th = template_hash(encoder, chat_template_kwargs)
+    if questions:
+        qh = hashlib.sha256(
+            "|".join(sorted(normalize_question(q) for q in questions)).encode()
+        ).hexdigest()[:12]
+        return Path(prefill_dir) / f"prefill_{safe_enc}_{th}_{qh}.pt"
     return Path(prefill_dir) / f"prefill_{safe_enc}_{th}.pt"
 
 
@@ -53,6 +64,10 @@ def detect_device() -> str:
     if torch.cuda.is_available():
         return "cuda"
     if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        logger.warning(
+            "MPS (Apple Silicon GPU) detected. MPS support is experimental "
+            "and may cause silent crashes. Use --device cpu if unstable."
+        )
         return "mps"
     return "cpu"
 
@@ -60,6 +75,7 @@ def detect_device() -> str:
 # ---------------------------------------------------------------------------
 # PrefillResult
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class PrefillResult:
@@ -109,19 +125,23 @@ class PrefillResult:
                 li = int(key.split("_")[1])
                 hidden_mean[li] = data[key]
         n_layers = cfg.get(
-            "n_layers", max(hidden_last.keys()) + 1 if hidden_last else 0,
+            "n_layers",
+            max(hidden_last.keys()) + 1 if hidden_last else 0,
         )
         sample = next(iter(hidden_last.values()))
         hidden_dim = cfg.get("hidden_dim", sample.shape[-1])
         return cls(
-            hidden_last=hidden_last, hidden_mean=hidden_mean,
-            n_layers=n_layers, hidden_dim=hidden_dim,
+            hidden_last=hidden_last,
+            hidden_mean=hidden_mean,
+            n_layers=n_layers,
+            hidden_dim=hidden_dim,
         )
 
 
 # ---------------------------------------------------------------------------
 # PrefillExtractor
 # ---------------------------------------------------------------------------
+
 
 class PrefillExtractor:
     """Loads an HF causal LM and extracts prefill hidden states.
@@ -162,7 +182,9 @@ class PrefillExtractor:
         cd = self._cache_dir or os.environ.get("HF_HUB_CACHE")
 
         self._tokenizer = AutoTokenizer.from_pretrained(
-            self._hf_path, cache_dir=cd, trust_remote_code=True,
+            self._hf_path,
+            cache_dir=cd,
+            trust_remote_code=True,
         )
         if self._tokenizer.pad_token is None:
             self._tokenizer.pad_token = self._tokenizer.eos_token
@@ -176,7 +198,8 @@ class PrefillExtractor:
             load_kwargs["device_map"] = "auto"
 
         self._model = AutoModelForCausalLM.from_pretrained(
-            self._hf_path, **load_kwargs,
+            self._hf_path,
+            **load_kwargs,
         )
         self._model.eval()
 
@@ -222,7 +245,9 @@ class PrefillExtractor:
         formatted = [
             self._tokenizer.apply_chat_template(
                 [{"role": "user", "content": q}],
-                tokenize=False, add_generation_prompt=True, **tpl_kwargs,
+                tokenize=False,
+                add_generation_prompt=True,
+                **tpl_kwargs,
             )
             for q in questions
         ]
@@ -236,25 +261,32 @@ class PrefillExtractor:
 
         if show_progress:
             from tqdm import tqdm
+
             short_name = self._hf_path.split("/")[-1]
             iterator = tqdm(
-                iterator, total=n_batches,
+                iterator,
+                total=n_batches,
                 desc=f"  extract({short_name})",
             )
 
         for batch_start in iterator:
-            batch_texts = formatted[batch_start: batch_start + batch_size]
+            batch_texts = formatted[batch_start : batch_start + batch_size]
             inputs = self._tokenizer(
-                batch_texts, return_tensors="pt", padding=True,
-                truncation=True, max_length=max_length,
+                batch_texts,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=max_length,
             )
             input_ids = inputs["input_ids"].to(self._model.device)
             attention_mask = inputs["attention_mask"].to(self._model.device)
 
             with torch.no_grad():
                 outputs = self._model(
-                    input_ids=input_ids, attention_mask=attention_mask,
-                    output_hidden_states=True, use_cache=False,
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    output_hidden_states=True,
+                    use_cache=False,
                 )
 
             hidden_states = outputs.hidden_states
@@ -293,6 +325,7 @@ class PrefillExtractor:
 # High-level extraction with caching
 # ---------------------------------------------------------------------------
 
+
 def run_extraction(
     encoder_hf_path: str,
     questions: list[str],
@@ -307,25 +340,28 @@ def run_extraction(
     tpl = chat_template_kwargs or {}
 
     if cache_dir:
-        cp = prefill_cache_path(cache_dir, encoder_hf_path, tpl)
+        cp = prefill_cache_path(cache_dir, encoder_hf_path, tpl, questions)
         if cp.exists():
             print(f"  Loading cached prefill: {cp}")
             return PrefillResult.load(cp)
 
     print(
-        f"  Extracting prefill: {encoder_hf_path} "
-        f"({len(questions)} questions, device={device})",
+        f"  Extracting prefill: {encoder_hf_path} ({len(questions)} questions, device={device})",
     )
     extractor = PrefillExtractor(
-        encoder_hf_path, device=device, cache_dir=hf_cache_dir,
+        encoder_hf_path,
+        device=device,
+        cache_dir=hf_cache_dir,
     )
     result = extractor.extract_batch(
-        questions, chat_template_kwargs=tpl, batch_size=batch_size,
+        questions,
+        chat_template_kwargs=tpl,
+        batch_size=batch_size,
     )
     extractor.unload()
 
     if cache_dir:
-        cp = prefill_cache_path(cache_dir, encoder_hf_path, tpl)
+        cp = prefill_cache_path(cache_dir, encoder_hf_path, tpl, questions)
         result.save(cp)
         print(f"  Saved prefill cache: {cp}")
 
@@ -356,9 +392,13 @@ def extract_from_checkpoint(
 
         if key not in seen:
             seen[key] = run_extraction(
-                enc, questions, chat_template_kwargs=tpl,
-                device=device, batch_size=batch_size,
-                cache_dir=cache_dir, hf_cache_dir=hf_cache_dir,
+                enc,
+                questions,
+                chat_template_kwargs=tpl,
+                device=device,
+                batch_size=batch_size,
+                cache_dir=cache_dir,
+                hf_cache_dir=hf_cache_dir,
             )
         results[tname] = seen[key]
 

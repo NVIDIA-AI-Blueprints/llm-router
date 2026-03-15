@@ -9,18 +9,16 @@ Tests the wiring between model-router-toolkit and litellm:
 
 from __future__ import annotations
 
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from model_router_toolkit.config import ModelSpec, PoolConfig, RoutingConfig
-from model_router_toolkit.router import BaseRouter, CostEstimate, RoutingResult
 from model_router_toolkit.adapters.litellm.app import _build_model_list, _resolve_api_key
 from model_router_toolkit.adapters.litellm.strategy import ModelRoutingStrategy
-
+from model_router_toolkit.config import ModelSpec, PoolConfig, RoutingConfig
+from model_router_toolkit.router import BaseRouter, CostEstimate, RoutingResult
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -37,7 +35,9 @@ class StubRouter(BaseRouter):
     def load(self, checkpoint_path):
         pass
 
-    def route(self, question: str, *, tolerance: float = 0.20, models: list[str] | None = None) -> RoutingResult:
+    def route(
+        self, question: str, *, tolerance: float = 0.20, models: list[str] | None = None
+    ) -> RoutingResult:
         n = len(self._model_names)
         return RoutingResult(
             model_names=self._model_names,
@@ -474,7 +474,6 @@ class TestStrategyRouterWiring:
         We let the API call fail (no real server) and verify the strategy
         was invoked before the error.
         """
-        import litellm
         from litellm import Router as LiteLLMRouter
 
         model_list = [

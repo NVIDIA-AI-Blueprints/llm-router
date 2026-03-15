@@ -74,7 +74,10 @@ class BaseRouter(ABC):
 
     @abstractmethod
     def route(
-        self, question: str, *, tolerance: float = 0.20,
+        self,
+        question: str,
+        *,
+        tolerance: float = 0.20,
         models: list[str] | None = None,
     ) -> RoutingResult:
         """Score all models and select the best cost-efficient one above threshold.
