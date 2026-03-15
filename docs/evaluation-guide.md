@@ -6,8 +6,8 @@ How to evaluate a trained router checkpoint and interpret the results.
 
 ```bash
 model-router evaluate \
-  --config configs/prefill-qwen08b.yaml \
-  --checkpoint checkpoints/prefill_router.pt \
+  --config configs/v1-9models-qwen08b.yaml \
+  --checkpoint checkpoints/prefill_router_qwen08b.pt \
   --data data/test.csv
 ```
 

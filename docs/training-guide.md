@@ -9,7 +9,7 @@ pip install -e '.[prefill]'
 ```
 
 You need:
-- A pool config YAML defining your models and encoder (see `configs/prefill-qwen08b.yaml`)
+- A pool config YAML defining your models and encoder (see `configs/v1-9models-qwen08b.yaml`)
 - A set of evaluation questions (500+ recommended)
 
 ### API Keys
@@ -34,7 +34,7 @@ Requires an API key (see Prerequisites). Prepare a `questions.txt` file with one
 
 ```bash
 model-router collect \
-  --config configs/prefill-qwen08b.yaml \
+  --config configs/v1-9models-qwen08b.yaml \
   --questions questions.txt \
   --output data/collected.csv \
   --judge vote
@@ -53,7 +53,7 @@ For reference-based judging (when you have ground truth answers):
 
 ```bash
 model-router collect \
-  --config configs/prefill-qwen08b.yaml \
+  --config configs/v1-9models-qwen08b.yaml \
   --questions questions.txt \
   --output data/collected.csv \
   --judge reference --references answers.csv
@@ -90,7 +90,7 @@ for name, qs in [("train.csv", train_qs), ("test.csv", test_qs)]:
 
 ```bash
 model-router train \
-  --config configs/prefill-qwen08b.yaml \
+  --config configs/v1-9models-qwen08b.yaml \
   --data data/train.csv \
   --output-dir checkpoints/
 ```
@@ -128,7 +128,7 @@ To use a different cache directory:
 
 ```bash
 model-router train \
-  --config configs/prefill-qwen08b.yaml \
+  --config configs/v1-9models-qwen08b.yaml \
   --data data/train.csv \
   --output-dir checkpoints/ \
   --prefill-dir my-cache/
@@ -138,7 +138,7 @@ To disable caching entirely:
 
 ```bash
 model-router train \
-  --config configs/prefill-qwen08b.yaml \
+  --config configs/v1-9models-qwen08b.yaml \
   --data data/train.csv \
   --output-dir checkpoints/ \
   --no-cache
@@ -163,8 +163,8 @@ See [Evaluation Guide](evaluation-guide.md) for details.
 
 ```bash
 model-router evaluate \
-  --config configs/prefill-qwen08b.yaml \
-  --checkpoint checkpoints/prefill_router.pt \
+  --config configs/v1-9models-qwen08b.yaml \
+  --checkpoint checkpoints/prefill_router_qwen08b.pt \
   --data data/test.csv
 ```
 
@@ -174,13 +174,13 @@ Update your config to point to the new checkpoint:
 
 ```yaml
 routing:
-  checkpoint: checkpoints/prefill_router.pt
+  checkpoint: checkpoints/prefill_router_qwen08b.pt
 ```
 
 Start the server:
 
 ```bash
-model-router serve --config configs/prefill-qwen08b.yaml --port 8000
+model-router serve --config configs/v1-9models-qwen08b.yaml --port 8000
 ```
 
 The trained checkpoint is self-contained -- it includes the pool config, transforms, and MLP weights. The server loads the encoder model on first request, then caches it for subsequent calls.

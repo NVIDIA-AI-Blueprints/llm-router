@@ -104,11 +104,10 @@ The selection algorithm:
 
 ## Starter Configs
 
-| Config | Method | Provider | When to use |
-|--------|--------|----------|-------------|
-| `configs/prefill-qwen08b.yaml` | Prefill | OpenRouter | Default — best accuracy |
-| `configs/v1-9models-qwen08b.yaml` | Prefill | OpenRouter | Full 9-model v1 pool |
-| `configs/local-prefill.yaml` | Prefill | Local | Air-gapped / local-only |
+| Config | Method | Encoder | When to use |
+|--------|--------|---------|-------------|
+| `configs/v1-9models-qwen08b.yaml` | Prefill | Qwen3.5-0.8B | Default — fast, lightweight encoder |
+| `configs/v1-9models-qwen35b.yaml` | Prefill | Qwen3.5-35B-A3B | Higher AUC, better cost-coverage |
 
 ## Annotated Example: Prefill Config
 
@@ -178,7 +177,7 @@ models:
 The `proxy-config` command generates a LiteLLM-compatible `config.yaml` from your pool config:
 
 ```bash
-model-router proxy-config --config configs/prefill-qwen08b.yaml --output configs/litellm-proxy.yaml
+model-router proxy-config --config configs/v1-9models-qwen08b.yaml --output configs/litellm-proxy.yaml
 ```
 
 Generated output:

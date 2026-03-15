@@ -19,7 +19,7 @@ from litellm import Router
 from model_router_toolkit import ModelRoutingStrategy
 
 router = Router(model_list=model_list)
-strategy = ModelRoutingStrategy.from_config("configs/prefill-qwen08b.yaml")
+strategy = ModelRoutingStrategy.from_config("configs/v1-9models-qwen08b.yaml")
 strategy.set_litellm_router(router)
 router.set_custom_routing_strategy(strategy)
 
@@ -41,7 +41,7 @@ Key features:
 FastAPI app with routing, inference, playground UI, and auto-review.
 
 ```bash
-model-router serve --config configs/prefill-qwen08b.yaml --port 8000
+model-router serve --config configs/v1-9models-qwen08b.yaml --port 8000
 ```
 
 Endpoints: `/v1/chat/completions`, `/api/chat` (SSE), `/api/models`, `/api/config`, `/api/review`, `/health`, `/` (playground).
@@ -57,7 +57,7 @@ Starts the full LiteLLM Proxy and injects `ModelRoutingStrategy` at startup.
 ```bash
 model-router proxy \
     --litellm-config configs/litellm-proxy.yaml \
-    --router-config configs/prefill-qwen08b.yaml \
+    --router-config configs/v1-9models-qwen08b.yaml \
     --port 4000
 ```
 
@@ -100,7 +100,7 @@ Lightweight router-only sidecar. Returns routing decisions without LLM inference
 #### Router-Only App
 
 ```bash
-model-router serve-router --config configs/prefill-qwen08b.yaml --port 8079
+model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
 ```
 
 ```bash
@@ -139,7 +139,7 @@ HMAC-SHA256 and bearer token authentication for enterprise integrations.
 
 ```bash
 export ROUTER_WEBHOOK_SECRET=my-secret
-model-router serve-router --config pool.yaml --port 8079
+model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
 ```
 
 Authentication methods (checked in order):

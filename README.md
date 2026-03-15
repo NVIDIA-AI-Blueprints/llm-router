@@ -8,7 +8,7 @@ LLM routing toolkit that learns which model handles which queries best, then rou
 pip install -e '.[prefill,litellm]'
 
 export OPENROUTER_API_KEY=your-key
-model-router serve --config configs/prefill-qwen08b.yaml --port 8000
+model-router serve --config configs/v1-9models-qwen08b.yaml --port 8000
 ```
 
 Open `http://localhost:8000/` for the interactive playground UI, or call the API:
@@ -24,7 +24,7 @@ Or use the router as a Python library (no server, no API keys):
 ```python
 from model_router_toolkit.config import load_config, build_router_from_config
 
-config = load_config("configs/prefill-qwen08b.yaml")
+config = load_config("configs/v1-9models-qwen08b.yaml")
 router = build_router_from_config(config)
 
 result = router.route("What is the capital of France?", tolerance=0.20)
@@ -92,7 +92,7 @@ from litellm import Router
 from model_router_toolkit import ModelRoutingStrategy
 
 router = Router(model_list=my_models)
-strategy = ModelRoutingStrategy.from_config("configs/prefill-qwen08b.yaml")
+strategy = ModelRoutingStrategy.from_config("configs/v1-9models-qwen08b.yaml")
 strategy.set_litellm_router(router)
 router.set_custom_routing_strategy(strategy)
 
@@ -107,7 +107,7 @@ response = await router.acompletion(
 No inference, no API keys — just routing decisions via HTTP:
 
 ```bash
-model-router serve-router --config configs/prefill-qwen08b.yaml --port 8079
+model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
 ```
 
 ```bash
@@ -124,7 +124,7 @@ See the [adapters guide](docs/adapters.md) for details on all adapters, and the 
 
 ```bash
 model-router collect \
-  --config configs/prefill-qwen08b.yaml \
+  --config configs/v1-9models-qwen08b.yaml \
   --questions questions.txt \
   --output data/collected.csv \
   --judge vote
@@ -134,7 +134,7 @@ model-router collect \
 
 ```bash
 model-router train \
-  --config configs/prefill-qwen08b.yaml \
+  --config configs/v1-9models-qwen08b.yaml \
   --data data/train.csv \
   --output-dir checkpoints/
 ```
@@ -145,8 +145,8 @@ Key options: `--device cpu|cuda|mps`, `--n-seeds 10`, `--n-keep 5`, `--prefill-d
 
 ```bash
 model-router evaluate \
-  --config configs/prefill-qwen08b.yaml \
-  --checkpoint checkpoints/prefill_router.pt \
+  --config configs/v1-9models-qwen08b.yaml \
+  --checkpoint checkpoints/prefill_router_qwen08b.pt \
   --data data/test.csv
 ```
 
@@ -155,23 +155,23 @@ model-router evaluate \
 **Standalone server** (playground UI — best for demos):
 
 ```bash
-model-router serve --config configs/prefill-qwen08b.yaml --port 8000
+model-router serve --config configs/v1-9models-qwen08b.yaml --port 8000
 ```
 
 **LiteLLM Proxy** (production — auth, rate limiting, spend tracking):
 
 ```bash
-model-router proxy-config --config configs/prefill-qwen08b.yaml --output configs/litellm-proxy.yaml
+model-router proxy-config --config configs/v1-9models-qwen08b.yaml --output configs/litellm-proxy.yaml
 model-router proxy \
     --litellm-config configs/litellm-proxy.yaml \
-    --router-config configs/prefill-qwen08b.yaml \
+    --router-config configs/v1-9models-qwen08b.yaml \
     --port 4000
 ```
 
 **Router sidecar** (route-only, no inference):
 
 ```bash
-model-router serve-router --config configs/prefill-qwen08b.yaml --port 8079
+model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
 ```
 
 ## Config
@@ -179,7 +179,7 @@ model-router serve-router --config configs/prefill-qwen08b.yaml --port 8079
 ```yaml
 routing:
   method: prefill
-  checkpoint: checkpoints/prefill_router.pt
+  checkpoint: checkpoints/prefill_router_qwen08b.pt
   tolerance: 0.20
   encoder: Qwen/Qwen3.5-0.8B
 

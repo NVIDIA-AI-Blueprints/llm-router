@@ -163,7 +163,7 @@ def v1_questions(v1_test_csv_subset, tmp_path):
 
 @pytest.fixture
 def prefill_config_path(project_root):
-    p = project_root / "configs" / "prefill-qwen08b.yaml"
+    p = project_root / "configs" / "v1-9models-qwen08b.yaml"
     if not p.exists():
-        pytest.skip("configs/prefill-qwen08b.yaml not found")
+        pytest.skip("configs/v1-9models-qwen08b.yaml not found")
     return p

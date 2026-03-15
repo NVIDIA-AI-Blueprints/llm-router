@@ -123,7 +123,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     serve_p = subparsers.add_parser("serve", help="Start the router server")
-    serve_p.add_argument("--config", default="configs/prefill-qwen08b.yaml")
+    serve_p.add_argument("--config", default="configs/v1-9models-qwen08b.yaml")
     serve_p.add_argument("--port", type=int, default=8000)
     serve_p.add_argument("--models", default=None, help="Comma-separated model subset to route between (default: all)")
     serve_p.set_defaults(func=_cmd_serve)
@@ -132,7 +132,7 @@ def main():
         "serve-router",
         help="Start a router-only server (routing decisions, no LLM inference)",
     )
-    sr_p.add_argument("--config", default="configs/prefill-qwen08b.yaml")
+    sr_p.add_argument("--config", default="configs/v1-9models-qwen08b.yaml")
     sr_p.add_argument("--port", type=int, default=8080)
     sr_p.add_argument("--models", default=None, help="Comma-separated model subset to route between (default: all)")
     sr_p.set_defaults(func=_cmd_serve_router)
@@ -218,7 +218,7 @@ def main():
     sc_p.set_defaults(func=lambda _: print(
         "serve-config is not yet available.\n"
         "Copy and edit one of the example configs in configs/.\n"
-        "See configs/prefill-qwen08b.yaml for an example."
+        "See configs/v1-9models-qwen08b.yaml for an example."
     ))
 
     args = parser.parse_args()

@@ -46,7 +46,7 @@ model_list = [
 ]
 
 router = Router(model_list=model_list)
-strategy = ModelRoutingStrategy.from_config("configs/prefill-qwen08b.yaml")
+strategy = ModelRoutingStrategy.from_config("configs/v1-9models-qwen08b.yaml")
 strategy.set_litellm_router(router)
 router.set_custom_routing_strategy(strategy)
 
@@ -89,12 +89,12 @@ Generate the LiteLLM proxy config from your pool config, then start:
 
 ```bash
 model-router proxy-config \
-    --config configs/prefill-qwen08b.yaml \
+    --config configs/v1-9models-qwen08b.yaml \
     --output configs/litellm-proxy.yaml
 
 model-router proxy \
     --litellm-config configs/litellm-proxy.yaml \
-    --router-config configs/prefill-qwen08b.yaml \
+    --router-config configs/v1-9models-qwen08b.yaml \
     --port 4000
 ```
 
@@ -103,7 +103,7 @@ Two config files are required:
 | File | Controls |
 |------|---------|
 | LiteLLM proxy config (`litellm-proxy.yaml`) | `model_list`, provider endpoints, API keys, auth, caching |
-| Pool config (`prefill-qwen08b.yaml`) | Routing method, checkpoint, tolerance, encoder, costs |
+| Pool config (`v1-9models-qwen08b.yaml`) | Routing method, checkpoint, tolerance, encoder, costs |
 
 The `proxy-config` command bridges the two — reads pool config and generates a matching LiteLLM config.
 
@@ -135,7 +135,7 @@ A full FastAPI server with routing, inference, and a playground UI. Best for dem
 
 ```bash
 pip install 'model-router-toolkit[litellm]'
-model-router serve --config configs/prefill-qwen08b.yaml --port 8000
+model-router serve --config configs/v1-9models-qwen08b.yaml --port 8000
 ```
 
 ### Connecting
@@ -190,7 +190,7 @@ A lightweight HTTP server that returns routing decisions **without performing LL
 
 ```bash
 pip install 'model-router-toolkit[server]'
-model-router serve-router --config configs/prefill-qwen08b.yaml --port 8079
+model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
 ```
 
 ### Calling the route endpoint
@@ -267,7 +267,7 @@ The router sidecar supports HMAC-SHA256 and bearer token authentication for ente
 
 ```bash
 export ROUTER_WEBHOOK_SECRET=my-shared-secret
-model-router serve-router --config configs/prefill-qwen08b.yaml --port 8079
+model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
 ```
 
 ### Calling with HMAC
@@ -312,7 +312,7 @@ TypeScript plugin for the OpenClaw gateway. Uses the `before_model_resolve` hook
 1. Start the router sidecar:
 
 ```bash
-model-router serve-router --config configs/prefill-qwen08b.yaml --port 8079
+model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
 ```
 
 2. Install the plugin in your OpenClaw configuration:
@@ -354,7 +354,7 @@ Use the router as a library — routing decisions only, no inference, no API key
 ```python
 from model_router_toolkit.config import load_config, build_router_from_config
 
-config = load_config("configs/prefill-qwen08b.yaml")
+config = load_config("configs/v1-9models-qwen08b.yaml")
 router = build_router_from_config(config)
 
 result = router.route("What is the capital of France?", tolerance=0.20)

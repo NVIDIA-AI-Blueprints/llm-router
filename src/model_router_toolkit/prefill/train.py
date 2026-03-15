@@ -4,7 +4,7 @@ Runs the full pipeline: extract prefill features, sweep layer/mode/PCA,
 train a SharedTrunkNet ensemble, and save a self-contained checkpoint.
 
 Usage (via CLI):
-    model-router train --config configs/prefill-qwen08b.yaml --data train.csv
+    model-router train --config configs/v1-9models-qwen08b.yaml --data train.csv
 """
 
 from __future__ import annotations

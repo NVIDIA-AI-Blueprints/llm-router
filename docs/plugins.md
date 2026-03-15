@@ -22,7 +22,7 @@ The OpenClaw plugin hooks into `before_model_resolve` — a lifecycle event that
 
 ```bash
 pip install 'model-router-toolkit[server,prefill]'
-model-router serve-router --config configs/prefill-qwen08b.yaml --port 8079
+model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
 ```
 
 2. OpenClaw gateway with plugin support
@@ -125,7 +125,7 @@ OpenClaw dispatches to overridden model
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| Plugin returns `{}`, no routing | Sidecar not running | Start: `model-router serve-router --config pool.yaml --port 8079` |
+| Plugin returns `{}`, no routing | Sidecar not running | Start: `model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079` |
 | Plugin returns `{}`, sidecar is running | `routerName` mismatch | Ensure pool `routerName` values match names in pool config |
 | Timeout errors | Encoder warmup on first request | Increase `timeoutMs` to 30000 for first request, or pre-warm sidecar |
 | All requests go to same model | `tolerance` too high or too low | Try `0.20` (default). Check sidecar logs for confidence values. |

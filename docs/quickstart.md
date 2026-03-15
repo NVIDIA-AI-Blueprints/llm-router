@@ -70,7 +70,7 @@ held-out test set so you can verify the checkpoint before using it.
 ```python
 from model_router_toolkit.config import load_config, build_router_from_config
 
-config = load_config("configs/v1-9models.yaml")
+config = load_config("configs/v1-9models-qwen08b.yaml")
 router = build_router_from_config(config)
 
 result = router.route("What is the capital of France?", tolerance=0.20)
@@ -83,7 +83,7 @@ No API keys needed — this runs the encoder locally and returns a routing decis
 ## Start the HTTP Sidecar
 
 ```bash
-model-router serve-router --config configs/v1-9models.yaml --port 8079
+model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
 ```
 
 Query it:
@@ -117,13 +117,12 @@ curl -X POST http://localhost:8079/v1/route \
 
 Full-server mode routes **and** calls the selected model. This requires each model in
 your config to have a `litellm_model` field and a valid API key. The `v1-9models.yaml`
-config includes cost fields only — add `litellm_model` entries for the models you want
-to serve, or see `configs/prefill-qwen08b.yaml` for a ready-to-serve example. See
+config includes `litellm_model` entries for all models. See
 [Configuration](configuration.md) for the full field reference.
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-...
-model-router serve --config configs/v1-9models.yaml --port 8000
+model-router serve --config configs/v1-9models-qwen08b.yaml --port 8000
 ```
 
 Call the OpenAI-compatible API:
@@ -151,7 +150,7 @@ router = Router(model_list=[
     {"model_name": "nemotron-3-super", "litellm_params": {"model": "openrouter/nvidia/nemotron-3-super-49b-v1"}},
     {"model_name": "gpt-5-2-high", "litellm_params": {"model": "openrouter/openai/gpt-5.2"}},
 ])
-strategy = ModelRoutingStrategy.from_config("configs/v1-9models.yaml")
+strategy = ModelRoutingStrategy.from_config("configs/v1-9models-qwen08b.yaml")
 strategy.set_litellm_router(router)
 router.set_custom_routing_strategy(strategy)
 

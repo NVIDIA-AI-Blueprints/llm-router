@@ -49,6 +49,5 @@ The `models` key is a list of model entries. Each entry defines one model in the
 
 | File | Use Case |
 |------|----------|
-| `prefill-qwen08b.yaml` | Default config. Qwen3.5-0.8B encoder, OpenRouter model pool. |
-| `v1-9models-qwen08b.yaml` | Full 9-model v1 pool. Qwen3.5-0.8B encoder, OpenRouter inference. |
-| `local-prefill.yaml` | Local GPU + prefill router. Encoder served locally; model pool uses OpenRouter plus optional local vLLM model. |
+| `v1-9models-qwen08b.yaml` | Default config. 9-model v1 pool, Qwen3.5-0.8B encoder, OpenRouter inference. |
+| `v1-9models-qwen35b.yaml` | 9-model v1 pool, Qwen3.5-35B-A3B encoder. Higher AUC, better cost-coverage. |

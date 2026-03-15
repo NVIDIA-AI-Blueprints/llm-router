@@ -128,13 +128,12 @@ models:
 
 ### Starter Configs
 
-| Config | Method | Provider | When to use |
-|--------|--------|----------|-------------|
-| `configs/prefill-qwen08b.yaml` | Prefill | OpenRouter | Default — best accuracy |
-| `configs/v1-9models-qwen08b.yaml` | Prefill | OpenRouter | Full 9-model v1 pool |
-| `configs/local-prefill.yaml` | Prefill | Local | Air-gapped / local-only |
+| Config | Method | Encoder | When to use |
+|--------|--------|---------|-------------|
+| `configs/v1-9models-qwen08b.yaml` | Prefill | Qwen3.5-0.8B | Default — fast, lightweight encoder |
+| `configs/v1-9models-qwen35b.yaml` | Prefill | Qwen3.5-35B-A3B | Higher AUC, better cost-coverage |
 
-Customize by copying: `cp configs/prefill-qwen08b.yaml configs/my-config.yaml`
+Customize by copying: `cp configs/v1-9models-qwen08b.yaml configs/my-config.yaml`
 
 ## Routing Methods
 
@@ -180,7 +179,7 @@ Runs every model in the pool on each question, judges correctness, writes a labe
 
 ```bash
 model-router collect \
-  --config configs/prefill-qwen08b.yaml \
+  --config configs/v1-9models-qwen08b.yaml \
   --questions questions.txt \
   --output data/collected.csv \
   --judge vote
@@ -213,7 +212,7 @@ model-router collect \
 Reference judging:
 ```bash
 model-router collect \
-  --config configs/prefill-qwen08b.yaml \
+  --config configs/v1-9models-qwen08b.yaml \
   --questions questions.txt \
   --output data/collected.csv \
   --judge reference --references answers.csv
@@ -227,7 +226,7 @@ Trains a routing model from labeled CSV data. No API key needed — uses local e
 
 ```bash
 model-router train \
-  --config configs/prefill-qwen08b.yaml \
+  --config configs/v1-9models-qwen08b.yaml \
   --data data/train.csv \
   --output-dir checkpoints/
 ```
@@ -283,8 +282,8 @@ Evaluates a trained checkpoint against test data. No API key needed.
 
 ```bash
 model-router evaluate \
-  --config configs/prefill-qwen08b.yaml \
-  --checkpoint checkpoints/prefill_router.pt \
+  --config configs/v1-9models-qwen08b.yaml \
+  --checkpoint checkpoints/prefill_router_qwen08b.pt \
   --data data/test.csv
 ```
 
@@ -346,14 +345,14 @@ model-router evaluate \
 Starts a FastAPI server with routing + LLM inference + playground UI.
 
 ```bash
-model-router serve --config configs/prefill-qwen08b.yaml --port 8000
+model-router serve --config configs/v1-9models-qwen08b.yaml --port 8000
 ```
 
 ### Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--config` | `configs/prefill-qwen08b.yaml` | Pool config YAML |
+| `--config` | `configs/v1-9models-qwen08b.yaml` | Pool config YAML |
 | `--port` | 8000 | Server port |
 
 Requires an API key for the model provider.
@@ -403,14 +402,14 @@ curl http://localhost:8000/v1/chat/completions \
 Returns routing decisions only — no LLM inference, no API keys needed. Useful for external dispatchers or microservice architectures.
 
 ```bash
-model-router serve-router --config configs/prefill-qwen08b.yaml --port 8080
+model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8080
 ```
 
 ### Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--config` | `configs/prefill-qwen08b.yaml` | Pool config YAML |
+| `--config` | `configs/v1-9models-qwen08b.yaml` | Pool config YAML |
 | `--port` | 8080 | Server port |
 
 ### Endpoints
@@ -463,7 +462,7 @@ Production-grade deployment with auth, rate limiting, spend tracking, caching, a
 
 ```bash
 model-router proxy-config \
-  --config configs/prefill-qwen08b.yaml \
+  --config configs/v1-9models-qwen08b.yaml \
   --output configs/litellm-proxy.yaml
 ```
 
@@ -477,7 +476,7 @@ model-router proxy-config \
 ```bash
 model-router proxy \
   --litellm-config configs/litellm-proxy.yaml \
-  --router-config configs/prefill-qwen08b.yaml \
+  --router-config configs/v1-9models-qwen08b.yaml \
   --port 4000
 ```
 
@@ -516,7 +515,7 @@ model_list = [
 ]
 
 router = Router(model_list=model_list)
-strategy = ModelRoutingStrategy.from_config("configs/prefill-qwen08b.yaml")
+strategy = ModelRoutingStrategy.from_config("configs/v1-9models-qwen08b.yaml")
 router.set_custom_routing_strategy(strategy)
 
 response = await router.acompletion(
@@ -545,7 +544,7 @@ No LLM inference, no API keys. Returns routing decisions for custom dispatchers.
 ```python
 from model_router_toolkit.config import load_config, build_router_from_config
 
-config = load_config("configs/prefill-qwen08b.yaml")
+config = load_config("configs/v1-9models-qwen08b.yaml")
 router = build_router_from_config(config)
 
 result = router.route("What is the capital of France?", tolerance=0.20)

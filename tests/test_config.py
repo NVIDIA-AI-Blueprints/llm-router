@@ -30,9 +30,9 @@ class TestPoolConfig:
         assert m.display_name == "test-model"
 
     def test_load_prefill_yaml_file(self, project_root):
-        config_path = project_root / "configs" / "prefill-qwen08b.yaml"
+        config_path = project_root / "configs" / "v1-9models-qwen08b.yaml"
         if not config_path.exists():
-            pytest.skip("prefill-qwen08b.yaml not found")
+            pytest.skip("v1-9models-qwen08b.yaml not found")
         config = load_config(config_path)
         assert config.routing.method == "prefill"
         assert len(config.models) > 0

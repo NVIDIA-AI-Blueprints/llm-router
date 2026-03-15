@@ -101,7 +101,7 @@ from model_router_toolkit.adapters.http.auth import WebhookAuthMiddleware
 ### Collect training data
 ```bash
 model-router collect \
-  --config configs/prefill-qwen08b.yaml \
+  --config configs/v1-9models-qwen08b.yaml \
   --questions questions.txt \
   --output data/train.csv \
   --judge vote                    # or: reference --references refs.csv
@@ -111,7 +111,7 @@ Runs every model in the pool on each question, judges correctness. Output CSV: `
 ### Train a router
 ```bash
 model-router train \
-  --config configs/prefill-qwen08b.yaml \
+  --config configs/v1-9models-qwen08b.yaml \
   --data data/train.csv \
   --output-dir checkpoints/
 ```
@@ -127,40 +127,39 @@ Key options:
 ### Evaluate a checkpoint
 ```bash
 model-router evaluate \
-  --config configs/prefill-qwen08b.yaml \
-  --checkpoint checkpoints/prefill_router.pt \
+  --config configs/v1-9models-qwen08b.yaml \
+  --checkpoint checkpoints/prefill_router_qwen08b.pt \
   --data data/test.csv
 ```
 Reports: per-model AUC/accuracy, oracle vs router accuracy, lift, headroom captured, routing distribution, agreement zones, near-miss analysis, pairwise confidence win rates.
 
 ### Serve (full mode — routing + inference + UI)
 ```bash
-model-router serve --config configs/prefill-qwen08b.yaml --port 8000
+model-router serve --config configs/v1-9models-qwen08b.yaml --port 8000
 ```
 OpenAI-compatible API at `/v1/chat/completions`. Playground UI at `/`.
 Uses `adapters/litellm/app.py`.
 
 ### Serve router only (no inference)
 ```bash
-model-router serve-router --config configs/prefill-qwen08b.yaml --port 8079
+model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
 ```
 Route-only API at `/v1/route`. No API keys needed.
 Uses `adapters/http/app.py`.
 
 ### LiteLLM Proxy
 ```bash
-model-router proxy-config --config pool.yaml --output litellm.yaml
-model-router proxy --litellm-config litellm.yaml --router-config pool.yaml --port 4000
+model-router proxy-config --config configs/v1-9models-qwen08b.yaml --output litellm.yaml
+model-router proxy --litellm-config litellm.yaml --router-config configs/v1-9models-qwen08b.yaml --port 4000
 ```
 Uses `adapters/litellm/proxy.py` and `adapters/litellm/config_bridge.py`.
 
 ### Configuration
 
-| Config | Method | Provider | When to use |
-|--------|--------|----------|-------------|
-| `prefill-qwen08b.yaml` | Prefill | OpenRouter | Default — best accuracy |
-| `v1-9models-qwen08b.yaml` | Prefill | OpenRouter | Full 9-model v1 pool |
-| `local-prefill.yaml` | Prefill | Local | Air-gapped / local-only |
+| Config | Method | Encoder | When to use |
+|--------|--------|---------|-------------|
+| `v1-9models-qwen08b.yaml` | Prefill | Qwen3.5-0.8B | Default — fast, lightweight encoder |
+| `v1-9models-qwen35b.yaml` | Prefill | Qwen3.5-35B-A3B | Higher AUC, better cost-coverage |
 
 ## Architecture
 
@@ -179,7 +178,7 @@ Training and evaluation bypass BaseRouter (batch extraction + direct trunk infer
 ```yaml
 routing:
   method: prefill
-  checkpoint: checkpoints/prefill_router.pt
+  checkpoint: checkpoints/prefill_router_qwen08b.pt
   tolerance: 0.20              # accuracy-cost tradeoff
   encoder: Qwen/Qwen3.5-0.8B  # HF model for prefill extraction
 
