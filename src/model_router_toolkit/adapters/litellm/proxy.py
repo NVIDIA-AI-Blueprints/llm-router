@@ -47,8 +47,12 @@ def _check_proxy_available() -> None:
         ) from None
 
 
-def _inject_strategy(router_config: str) -> None:
-    """Patch the litellm proxy's internal Router with our strategy."""
+def _inject_strategy(router_config: str):
+    """Patch the litellm proxy's internal Router with our strategy.
+
+    Returns the ModelRoutingStrategy instance so callers can access
+    ``last_result`` for response patching.
+    """
     import litellm.proxy.proxy_server as proxy_module
 
     from model_router_toolkit.adapters.litellm.strategy import ModelRoutingStrategy
@@ -78,6 +82,8 @@ def _inject_strategy(router_config: str) -> None:
     except Exception as e:
         logger.warning("Warmup route failed: %s", e)
 
+    return strategy
+
 
 def start_proxy(
     litellm_config: str,
@@ -101,26 +107,62 @@ def start_proxy(
     from litellm.proxy.proxy_server import app as litellm_app
 
     _strategy_injected = False
+    _strategy_ref = None
 
-    class _StrategyInjectionMiddleware(BaseHTTPMiddleware):
-        """Inject routing strategy on the first request.
+    class _RouterProxyMiddleware(BaseHTTPMiddleware):
+        """Two responsibilities:
 
-        FastAPI ignores on_event("startup") when a lifespan is set (litellm
-        uses lifespan), so we inject on first request instead — by that point
-        litellm's lifespan has completed and llm_router is guaranteed ready.
+        1. Inject routing strategy on the first request (litellm's lifespan
+           ignores on_event("startup"), so we inject here instead).
+        2. Patch the response ``model`` field to reflect the actual routed
+           model (litellm echoes the request model name, not the deployment).
         """
 
         async def dispatch(self, request: Request, call_next) -> Response:
-            nonlocal _strategy_injected
+            nonlocal _strategy_injected, _strategy_ref
             if not _strategy_injected:
                 _strategy_injected = True
                 try:
-                    _inject_strategy(router_config_abs)
+                    _strategy_ref = _inject_strategy(router_config_abs)
                 except Exception:
                     logger.exception("Failed to inject routing strategy")
-            return await call_next(request)
 
-    litellm_app.add_middleware(_StrategyInjectionMiddleware)
+            response = await call_next(request)
+
+            strategy = _strategy_ref
+            if strategy and hasattr(strategy, "last_result") and strategy.last_result:
+                selected = strategy.last_result.selected_model
+                response.headers["X-Model-Router-Selected"] = selected
+
+                if response.headers.get("content-type", "").startswith("application/json"):
+                    body = b""
+                    async for chunk in response.body_iterator:
+                        body += chunk if isinstance(chunk, bytes) else chunk.encode()
+
+                    import json as _json
+
+                    try:
+                        data = _json.loads(body)
+                        data["model"] = selected
+                        body = _json.dumps(data).encode()
+                    except (ValueError, KeyError):
+                        pass
+
+                    headers = dict(response.headers)
+                    headers["content-length"] = str(len(body))
+
+                    from starlette.responses import Response as StarletteResponse
+
+                    return StarletteResponse(
+                        content=body,
+                        status_code=response.status_code,
+                        headers=headers,
+                        media_type=response.media_type,
+                    )
+
+            return response
+
+    litellm_app.add_middleware(_RouterProxyMiddleware)
 
     import uvicorn
 
