@@ -654,6 +654,7 @@ See [docs/guide-configuration.md](docs/guide-configuration.md) for the full refe
 | `OPENAI_API_KEY` | Serving, collecting (OpenAI configs) | Fallback API key for OpenAI-compatible providers |
 | `ROUTER_WEBHOOK_SECRET` | Router sidecar with auth | Shared secret for HMAC-SHA256 / bearer auth |
 | `CORS_ORIGINS` | Servers with restricted CORS | Comma-separated allowed origins (default: `*`) |
+| `ROUTER_DEVICE` | Serve/sidecar/proxy modes | Override device auto-detection: `cpu`, `cuda`, `mps` |
 | `ROUTER_TELEMETRY_DB` | Optional telemetry | Path to SQLite file for session/chat logging |
 
 **Not needed** for `train`, `evaluate`, or direct Python library use — these work fully offline.

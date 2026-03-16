@@ -60,13 +60,19 @@ def prefill_cache_path(
 
 
 def detect_device() -> str:
-    """Auto-detect the best available device."""
+    """Auto-detect the best available device.
+
+    Set ROUTER_DEVICE=cpu|cuda|mps to override auto-detection.
+    """
+    override = os.environ.get("ROUTER_DEVICE", "").lower()
+    if override in ("cpu", "cuda", "mps"):
+        return override
     if torch.cuda.is_available():
         return "cuda"
     if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         logger.warning(
             "MPS (Apple Silicon GPU) detected. MPS support is experimental "
-            "and may cause silent crashes. Use --device cpu if unstable."
+            "and may cause silent crashes. Use ROUTER_DEVICE=cpu or --device cpu if unstable."
         )
         return "mps"
     return "cpu"
