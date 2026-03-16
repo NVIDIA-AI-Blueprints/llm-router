@@ -2,9 +2,9 @@
 
 **Use the most efficient and accurate model for every LLM call.**
 
-Model Router Toolkit learns which models handle which types of queries well and routes each request to the most efficient model that meets your accuracy threshold. Instead of over-provisioning with a single expensive model or under-serving with a cheap one, the router matches query complexity to model capability automatically.
+Model Router learns which models handle which types of queries well and routes each request to the most efficient model that meets your accuracy threshold. Instead of over-provisioning with a single large frontier model or under-serving with a small efficient one, the router matches query complexity to model capability automatically.
 
-The core insight: most queries don't need your most powerful model. A lightweight model produces the same correct answer on straightforward requests, while complex queries still get routed to stronger models. The router figures out which is which.
+The core insight: lightweight models can handle a substantial set of queries correctly and efficiently. The router learns which queries those are, sends them to smaller models, and reserves large frontier models for the queries that genuinely need them.
 
 > [!NOTE]
 > **Reference implementation only.** This branch is a reference implementation demonstrating prefill-based LLM routing. For production deployment, please fork this repository and leverage the relevant components for your use case. If you encounter issues or have questions, please [open an issue](../../issues/new).
@@ -58,12 +58,12 @@ The core insight: most queries don't need your most powerful model. A lightweigh
 
 You have an LLM application calling one or more model providers. You face a tradeoff:
 
-- **Cheap models** ($0.05–$0.25/M tokens) are fast and affordable but fail on hard questions.
-- **Expensive models** ($2.50–$25/M tokens) handle hard questions but cost 50–500x more.
+- **Small, efficient models** ($0.05–$0.25/M tokens) are fast and affordable but fail on hard questions.
+- **Large frontier models** ($2.50–$25/M tokens) handle hard questions but cost 50–500x more.
 
-Most production workloads are a mix: ~60% of queries are simple enough for the cheapest model, ~30% need a mid-tier model, and ~10% genuinely need the most capable (and expensive) model.
+Most production workloads are a mix: ~60% of queries are simple enough for the smallest model, ~30% need a mid-tier model, and ~10% genuinely need the most capable (and largest) model.
 
-Sending everything to the expensive model wastes money. Sending everything to the cheap model loses accuracy. **Model Router Toolkit automatically picks the right model for each query.**
+Sending everything to the large frontier model wastes money. Sending everything to the small efficient model loses accuracy. **Model Router Toolkit automatically picks the right model for each query.**
 
 ## How It Works
 
@@ -112,15 +112,15 @@ The encoder runs once per query. No target model is called during routing — th
    tolerance = 0.20 → threshold = 0.97 - 0.20 = 0.77
 
    Models above threshold:
-     nemotron-nano  ✓  (0.92 ≥ 0.77)  → cheapest ✓ SELECTED
+     nemotron-nano  ✓  (0.92 ≥ 0.77)  → most efficient ✓ SELECTED
      gpt-oss-120b   ✓  (0.95 ≥ 0.77)
      claude-opus    ✓  (0.97 ≥ 0.77)
 ```
 
 The `tolerance` parameter controls the accuracy–cost tradeoff:
 - `tolerance = 0.0` → always pick the model with the highest P(correct), regardless of cost
-- `tolerance = 0.20` (default) → allow up to 20 percentage points below the best for a cheaper model
-- `tolerance = 1.0` → always pick the cheapest model in the pool
+- `tolerance = 0.20` (default) → allow up to 20 percentage points below the best for a smaller, more efficient model
+- `tolerance = 1.0` → always pick the smallest model in the pool
 
 ## Components Overview
 
@@ -632,8 +632,8 @@ routing:
   encoder_backend: transformers                # "transformers" (default)
 
 models:
-  - name: my-cheap-model                       # unique name (must match training CSV)
-    display_name: My Cheap Model               # human-readable name (optional)
+  - name: my-small-model                        # unique name (must match training CSV)
+    display_name: My Small Model                # human-readable name (optional)
     litellm_model: openrouter/provider/model   # LiteLLM model identifier
     cost_per_m_input_tokens: 0.05              # cost per million input tokens
     cost_per_m_output_tokens: 0.20             # cost per million output tokens
