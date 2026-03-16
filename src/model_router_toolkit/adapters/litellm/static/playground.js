@@ -62,6 +62,10 @@ const Playground = (function () {
       }
     }
 
+    if (config.device === 'cpu') {
+      document.getElementById('cpuBanner').style.display = '';
+    }
+
     updateHowItWorks(method);
   }
 
@@ -288,12 +292,10 @@ const Playground = (function () {
       '<div class="routing-details" id="' + cardId + '">' +
       pipelineHtml +
       '<div style="margin-top:8px;">' +
-      '<button class="routing-collapse-btn" onclick="var d=document.getElementById(\'' + probsId + '\');var c=d.classList.toggle(\'collapsed\');this.textContent=c?\'Show model probabilities\':\'Hide model probabilities\'">Show model probabilities</button>' +
-      '<div id="' + probsId + '" class="collapsed" style="margin-top:6px;">' +
       '<div style="margin-bottom:4px; font-size:10px; color:var(--text-dim);">\u2605 = highest probability, \u2190 = selected model</div>' +
       probsHtml +
       '<div class="routing-summary"><strong>Selected: ' + dn(selected) + '</strong> \u2014 most efficient model with p(correct) \u2265 ' + thresholdStr + '</div>' +
-      '</div></div></div></div>';
+      '</div></div></div>';
   }
 
   // ── Send Message ──────────────────────────────────────────────────────
@@ -634,6 +636,22 @@ const Playground = (function () {
     var section = headerEl.closest('.sidebar-section');
     if (section) section.classList.toggle('collapsed');
   }
+
+  // ── Mobile Sidebar Toggle ──────────────────────────────────────────────
+  (function initSidebarToggle() {
+    var btn = document.getElementById('sidebarToggle');
+    var backdrop = document.getElementById('sidebarBackdrop');
+    var sidebar = document.querySelector('.sidebar');
+    if (!btn || !sidebar) return;
+
+    function openSidebar()  { sidebar.classList.add('open'); backdrop.classList.add('open'); btn.classList.add('open'); }
+    function closeSidebar() { sidebar.classList.remove('open'); backdrop.classList.remove('open'); btn.classList.remove('open'); }
+
+    btn.addEventListener('click', function () {
+      sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
+    });
+    backdrop.addEventListener('click', closeSidebar);
+  })();
 
   // ── Public API ────────────────────────────────────────────────────────
   init();

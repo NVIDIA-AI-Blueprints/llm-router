@@ -13,6 +13,14 @@
     <div class="header-dot"></div>
     <div class="header-title">Model Router Toolkit</div>
     <div class="header-subtitle" id="headerSubtitle">Playground</div>
+    <button class="sidebar-toggle" id="sidebarToggle" title="Settings" aria-label="Open settings">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg>
+    </button>
+  </div>
+
+  <div class="cpu-banner" id="cpuBanner" style="display:none">
+    <span class="cpu-banner-icon">&#9888;</span>
+    Running router on CPU &mdash; prefill step will be slow (~5s per query)
   </div>
 
   <div class="main">
@@ -40,15 +48,16 @@
       </div>
     </div>
 
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
     <div class="sidebar">
       <div class="sidebar-section">
         <h3 class="sidebar-section-header" onclick="Playground.toggleSection(this)"><span class="chevron">&#9662;</span> Tolerance <span class="info-tip" data-tip="How much accuracy to trade for efficiency. The router picks the most efficient model whose p(correct) is within this range of the best.">?</span></h3>
         <div class="sidebar-section-body">
           <div class="tolerance-display">
-            <span class="tolerance-value" id="tolValue">0.20</span>
+            <span class="tolerance-value" id="tolValue">0.05</span>
             <span class="tolerance-label">accuracy tradeoff</span>
           </div>
-          <input type="range" id="tolSlider" min="0" max="0.50" step="0.01" value="0.20">
+          <input type="range" id="tolSlider" min="0" max="0.50" step="0.01" value="0.05">
           <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-dim); margin-top:4px;">
             <span>0.00 (best model)</span>
             <span>0.50 (most efficient)</span>
@@ -68,7 +77,7 @@
         <div class="sidebar-section-body">
           <div class="model-toggle">
             <label class="toggle-switch">
-              <input type="checkbox" id="autoReviewToggle">
+              <input type="checkbox" id="autoReviewToggle" checked>
               <span class="toggle-slider"></span>
             </label>
             <div class="model-toggle-info">

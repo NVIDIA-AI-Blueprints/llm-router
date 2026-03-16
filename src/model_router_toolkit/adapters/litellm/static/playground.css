@@ -56,6 +56,20 @@ html, body {
 .header-title { font-size: 15px; font-weight: 700; color: var(--text-heading); }
 .header-subtitle { font-size: 11px; color: var(--text-dim); font-family: "Roboto Mono", monospace; }
 
+/* ── CPU Warning Banner ───────────────────────────────────────────────── */
+.cpu-banner {
+  background: #2d2200;
+  border-bottom: 1px solid #5c4a00;
+  color: #fbbf24;
+  font-size: 12px;
+  padding: 6px 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.cpu-banner-icon { font-size: 14px; }
+
 .main { display: flex; flex: 1; min-height: 0; }
 
 /* ── Chat Panel ──────────────────────────────────────────────────────── */
@@ -170,7 +184,7 @@ html, body {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 6px 10px; border-radius: 6px;
   border: 1px solid var(--border); background: var(--bg-deep);
-  min-width: 72px; text-align: center;
+  min-width: 72px; text-align: center; flex-shrink: 0;
   transition: border-color 0.3s, background 0.3s;
 }
 .pipeline-step.active { border-color: rgba(118,185,0,0.4); background: rgba(118,185,0,0.06); }
@@ -412,8 +426,31 @@ input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius
   font-size: 11px; font-weight: 500;
 }
 
+/* ── Sidebar Toggle (mobile) ─────────────────────────────────────────── */
+.sidebar-toggle {
+  display: none; margin-left: auto; background: none; border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text-dim); padding: 4px 6px; cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.sidebar-toggle:hover { color: var(--green); border-color: var(--green); }
+.sidebar-toggle svg { transition: transform 0.25s ease; }
+.sidebar-toggle.open svg { transform: rotate(180deg); }
+
+.sidebar-backdrop {
+  display: none; position: fixed; inset: 0; z-index: 99; background: rgba(0,0,0,0.5);
+}
+
 /* ── Responsive ──────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .sidebar { display: none; }
+  .sidebar-toggle { display: flex; align-items: center; justify-content: center; }
+
+  .sidebar {
+    position: fixed; top: var(--header-height); right: 0; bottom: 0;
+    z-index: 100; width: min(var(--sidebar-width), 85vw);
+    transform: translateX(100%); transition: transform 0.25s ease;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-backdrop.open { display: block; }
+
   .msg { max-width: 95%; }
 }
