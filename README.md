@@ -122,6 +122,8 @@ The `tolerance` parameter controls the accuracy–cost tradeoff:
 - `tolerance = 0.20` (default) → allow up to 20 percentage points below the best for a smaller, more efficient model
 - `tolerance = 1.0` → always pick the smallest model in the pool
 
+> **Research paper coming soon.** A paper detailing the research behind this routing technique — including the complexity-signal extraction method, encoder-layer selection, and evaluation methodology — will be published shortly.
+
 ## Components Overview
 
 The toolkit has **four layers**. Each layer is independent and can be used separately.
