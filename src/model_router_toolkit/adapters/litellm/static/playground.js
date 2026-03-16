@@ -637,22 +637,6 @@ const Playground = (function () {
     if (section) section.classList.toggle('collapsed');
   }
 
-  // ── Mobile Sidebar Toggle ──────────────────────────────────────────────
-  (function initSidebarToggle() {
-    var btn = document.getElementById('sidebarToggle');
-    var backdrop = document.getElementById('sidebarBackdrop');
-    var sidebar = document.querySelector('.sidebar');
-    if (!btn || !sidebar) return;
-
-    function openSidebar()  { sidebar.classList.add('open'); backdrop.classList.add('open'); btn.classList.add('open'); }
-    function closeSidebar() { sidebar.classList.remove('open'); backdrop.classList.remove('open'); btn.classList.remove('open'); }
-
-    btn.addEventListener('click', function () {
-      sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
-    });
-    backdrop.addEventListener('click', closeSidebar);
-  })();
-
   // ── Public API ────────────────────────────────────────────────────────
   init();
 
@@ -661,3 +645,21 @@ const Playground = (function () {
     toggleSection: toggleSection,
   };
 })();
+
+// ── Mobile Sidebar Toggle (event delegation, runs after DOM ready) ────
+document.addEventListener('click', function (e) {
+  var btn = document.getElementById('sidebarToggle');
+  var backdrop = document.getElementById('sidebarBackdrop');
+  var sidebar = document.querySelector('.sidebar');
+  if (!btn || !sidebar || !backdrop) return;
+
+  if (e.target.closest('#sidebarToggle')) {
+    var isOpen = sidebar.classList.toggle('open');
+    backdrop.classList.toggle('open', isOpen);
+    btn.classList.toggle('open', isOpen);
+  } else if (e.target === backdrop) {
+    sidebar.classList.remove('open');
+    backdrop.classList.remove('open');
+    btn.classList.remove('open');
+  }
+});
