@@ -92,33 +92,35 @@ def start_proxy(
     litellm_config = str(Path(litellm_config).resolve())
     router_config_abs = str(Path(router_config).resolve())
 
-    os.environ["LITELLM_CONFIG_FILE_PATH"] = litellm_config
+    os.environ["CONFIG_FILE_PATH"] = litellm_config
+
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.requests import Request
+    from starlette.responses import Response
 
     from litellm.proxy.proxy_server import app as litellm_app
 
-    @litellm_app.on_event("startup")
-    async def _register_routing_strategy():
-        import asyncio
+    _strategy_injected = False
 
-        import litellm.proxy.proxy_server as proxy_module
+    class _StrategyInjectionMiddleware(BaseHTTPMiddleware):
+        """Inject routing strategy on the first request.
 
-        max_attempts = 30
-        for attempt in range(1, max_attempts + 1):
-            if proxy_module.llm_router is not None:
-                _inject_strategy(router_config_abs)
-                return
-            logger.info(
-                "Waiting for litellm proxy router to initialize... (%d/%d)",
-                attempt,
-                max_attempts,
-            )
-            await asyncio.sleep(1.0)
+        FastAPI ignores on_event("startup") when a lifespan is set (litellm
+        uses lifespan), so we inject on first request instead — by that point
+        litellm's lifespan has completed and llm_router is guaranteed ready.
+        """
 
-        logger.error(
-            "litellm proxy router did not initialize after %ds. "
-            "Routing strategy was NOT registered. Check your litellm config.",
-            max_attempts,
-        )
+        async def dispatch(self, request: Request, call_next) -> Response:
+            nonlocal _strategy_injected
+            if not _strategy_injected:
+                _strategy_injected = True
+                try:
+                    _inject_strategy(router_config_abs)
+                except Exception:
+                    logger.exception("Failed to inject routing strategy")
+            return await call_next(request)
+
+    litellm_app.add_middleware(_StrategyInjectionMiddleware)
 
     import uvicorn
 
