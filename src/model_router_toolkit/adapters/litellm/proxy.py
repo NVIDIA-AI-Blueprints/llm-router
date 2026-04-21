@@ -106,26 +106,22 @@ def start_proxy(
 
     from litellm.proxy.proxy_server import app as litellm_app
 
-    _strategy_injected = False
     _strategy_ref = None
 
-    class _RouterProxyMiddleware(BaseHTTPMiddleware):
-        """Two responsibilities:
+    @litellm_app.on_event("startup")
+    async def _inject_routing_strategy():
+        nonlocal _strategy_ref
+        try:
+            _strategy_ref = _inject_strategy(router_config_abs)
+        except Exception:
+            logger.exception("Failed to inject routing strategy at startup")
 
-        1. Inject routing strategy on the first request (litellm's lifespan
-           ignores on_event("startup"), so we inject here instead).
-        2. Patch the response ``model`` field to reflect the actual routed
-           model (litellm echoes the request model name, not the deployment).
+    class _RouterProxyMiddleware(BaseHTTPMiddleware):
+        """Patch the response ``model`` field to reflect the actual routed
+        model (litellm echoes the request model name, not the deployment).
         """
 
         async def dispatch(self, request: Request, call_next) -> Response:
-            nonlocal _strategy_injected, _strategy_ref
-            if not _strategy_injected:
-                _strategy_injected = True
-                try:
-                    _strategy_ref = _inject_strategy(router_config_abs)
-                except Exception:
-                    logger.exception("Failed to inject routing strategy")
 
             response = await call_next(request)
 

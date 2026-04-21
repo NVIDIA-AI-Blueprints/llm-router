@@ -48,11 +48,18 @@ def generate_litellm_config(
         }
         model_list.append(entry)
 
+    first_model_name = config.models[0].name if config.models else None
+    router_settings: dict[str, Any] = {
+        "routing_strategy": "simple-shuffle",
+    }
+    if first_model_name:
+        router_settings["model_group_alias"] = {
+            "nvidia-routed": first_model_name,
+        }
+
     litellm_config: dict[str, Any] = {
         "model_list": model_list,
-        "router_settings": {
-            "routing_strategy": "simple-shuffle",
-        },
+        "router_settings": router_settings,
     }
 
     if output:
