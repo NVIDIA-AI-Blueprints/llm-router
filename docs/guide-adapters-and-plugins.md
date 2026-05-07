@@ -11,6 +11,7 @@ This guide covers every adapter and plugin in the toolkit, their APIs, configura
   - [ModelRoutingStrategy](#modelroutingstrategy)
   - [Standalone Server (app.py)](#standalone-server-apppy)
   - [LiteLLM Proxy Injection (proxy.py)](#litellm-proxy-injection-proxypy)
+  - [External Sidecar Hook (external_hook.py)](#external-sidecar-hook-external_hookpy)
   - [Config Bridge (config_bridge.py)](#config-bridge-config_bridgepy)
 - [HTTP Adapter](#http-adapter)
   - [Router Sidecar (app.py)](#router-sidecar-apppy)
@@ -48,7 +49,7 @@ The core package never imports adapter dependencies. Each adapter brings its own
 
 Location: `src/model_router_toolkit/adapters/litellm/`
 
-Three integration patterns, all sharing the same `ModelRoutingStrategy`:
+Four integration patterns. Three share the same in-process `ModelRoutingStrategy` (Strategy, Standalone Server, Proxy Injection); the fourth (External Sidecar Hook) keeps the encoder out-of-process and consults a Router Sidecar over HTTP.
 
 ### ModelRoutingStrategy
 
@@ -200,6 +201,128 @@ model-router proxy \
   --host 0.0.0.0 \
   --port 4000
 ```
+
+---
+
+### External Sidecar Hook (external_hook.py)
+
+**File**: `external_hook.py`
+
+A LiteLLM Proxy `CustomLogger` callback that delegates routing to a separately-running [Router Sidecar](#router-sidecar-apppy) instead of running the encoder in-process. The proxy stays vanilla — no `[prefill]` install, no encoder memory, no GPU pinning required on the proxy host. The router can be scaled, restarted, or GPU-pinned independently.
+
+#### When to choose this over `proxy.py`
+
+| Concern | Proxy Injection (proxy.py) | External Sidecar Hook (external_hook.py) |
+|---------|---------------------------|------------------------------------------|
+| Encoder location | In the proxy process | In a separate sidecar |
+| Proxy install | `[prefill,proxy]` (pulls torch/transformers) | core only — just the hook module |
+| Independent scaling | No | Yes (multiple proxies share one router) |
+| Per-request overhead | None (in-process call) | One HTTP roundtrip (typically 1–10 ms LAN) |
+| Failure mode | Proxy startup fails if checkpoint missing | Per-request fallback via circuit breaker |
+
+#### How it works
+
+1. The proxy boots normally with the toolkit installed but not loading any encoder.
+2. On each completion request, LiteLLM calls `async_pre_call_hook(data, ...)` before deployment selection.
+3. The hook POSTs `{messages, tolerance}` to the sidecar's `/v1/route` endpoint.
+4. The sidecar returns `{selected_model: "..."}`.
+5. The hook overwrites `data["model"]` with the selected name; LiteLLM dispatches normally to the matching `model_list` entry.
+6. On failure (timeout, non-2xx, network error, malformed payload), the hook either falls back to `default_model` or re-raises, depending on configuration.
+7. A small circuit breaker tracks consecutive failures and short-circuits to the fallback for `open_duration_s` seconds once the threshold is hit.
+
+#### Loading in a LiteLLM Proxy `config.yaml`
+
+```yaml
+model_list:
+  - model_name: nemotron-3-nano-reasoning
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-nano-30b-a3b
+  - model_name: gpt-oss-120b-high
+    litellm_params:
+      model: openrouter/openai/gpt-oss-120b
+  # one entry per pool model — model_name MUST match a name in the router's pool config
+
+litellm_settings:
+  callbacks: model_router_toolkit.adapters.litellm.external_hook.external_router_hook
+  fallbacks:
+    - gpt-oss-120b-high: [nemotron-3-super]
+  default_fallbacks: [gpt-oss-120b-high]
+  num_retries: 2
+```
+
+The module-level `external_router_hook` instance is built lazily from the `ROUTER_SIDECAR_URL` environment variable on import. If the variable is unset the singleton is `None`, which LiteLLM rejects — set the env var before starting the proxy.
+
+#### Configuration (environment variables)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ROUTER_SIDECAR_URL` | (required) | Base URL of the running sidecar, e.g. `http://router:8079` |
+| `ROUTER_SIDECAR_TIMEOUT_S` | `2.0` | HTTP timeout for sidecar calls |
+| `ROUTER_SIDECAR_TOLERANCE` | `0.20` | Default tolerance sent in each route request |
+| `ROUTER_SIDECAR_DEFAULT_MODEL` | unset | Fallback model when sidecar fails. Unset = re-raise the error |
+| `ROUTER_SIDECAR_FAILURES_BEFORE_OPEN` | `5` | Consecutive failures before the breaker opens |
+| `ROUTER_SIDECAR_OPEN_DURATION_S` | `30` | Cooldown (seconds) before the breaker re-probes |
+
+#### Programmatic construction
+
+```python
+from model_router_toolkit.adapters.litellm.external_hook import ExternalRouterHook
+
+hook = ExternalRouterHook(
+    sidecar_url="http://router:8079",
+    timeout_s=2.0,
+    tolerance=0.20,
+    default_model="gpt-oss-120b-high",
+    failures_before_open=5,
+    open_duration_s=30.0,
+)
+```
+
+Or build from environment:
+
+```python
+hook = ExternalRouterHook.from_env()
+```
+
+#### Per-request controls
+
+The hook honors two metadata fields on each completion request, matching the conventions in [ModelRoutingStrategy](#modelroutingstrategy):
+
+| Metadata key | Effect |
+|--------------|--------|
+| `pin_model` | Skips the sidecar entirely; sets `data["model"]` directly to the pinned name |
+| `tolerance` | Overrides the default tolerance for this request only |
+
+```python
+# Pin (no sidecar call)
+client.chat.completions.create(
+    model="any-pool-model",
+    messages=[...],
+    extra_body={"metadata": {"pin_model": "gpt-oss-120b-high"}},
+)
+
+# Tighter tolerance for this request
+client.chat.completions.create(
+    model="any-pool-model",
+    messages=[...],
+    extra_body={"metadata": {"tolerance": 0.05}},
+)
+```
+
+#### Call-type filtering
+
+The hook only routes for completion-style calls (`completion`, `acompletion`, `text_completion`, `atext_completion`). Embeddings, image, and audio calls pass through unchanged.
+
+#### Error handling
+
+| Failure | Behavior with `default_model` set | Behavior without `default_model` |
+|---------|----------------------------------|----------------------------------|
+| HTTP timeout / connection error | Log warning, set `data["model"] = default_model` | Re-raise the underlying exception |
+| Non-2xx response from sidecar | Same as above | Re-raise |
+| Malformed payload (no `selected_model`) | Same as above | Re-raise `ValueError` |
+| Breaker open | Short-circuit to default | Re-raise `RuntimeError("router sidecar circuit open")` |
+
+LiteLLM's own `fallbacks` / `default_fallbacks` / `num_retries` apply to the dispatched model call after the hook runs — so you get two layers of resilience: the hook protects against router unavailability, and LiteLLM protects against upstream provider failures.
 
 ---
 

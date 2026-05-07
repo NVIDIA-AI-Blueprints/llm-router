@@ -38,6 +38,7 @@ The core insight: lightweight models can handle a substantial set of queries cor
   - [Serve (Standalone Server)](#serve-standalone-server)
   - [Serve (Router-Only Sidecar)](#serve-router-only-sidecar)
   - [LiteLLM Proxy Integration](#litellm-proxy-integration)
+  - [LiteLLM Proxy + External Sidecar Hook](#litellm-proxy--external-sidecar-hook)
   - [LiteLLM SDK Integration](#litellm-sdk-integration)
   - [Collect Training Data](#collect-training-data)
   - [Train a Router](#train-a-router)
@@ -157,7 +158,8 @@ Platform integrations that connect the routing engine to real infrastructure. Ea
 |---------|---------------|-------------|
 | **LiteLLM Strategy** | `[litellm]` | Embed routing in any `litellm.Router` — 4 lines of Python |
 | **Standalone Server** | `[litellm]` | Full server: routing + inference + playground UI |
-| **LiteLLM Proxy** | `[proxy]` | Inject routing into LiteLLM Proxy at startup |
+| **LiteLLM Proxy** | `[proxy]` | Inject routing into LiteLLM Proxy at startup (in-process) |
+| **External Sidecar Hook** | none (proxy-side only) | LiteLLM Proxy `CustomLogger` callback that delegates routing to a separately-running sidecar |
 | **Router Sidecar** | `[server]` | Route-only HTTP API (`POST /v1/route`), no inference |
 | **Webhook Auth** | `[server]` | HMAC-SHA256 / bearer token middleware for the sidecar |
 
@@ -396,6 +398,44 @@ model-router proxy \
 The proxy runs as a standard LiteLLM Proxy with the routing strategy injected at startup.
 
 **When to use**: Production deployments, teams already using LiteLLM, environments needing auth/rate-limiting/caching.
+
+### LiteLLM Proxy + External Sidecar Hook
+
+Same end result as the in-process proxy integration, but the encoder runs in a separate Router Sidecar process. The proxy stays vanilla (no `[prefill]` install, no GPU memory) and consults the sidecar over HTTP for each routing decision.
+
+```bash
+# 1. Start the router sidecar (CPU or GPU)
+pip install -e '.[prefill,server]'
+model-router serve-router --config configs/v1-9models-qwen08b.yaml --port 8079
+
+# 2. In your LiteLLM Proxy environment (no [prefill] needed):
+pip install -e '.'                  # core only — provides the hook module
+pip install 'litellm[proxy]'        # standard LiteLLM Proxy
+
+export ROUTER_SIDECAR_URL=http://router-sidecar:8079
+export ROUTER_SIDECAR_DEFAULT_MODEL=gpt-oss-120b-high   # fail-open target
+```
+
+Wire the hook into the proxy's `config.yaml`:
+
+```yaml
+model_list:
+  - model_name: nemotron-3-nano-reasoning
+    litellm_params: { model: openrouter/nvidia/nemotron-3-nano-30b-a3b }
+  - model_name: gpt-oss-120b-high
+    litellm_params: { model: openrouter/openai/gpt-oss-120b }
+  # ... one entry per pool model; model_name must match the router's pool
+
+litellm_settings:
+  callbacks: model_router_toolkit.adapters.litellm.external_hook.external_router_hook
+  fallbacks:
+    - gpt-oss-120b-high: [nemotron-3-super]
+  num_retries: 2
+```
+
+The hook rewrites `data["model"]` from the sidecar's decision before LiteLLM dispatches. Ships with a circuit breaker and configurable fail-open default — if the sidecar is down, requests still flow through to the default model. See [docs/guide-adapters-and-plugins.md](docs/guide-adapters-and-plugins.md#external-sidecar-hook-external_hookpy) for the full reference.
+
+**When to use**: Production deployments where you want to scale, restart, or GPU-pin the router independently of the LiteLLM Proxy. Also useful when multiple LiteLLM Proxies share a single router.
 
 ### LiteLLM SDK Integration
 
@@ -658,6 +698,12 @@ See [docs/guide-configuration.md](docs/guide-configuration.md) for the full refe
 | `CORS_ORIGINS` | Servers with restricted CORS | Comma-separated allowed origins (default: `*`) |
 | `ROUTER_DEVICE` | Serve/sidecar/proxy modes | Override device auto-detection: `cpu`, `cuda`, `mps` |
 | `ROUTER_TELEMETRY_DB` | Optional telemetry | Path to SQLite file for session/chat logging |
+| `ROUTER_SIDECAR_URL` | External sidecar hook | URL of the running router sidecar, e.g. `http://router:8079` |
+| `ROUTER_SIDECAR_TIMEOUT_S` | External sidecar hook | HTTP timeout for sidecar calls (default: `2.0`) |
+| `ROUTER_SIDECAR_TOLERANCE` | External sidecar hook | Default tolerance sent to the sidecar (default: `0.20`) |
+| `ROUTER_SIDECAR_DEFAULT_MODEL` | External sidecar hook | Fallback model when the sidecar is unreachable; unset = re-raise |
+| `ROUTER_SIDECAR_FAILURES_BEFORE_OPEN` | External sidecar hook | Circuit-breaker threshold (default: `5`) |
+| `ROUTER_SIDECAR_OPEN_DURATION_S` | External sidecar hook | Cooldown after the breaker opens (default: `30`) |
 
 **Not needed** for `train`, `evaluate`, or direct Python library use — these work fully offline.
 
@@ -692,7 +738,8 @@ model-router-toolkit/
 │   │   ├── litellm/          # LiteLLM integration
 │   │   │   ├── strategy.py   # ModelRoutingStrategy for litellm.Router
 │   │   │   ├── app.py        # Standalone server (routing + inference + UI)
-│   │   │   ├── proxy.py      # LiteLLM Proxy injection
+│   │   │   ├── proxy.py      # LiteLLM Proxy injection (in-process)
+│   │   │   ├── external_hook.py  # LiteLLM Proxy callback delegating to a sidecar
 │   │   │   ├── config_bridge.py  # Pool config → LiteLLM config generator
 │   │   │   ├── completions.py    # /v1/chat/completions endpoint
 │   │   │   ├── chat.py           # /api/chat SSE endpoint

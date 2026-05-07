@@ -11,6 +11,7 @@ This guide covers every way to deploy the router — from a single Python functi
 - [Standalone Server](#standalone-server)
 - [Router-Only Sidecar](#router-only-sidecar)
 - [LiteLLM Proxy](#litellm-proxy)
+- [LiteLLM Proxy + External Sidecar Hook](#litellm-proxy--external-sidecar-hook)
 - [LiteLLM SDK Embedding](#litellm-sdk-embedding)
 - [OpenClaw Gateway Plugin](#openclaw-gateway-plugin)
 - [Choosing a Deployment Mode](#choosing-a-deployment-mode)
@@ -25,7 +26,8 @@ This guide covers every way to deploy the router — from a single Python functi
 | **Direct Python** | Route in-process, you handle inference | `[prefill]` | No | You handle it |
 | **Standalone Server** | Full server: route + infer + playground | `[prefill,litellm]` | Yes | Server handles it |
 | **Router Sidecar** | Route-only HTTP API | `[prefill,server]` | No | You handle it |
-| **LiteLLM Proxy** | Drop into existing LiteLLM Proxy | `[prefill,proxy]` | Yes | Proxy handles it |
+| **LiteLLM Proxy** | Drop routing into LiteLLM Proxy (in-process encoder) | `[prefill,proxy]` | Yes | Proxy handles it |
+| **Proxy + External Sidecar** | LiteLLM Proxy delegates routing to a separate Router Sidecar via callback | proxy: core; sidecar: `[prefill,server]` | Yes | Proxy handles it |
 | **LiteLLM SDK** | Embed in any litellm.Router | `[prefill,litellm]` | Yes | litellm handles it |
 | **OpenClaw Plugin** | Gateway plugin (TypeScript) | Sidecar running | No (for plugin) | Gateway handles it |
 
@@ -399,6 +401,110 @@ The `model` field in the request triggers routing. The proxy intercepts the requ
 
 ---
 
+## LiteLLM Proxy + External Sidecar Hook
+
+Same client-facing behavior as the in-process LiteLLM Proxy mode, but the encoder runs in a separate Router Sidecar process. The proxy stays vanilla — it doesn't install `[prefill]`, doesn't load torch, and doesn't need GPU memory. The router can be scaled, restarted, and GPU-pinned independently of the proxy.
+
+### When to choose this over the in-process proxy
+
+| Concern | In-process Proxy | Proxy + External Sidecar |
+|---------|------------------|--------------------------|
+| Encoder lives in | The proxy process | A dedicated sidecar process |
+| Proxy install size | ~5 GB (torch + transformers + encoder weights) | <100 MB (vanilla LiteLLM + the hook module) |
+| Independent scaling | No — proxy and router scale together | Yes — many proxies can share one router |
+| GPU pinning | Proxy host needs the GPU | Only the sidecar host needs the GPU |
+| Per-request overhead | None (in-process call) | One HTTP roundtrip (typically 1–10 ms LAN) |
+| Failure isolation | Router OOM crashes the proxy | Sidecar can fail; hook fails-open or trips a circuit breaker |
+
+### Setup
+
+```bash
+# Sidecar host: full prefill stack
+pip install -e '.[prefill,server]'
+
+# Proxy host: core only — gets the hook module without the encoder deps
+pip install -e '.'
+pip install 'litellm[proxy]'
+```
+
+### Step 1: Start the Router Sidecar
+
+```bash
+model-router serve-router \
+  --config configs/v1-9models-qwen08b.yaml \
+  --port 8079
+```
+
+The sidecar exposes `POST /v1/route` and `GET /health`. See [Router-Only Sidecar](#router-only-sidecar) for the full reference.
+
+### Step 2: Configure the proxy
+
+Create the LiteLLM Proxy `config.yaml`. The `model_name` entries must match the `name:` field of every model in the router's pool config — that's how the rewritten model gets resolved by LiteLLM.
+
+```yaml
+model_list:
+  - model_name: nemotron-3-nano-reasoning
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-nano-30b-a3b
+  - model_name: gpt-oss-120b-high
+    litellm_params:
+      model: openrouter/openai/gpt-oss-120b
+  - model_name: claude-opus-4-6-high
+    litellm_params:
+      model: openrouter/anthropic/claude-opus-4-6
+  # ... one entry per pool model
+
+litellm_settings:
+  callbacks: model_router_toolkit.adapters.litellm.external_hook.external_router_hook
+  fallbacks:
+    - gpt-oss-120b-high: [nemotron-3-super]
+  default_fallbacks: [gpt-oss-120b-high]
+  num_retries: 2
+  request_timeout: 30
+```
+
+### Step 3: Set environment and start
+
+```bash
+export ROUTER_SIDECAR_URL=http://router-sidecar:8079
+export ROUTER_SIDECAR_DEFAULT_MODEL=gpt-oss-120b-high   # fail-open target
+export ROUTER_SIDECAR_TOLERANCE=0.20
+
+litellm --config config.yaml --port 4000
+```
+
+The proxy's `external_router_hook` callback is built from `ROUTER_SIDECAR_URL` at import time. If the variable is unset the singleton is `None` and LiteLLM's callback loader will reject it.
+
+### Using the proxy
+
+```bash
+curl http://localhost:4000/v1/chat/completions \
+  -H "Authorization: Bearer sk-your-litellm-key" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "any-pool-model", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+The hook intercepts each request, calls the sidecar for a routing decision, and rewrites `data["model"]` before LiteLLM dispatches. From the client's perspective the proxy works exactly like a normal LiteLLM Proxy.
+
+### Failure handling
+
+The hook composes with LiteLLM's own fallback chain:
+
+1. **Sidecar unreachable / timeout / non-2xx**: hook logs a warning and either rewrites to `ROUTER_SIDECAR_DEFAULT_MODEL` (if set) or re-raises the error.
+2. **Repeated failures**: an in-memory circuit breaker trips after `ROUTER_SIDECAR_FAILURES_BEFORE_OPEN` consecutive failures and skips the sidecar entirely for `ROUTER_SIDECAR_OPEN_DURATION_S` seconds, going straight to the default. This prevents the proxy from paying the timeout on every request when the sidecar is flapping.
+3. **Upstream provider failure**: LiteLLM's `fallbacks` / `default_fallbacks` / `num_retries` apply to the dispatched call as usual — independent of the routing layer.
+
+For the full env-var reference, see [Adapters & Plugins → External Sidecar Hook](guide-adapters-and-plugins.md#external-sidecar-hook-external_hookpy).
+
+### When to use
+
+- Production deployments where the router and proxy have different scaling profiles
+- Multi-proxy fleets sharing a single router
+- Environments where you want to avoid pulling torch / transformers into the proxy host
+- Cases where you want to update or roll back the router independently of proxy releases
+
+---
+
 ## LiteLLM SDK Embedding
 
 Embed routing directly in any Python app that uses `litellm.Router`.
@@ -558,8 +664,10 @@ For full configuration reference and troubleshooting, see the [OpenClaw Plugin](
 | Scenario | Recommended Mode | Why |
 |----------|-----------------|-----|
 | Local development / demos | Standalone Server | Playground UI, single command, fast iteration |
-| Existing LiteLLM stack | LiteLLM Proxy | Drop-in; keeps auth, rate limiting, spend tracking |
-| Production without LiteLLM | LiteLLM Proxy | Best out-of-box production features |
+| Existing LiteLLM stack, single proxy | LiteLLM Proxy (in-process) | Drop-in; keeps auth, rate limiting, spend tracking |
+| LiteLLM stack, fleet of proxies sharing a router | Proxy + External Sidecar | One router, many proxies; independent scaling and GPU pinning |
+| Production without LiteLLM | LiteLLM Proxy (in-process) | Best out-of-box production features |
+| Proxy host should stay torch-free | Proxy + External Sidecar | Encoder lives in the sidecar; proxy install stays small |
 | Gateway integration | Router Sidecar + Plugin | Route-only, no inference duplication |
 | Existing Python app | LiteLLM SDK or Direct Python | Minimal integration; no server needed |
 | Custom dispatcher | Direct Python | Full control; routing decisions only |

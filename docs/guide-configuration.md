@@ -381,6 +381,12 @@ Environment variables are not part of the YAML config but affect the runtime beh
 | `CORS_ORIGINS` | Standalone server, router sidecar | Comma-separated allowed CORS origins (default: `*`) |
 | `ROUTER_TELEMETRY_DB` | Telemetry module | SQLite file path for session logging |
 | `HF_HOME` / `TRANSFORMERS_CACHE` | Encoder loading | Custom HuggingFace model cache directory |
+| `ROUTER_SIDECAR_URL` | External Sidecar Hook | Base URL of the running router sidecar (required to enable the hook) |
+| `ROUTER_SIDECAR_TIMEOUT_S` | External Sidecar Hook | HTTP timeout for sidecar calls (default: `2.0`) |
+| `ROUTER_SIDECAR_TOLERANCE` | External Sidecar Hook | Default tolerance sent to the sidecar (default: `0.20`) |
+| `ROUTER_SIDECAR_DEFAULT_MODEL` | External Sidecar Hook | Fallback model when the sidecar fails. Unset = re-raise on error |
+| `ROUTER_SIDECAR_FAILURES_BEFORE_OPEN` | External Sidecar Hook | Circuit-breaker threshold (default: `5`) |
+| `ROUTER_SIDECAR_OPEN_DURATION_S` | External Sidecar Hook | Cooldown after the breaker opens (default: `30`) |
 
 ---
 
