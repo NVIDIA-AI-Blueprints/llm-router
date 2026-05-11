@@ -4,3 +4,4 @@ numpy
 transformers
 pyyaml
 jupyterlab
+torch

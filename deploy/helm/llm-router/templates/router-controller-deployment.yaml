@@ -22,10 +22,9 @@ spec:
         {{- include "llm-router.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: router-controller
     spec:
-      {{- if .Values.routerController.securityContext.pod }}
+      serviceAccountName: {{ include "llm-router.serviceAccountName" . }}
       securityContext:
-        {{- toYaml .Values.routerController.securityContext.pod | nindent 8 }}
-      {{- end }}
+        {{- include "llm-router.podSecurityContext" . | nindent 8 }}
 
       containers:
         - name: {{ .Chart.Name }}-router-controller
@@ -50,10 +49,8 @@ spec:
 {{- end }}
           resources:
             {{- toYaml .Values.routerController.resources | nindent 12 }}
-          {{- if .Values.routerController.securityContext.container }}
           securityContext:
-            {{- toYaml .Values.routerController.securityContext.container | nindent 12 }}
-          {{- end }}
+            {{- include "llm-router.containerSecurityContext" . | nindent 12 }}
           {{- if .Values.routerController.healthChecks.readinessProbe }}
           readinessProbe:
             {{- toYaml .Values.routerController.healthChecks.readinessProbe | nindent 12 }}

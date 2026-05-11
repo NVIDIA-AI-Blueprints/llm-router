@@ -7,6 +7,29 @@ global:
 # NOTE: API keys are managed via user-created Kubernetes secrets
 # See README.md for instructions on creating the required secrets
 
+# OpenShift-specific configuration
+# For OpenShift deployments, use: helm install ... -f openshift-values.yaml
+openshift:
+  enabled: false
+  storageClass: ""
+  routes:
+    enabled: false
+    router:
+      host: ""
+      enabled: false
+    controller:
+      host: ""
+      enabled: false
+    app:
+      host: ""
+      enabled: false
+
+# Service Account (missing from current chart)
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
 # Resource Management (disabled by default - enable for production environments)
 # Provides namespace-level resource quotas and container limits
 resourceManagement:
@@ -255,7 +278,7 @@ routerServer:
         # Use PersistentVolumeClaim (recommended for production)
         persistentVolumeClaim:
           enabled: true
-          storageClass: ""  # Use default storage class if empty
+          storageClass: ""
           accessMode: ReadWriteOnce
           size: "100Gi"
           # Optionally specify an existing PVC name
@@ -277,6 +300,13 @@ routerServer:
         hostPath:
           enabled: false
           path: ""
+
+  # Additional environment variables
+  env: []
+
+  # Extra volumes and volume mounts
+  extraVolumes: []
+  extraVolumeMounts: []
 
   shm_size: "8G"
 

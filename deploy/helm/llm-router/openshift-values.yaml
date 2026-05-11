@@ -1,0 +1,54 @@
+# OpenShift-specific values for LLM Router
+# Usage: helm install llm-router ./deploy/helm/llm-router -f openshift-values.yaml
+#
+# This file enables OpenShift-specific features:
+# - Security contexts compatible with restricted-v2 SCC
+# - OpenShift Routes instead of Kubernetes Ingress
+# - HuggingFace cache configuration for Triton routing
+# - GPU node tolerations
+#
+# For full OpenShift deployment instructions, see deploy/openshift.md
+
+openshift:
+  enabled: true
+  storageClass: ""  # Uses cluster default. Override if needed (e.g., "gp3-csi", "ocs-storagecluster-cephfs")
+  routes:
+    enabled: true
+    router:
+      host: ""
+      enabled: true
+    controller:
+      host: ""
+      enabled: true
+    app:
+      host: ""
+      enabled: true
+
+# Router Server - OpenShift-specific overrides
+routerServer:
+  # HuggingFace cache environment variables
+  # Required on OpenShift to avoid permission errors from restricted security contexts
+  env:
+    - name: HF_DATASETS_CACHE
+      value: "/tmp/hf_cache"
+    - name: HUGGINGFACE_HUB_CACHE
+      value: "/tmp/hf_cache"
+    - name: TRANSFORMERS_CACHE
+      value: "/tmp/hf_cache"
+    - name: HOME
+      value: "/tmp"
+
+  extraVolumes:
+    - name: hf-cache
+      emptyDir: {}
+
+  extraVolumeMounts:
+    - name: hf-cache
+      mountPath: /tmp/hf_cache
+
+# GPU node tolerations
+tolerations:
+  - key: "g5-gpu"
+    operator: Equal
+    value: "true"
+    effect: NoSchedule

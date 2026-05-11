@@ -22,10 +22,9 @@ spec:
         {{- include "llm-router.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: app
     spec:
-      {{- if .Values.app.securityContext.pod }}
+      serviceAccountName: {{ include "llm-router.serviceAccountName" . }}
       securityContext:
-        {{- toYaml .Values.app.securityContext.pod | nindent 8 }}
-      {{- end }}
+        {{- include "llm-router.podSecurityContext" . | nindent 8 }}
       containers:
         - name: app
           image: "{{ .Values.global.imageRegistry }}{{ .Values.app.image.repository }}:{{ .Values.app.image.tag }}"
@@ -38,10 +37,8 @@ spec:
               protocol: TCP
           resources:
             {{- toYaml .Values.app.resources | nindent 12 }}
-          {{- if .Values.app.securityContext.container }}
           securityContext:
-            {{- toYaml .Values.app.securityContext.container | nindent 12 }}
-          {{- end }}
+            {{- include "llm-router.containerSecurityContext" . | nindent 12 }}
           {{- if .Values.app.healthChecks.readinessProbe }}
           readinessProbe:
             {{- toYaml .Values.app.healthChecks.readinessProbe | nindent 12 }}

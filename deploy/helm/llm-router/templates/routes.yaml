@@ -1,0 +1,73 @@
+{{- if and .Values.openshift.enabled .Values.openshift.routes.enabled -}}
+{{- if .Values.openshift.routes.router.enabled -}}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "llm-router.fullname" . }}-router
+  labels:
+    {{- include "llm-router.labels" . | nindent 4 }}
+    app.kubernetes.io/component: router-server
+spec:
+  {{- if .Values.openshift.routes.router.host }}
+  host: {{ .Values.openshift.routes.router.host }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "llm-router.fullname" . }}-router-server
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+---
+{{- end }}
+{{- if .Values.openshift.routes.controller.enabled -}}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "llm-router.fullname" . }}-controller
+  labels:
+    {{- include "llm-router.labels" . | nindent 4 }}
+    app.kubernetes.io/component: router-controller
+spec:
+  {{- if .Values.openshift.routes.controller.host }}
+  host: {{ .Values.openshift.routes.controller.host }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "llm-router.fullname" . }}-router-controller
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+---
+{{- end }}
+{{- if and .Values.app.enabled .Values.openshift.routes.app.enabled -}}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "llm-router.fullname" . }}-app
+  labels:
+    {{- include "llm-router.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  {{- if .Values.openshift.routes.app.host }}
+  host: {{ .Values.openshift.routes.app.host }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "llm-router.fullname" . }}-app
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+{{- end }}
+{{- end }}

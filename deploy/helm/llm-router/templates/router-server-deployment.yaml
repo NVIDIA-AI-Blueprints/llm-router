@@ -22,10 +22,9 @@ spec:
         {{- include "llm-router.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: router-server
     spec:
-      {{- if .Values.routerServer.securityContext.pod }}
+      serviceAccountName: {{ include "llm-router.serviceAccountName" . }}
       securityContext:
-        {{- toYaml .Values.routerServer.securityContext.pod | nindent 8 }}
-      {{- end }}
+        {{- include "llm-router.podSecurityContext" . | nindent 8 }}
       containers:
         - name: router-server
           image: "{{ .Values.global.imageRegistry }}{{ .Values.routerServer.image.repository }}:{{ .Values.routerServer.image.tag }}"
@@ -33,6 +32,10 @@ spec:
           command:
             - "tritonserver"
             - "--log-verbose=1"
+            - "--exit-on-error=false"
+            - "--allow-http=true"
+            - "--allow-grpc=true"
+            - "--allow-metrics=true"
             {{- if .Values.routerServer.modelRepository.path }}
             - "--model-repository={{ .Values.routerServer.modelRepository.path }}"
             {{- end }}
@@ -127,10 +130,11 @@ spec:
             - name: model-repository
               mountPath: {{ .Values.routerServer.volumes.modelRepository.mountPath }}
             {{- end }}
-          {{- if .Values.routerServer.securityContext.container }}
+            {{- if .Values.routerServer.extraVolumeMounts }}
+            {{- toYaml .Values.routerServer.extraVolumeMounts | nindent 12 }}
+            {{- end }}
           securityContext:
-            {{- toYaml .Values.routerServer.securityContext.container | nindent 12 }}
-          {{- end }}
+            {{- include "llm-router.containerSecurityContext" . | nindent 12 }}
       {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
@@ -160,6 +164,9 @@ spec:
             sizeLimit: {{ .Values.routerServer.volumes.modelRepository.storage.emptyDir.sizeLimit }}
             {{- end }}
           {{- end }}
+        {{- end }}
+        {{- if .Values.routerServer.extraVolumes }}
+        {{- toYaml .Values.routerServer.extraVolumes | nindent 8 }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
