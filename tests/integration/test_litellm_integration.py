@@ -695,6 +695,85 @@ class TestChatEndpoint:
         assert "Hello world" in body
         assert "event: done" in body
 
+    def test_chat_streams_reasoning_only_chunks(self):
+        app = _make_test_app()
+        client = TestClient(app)
+        litellm_router = app.state.litellm_router
+
+        chunk = {"choices": [{"delta": {"reasoning_content": "thinking..."}}]}
+
+        async def mock_stream(**kwargs):
+            class AsyncChunks:
+                def __init__(self):
+                    self._items = [chunk]
+                    self._idx = 0
+
+                def __aiter__(self):
+                    return self
+
+                async def __anext__(self):
+                    if self._idx >= len(self._items):
+                        raise StopAsyncIteration
+                    item = self._items[self._idx]
+                    self._idx += 1
+                    return item
+
+            return AsyncChunks()
+
+        with patch.object(litellm_router, "acompletion", side_effect=mock_stream):
+            resp = client.post(
+                "/api/chat",
+                json={"message": "show your reasoning", "tolerance": 0.15},
+            )
+
+        assert resp.status_code == 200
+        body = resp.text
+        assert "event: routing" in body
+        assert "event: reasoning" in body
+        assert "thinking..." in body
+        assert "event: done" in body
+
+    def test_chat_mid_stream_error_is_reported_after_tokens(self):
+        app = _make_test_app()
+        client = TestClient(app)
+        litellm_router = app.state.litellm_router
+
+        chunk = MagicMock()
+        chunk.choices = [MagicMock()]
+        chunk.choices[0].delta = MagicMock()
+        chunk.choices[0].delta.content = "partial answer"
+
+        async def mock_stream(**kwargs):
+            class FailingChunks:
+                def __init__(self):
+                    self._idx = 0
+
+                def __aiter__(self):
+                    return self
+
+                async def __anext__(self):
+                    if self._idx == 0:
+                        self._idx += 1
+                        return chunk
+                    raise RuntimeError("provider stream failed")
+
+            return FailingChunks()
+
+        with patch.object(litellm_router, "acompletion", side_effect=mock_stream):
+            resp = client.post(
+                "/api/chat",
+                json={"message": "test", "tolerance": 0.10},
+            )
+
+        assert resp.status_code == 200
+        body = resp.text
+        assert "event: routing" in body
+        assert "event: token" in body
+        assert "partial answer" in body
+        assert "event: error" in body
+        assert "provider stream failed" in body
+        assert "event: done" not in body
+
     def test_chat_tolerance_is_applied(self):
         app = _make_test_app()
         client = TestClient(app)

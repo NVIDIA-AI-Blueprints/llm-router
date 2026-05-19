@@ -18,6 +18,68 @@ def _sse_event(event: str, data: Any) -> str:
     return f"event: {event}\ndata: {payload}\n\n"
 
 
+def _get_field(value: Any, name: str) -> Any:
+    if isinstance(value, dict):
+        return value.get(name)
+    return getattr(value, name, None)
+
+
+def _text_value(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts = [_text_value(item) for item in value]
+        return "".join(part for part in parts if part)
+    if isinstance(value, dict):
+        for key in ("text", "content", "reasoning", "reasoning_content"):
+            text = _text_value(value.get(key))
+            if text:
+                return text
+    return ""
+
+
+def _first_choice(chunk: Any) -> Any:
+    choices = _get_field(chunk, "choices")
+    if not choices:
+        return None
+    return choices[0]
+
+
+def _delta_texts(chunk: Any) -> tuple[str, str]:
+    choice = _first_choice(chunk)
+    if choice is None:
+        return "", ""
+
+    delta = _get_field(choice, "delta")
+    if delta is None:
+        return "", ""
+
+    content = _text_value(_get_field(delta, "content"))
+
+    reasoning = (
+        _text_value(_get_field(delta, "reasoning_content"))
+        or _text_value(_get_field(delta, "reasoning"))
+    )
+
+    provider_fields = _get_field(delta, "provider_specific_fields")
+    if not reasoning and provider_fields:
+        reasoning = (
+            _text_value(_get_field(provider_fields, "reasoning_content"))
+            or _text_value(_get_field(provider_fields, "reasoning"))
+        )
+
+    additional_kwargs = _get_field(delta, "additional_kwargs")
+    if not reasoning and additional_kwargs:
+        reasoning = (
+            _text_value(_get_field(additional_kwargs, "reasoning_content"))
+            or _text_value(_get_field(additional_kwargs, "reasoning"))
+        )
+
+    return content, reasoning
+
+
 class ChatRequest(BaseModel):
     message: str
     tolerance: float = 0.10
@@ -70,16 +132,16 @@ async def _chat_stream(request: Request, req: ChatRequest):
             stream=True,
         )
         async for chunk in stream:
-            if chunk.choices:
-                delta = chunk.choices[0].delta
-                content = getattr(delta, "content", None) or ""
-                if content:
-                    yield _sse_event("token", {"text": content})
-                    tokens_sent = True
+            content, reasoning = _delta_texts(chunk)
+            if reasoning:
+                yield _sse_event("reasoning", {"text": reasoning})
+                tokens_sent = True
+            if content:
+                yield _sse_event("token", {"text": content})
+                tokens_sent = True
     except Exception as e:
-        if not tokens_sent:
-            yield _sse_event("error", {"message": str(e)[:300]})
-            return
+        yield _sse_event("error", {"message": str(e)[:300], "partial": tokens_sent})
+        return
 
     latency_ms = (time.perf_counter() - t0) * 1000
     yield _sse_event("done", {"latency_ms": round(latency_ms, 2)})
