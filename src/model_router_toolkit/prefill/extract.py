@@ -194,6 +194,9 @@ class PrefillExtractor:
         )
         if self._tokenizer.pad_token is None:
             self._tokenizer.pad_token = self._tokenizer.eos_token
+        # extract_batch slices hs[:seq_len] and takes hs[-1] as the last
+        # token, which requires real tokens at the front of each row.
+        self._tokenizer.padding_side = "right"
 
         load_kwargs: dict[str, Any] = {
             "dtype": self._dtype,
@@ -306,8 +309,9 @@ class PrefillExtractor:
                     all_mean[li].append(hs.mean(dim=0).cpu())
 
             del outputs, hidden_states, input_ids, attention_mask
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         return PrefillResult(
             hidden_last={li: torch.stack(all_last[li]) for li in layers},

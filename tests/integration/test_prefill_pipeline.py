@@ -5,6 +5,7 @@ and a trained checkpoint. Run with: pytest --run-slow
 """
 
 import time
+from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
@@ -94,6 +95,53 @@ class TestPrefillResultSerialization:
         for li in layers:
             torch.testing.assert_close(original.hidden_last[li], loaded.hidden_last[li])
             torch.testing.assert_close(original.hidden_mean[li], loaded.hidden_mean[li])
+
+
+class TestScorerDeviceSelection:
+    """The scorer must honor device auto-detection and ROUTER_DEVICE."""
+
+    def test_scorer_honors_router_device_env(self, monkeypatch):
+        from model_router_toolkit.prefill.scorer import PrefillScorer
+
+        monkeypatch.setenv("ROUTER_DEVICE", "cpu")
+        scorer = PrefillScorer("nonexistent.pt")
+        assert scorer._device == "cpu"
+
+    def test_scorer_auto_detects_cuda(self, monkeypatch):
+        from model_router_toolkit.prefill.scorer import PrefillScorer
+
+        monkeypatch.delenv("ROUTER_DEVICE", raising=False)
+        with patch("torch.cuda.is_available", return_value=True):
+            scorer = PrefillScorer("nonexistent.pt")
+        assert scorer._device == "cuda"
+
+    def test_scorer_matches_detect_device(self, monkeypatch):
+        from model_router_toolkit.prefill.scorer import PrefillScorer
+
+        monkeypatch.delenv("ROUTER_DEVICE", raising=False)
+        scorer = PrefillScorer("nonexistent.pt")
+        assert scorer._device == detect_device()
+
+
+class TestTokenizerPadding:
+    def test_padding_side_forced_right(self):
+        tok = MagicMock()
+        tok.pad_token = "<pad>"
+        tok.padding_side = "left"
+
+        model = MagicMock()
+        model.config.num_hidden_layers = 24
+        model.config.hidden_size = 64
+        model.eval.return_value = model
+
+        with (
+            patch("transformers.AutoTokenizer.from_pretrained", return_value=tok),
+            patch("transformers.AutoModelForCausalLM.from_pretrained", return_value=model),
+        ):
+            extractor = PrefillExtractor("fake/encoder", device="cpu")
+            extractor._ensure_loaded()
+
+        assert extractor._tokenizer.padding_side == "right"
 
 
 @pytest.mark.slow

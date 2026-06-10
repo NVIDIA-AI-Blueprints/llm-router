@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from model_router_toolkit.prefill.extract import PrefillExtractor, PrefillResult
+from model_router_toolkit.prefill.extract import PrefillExtractor, PrefillResult, detect_device
 from model_router_toolkit.prefill.transforms import build_features
 from model_router_toolkit.prefill.trunk import SharedTrunkNet, predict_proba, reconstruct_trunk
 from model_router_toolkit.router import CostEstimate
@@ -36,7 +36,7 @@ class PrefillScorer:
         self._trunk_nets: list[SharedTrunkNet] = []
         self._extractor: PrefillExtractor | None = None
         self.model_names: list[str] = []
-        self._device = "cpu"
+        self._device = detect_device()
 
     def _ensure_loaded(self) -> None:
         if self._ckpt is not None:
