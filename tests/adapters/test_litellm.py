@@ -146,6 +146,51 @@ class TestModelRoutingStrategy:
         )
         assert dep["model_name"] == "model-b"
 
+    @pytest.mark.asyncio
+    async def test_last_result_is_request_scoped(self):
+        """Concurrent requests must each read back their own routing result."""
+        import asyncio
+
+        strategy = ModelRoutingStrategy(FakeRouter("model-a"), tolerance=0.20)
+        a_routed = asyncio.Event()
+        b_routed = asyncio.Event()
+
+        async def request_a():
+            strategy.begin_request()
+            await strategy.async_get_available_deployment(
+                model="x",
+                messages=[{"role": "user", "content": "q"}],
+                request_kwargs={"metadata": {"models": ["model-a"]}},
+            )
+            a_routed.set()
+            # Request B routes (and overwrites shared state) before A reads.
+            await b_routed.wait()
+            return strategy.last_result.selected_model
+
+        async def request_b():
+            await a_routed.wait()
+            strategy.begin_request()
+            await strategy.async_get_available_deployment(
+                model="x",
+                messages=[{"role": "user", "content": "q"}],
+                request_kwargs={"metadata": {"models": ["model-b"]}},
+            )
+            b_routed.set()
+            return strategy.last_result.selected_model
+
+        sel_a, sel_b = await asyncio.gather(request_a(), request_b())
+        assert sel_a == "model-a"
+        assert sel_b == "model-b"
+
+    def test_last_result_falls_back_without_begin_request(self):
+        strategy = ModelRoutingStrategy(FakeRouter("model-a"), tolerance=0.20)
+        strategy.get_available_deployment(
+            model="x",
+            messages=[{"role": "user", "content": "q"}],
+        )
+        assert strategy.last_result is not None
+        assert strategy.last_result.selected_model == "model-a"
+
     def test_pin_model_metadata_bypasses_routing(self):
         """When request_kwargs has pin_model, skip ML and return pinned model."""
         strategy = ModelRoutingStrategy(FakeRouter("model-a"), tolerance=0.20)
