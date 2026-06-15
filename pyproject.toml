@@ -54,6 +54,11 @@ proxy = [
     "litellm[proxy]>=1.50,<=1.82.6",
     "packaging>=20.0",
 ]
+privacy = [
+    "presidio-analyzer>=2.2,<3",
+    "presidio-anonymizer>=2.2,<3",
+    "spacy>=3.7,<4",
+]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",

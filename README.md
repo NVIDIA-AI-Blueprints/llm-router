@@ -397,6 +397,32 @@ model-router proxy \
 
 The proxy runs as a standard LiteLLM Proxy with the routing strategy injected at startup.
 
+#### Optional pre-cloud request redaction
+
+The in-process proxy can optionally redact common personal data from chat request text before
+LiteLLM forwards the request to an upstream provider. Redaction is disabled by default and is
+best-effort; it is not a complete privacy guarantee.
+
+```bash
+pip install -e '.[prefill,proxy,privacy]'
+python -m spacy download en_core_web_sm
+
+export MODEL_ROUTER_REDACTION_ENABLED=true
+export MODEL_ROUTER_REDACTION_BACKEND=presidio
+export MODEL_ROUTER_REDACTION_SCORE_THRESHOLD=0.35
+
+model-router proxy \
+  --litellm-config configs/litellm-proxy.yaml \
+  --router-config configs/v1-9models-qwen08b.yaml \
+  --port 4000
+```
+
+By default, the Presidio backend is limited to the initial supported entity scope: email
+addresses, phone numbers, SSNs, dates, URLs, person names, selected geographic entities,
+and organization names. Override the entity list with
+`MODEL_ROUTER_REDACTION_ENTITIES=EMAIL_ADDRESS,PHONE_NUMBER` when a deployment needs a
+narrower policy.
+
 **When to use**: Production deployments, teams already using LiteLLM, environments needing auth/rate-limiting/caching.
 
 ### LiteLLM Proxy + External Sidecar Hook

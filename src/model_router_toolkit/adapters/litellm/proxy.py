@@ -100,11 +100,12 @@ def start_proxy(
 
     os.environ["CONFIG_FILE_PATH"] = litellm_config
 
+    from litellm.proxy.proxy_server import app as litellm_app
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.requests import Request
     from starlette.responses import Response
 
-    from litellm.proxy.proxy_server import app as litellm_app
+    from model_router_toolkit.privacy.middleware import maybe_add_request_redaction_middleware
 
     _strategy_ref = None
 
@@ -159,6 +160,7 @@ def start_proxy(
             return response
 
     litellm_app.add_middleware(_RouterProxyMiddleware)
+    maybe_add_request_redaction_middleware(litellm_app)
 
     import uvicorn
 
