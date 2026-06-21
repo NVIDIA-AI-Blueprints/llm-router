@@ -29,10 +29,18 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
 
     # Forward every OpenAI-compatible field untouched so that agents which rely
     # on `tools` / `tool_choice` / `response_format` / `top_p` / `seed` / `stop`
-    # etc. actually reach the upstream model. Only routing-specific keys and
-    # `model` are stripped; `model` is then overridden with the litellm model
-    # group so the routing strategy can intercept the call.
-    routing_only_keys = {"tolerance", "models", "model"}
+    # etc. actually reach the upstream model. Only routing-specific keys are
+    # stripped:
+    #   - `tolerance`, `models`: consumed by the router strategy above
+    #   - `model`: replaced with the litellm model group so the strategy can
+    #     intercept the call (the original value is ignored, matching the prior
+    #     behavior of this endpoint)
+    #   - `metadata`: reserved for the router's internal use (we build a fresh
+    #     dict containing the `models` filter below); passing through a
+    #     client-supplied `metadata` could collide with litellm.Router internal
+    #     keys (trace_id, tags, callback context, ...), so it is dropped to
+    #     keep the prior surface unchanged
+    routing_only_keys = {"tolerance", "models", "model", "metadata"}
     kwargs: dict[str, Any] = {
         k: v for k, v in body.items() if k not in routing_only_keys
     }
@@ -41,7 +49,7 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
     kwargs.setdefault("max_tokens", 4096)
 
     if "models" in body:
-        kwargs.setdefault("metadata", {})["models"] = body["models"]
+        kwargs["metadata"] = {"models": body["models"]}
 
     if stream:
 
