@@ -11,14 +11,72 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from model_router_toolkit.adapters.http._shared import health_dict, models_list, warmup_router
 from model_router_toolkit.config import PoolConfig, load_config
 
 logger = logging.getLogger(__name__)
+
+
+def _install_openai_compat_error_handlers(app: FastAPI) -> None:
+    """Translate litellm exceptions into OpenAI-compatible error JSON responses.
+
+    Without this handler, FastAPI returns a generic 500 Internal Server Error
+    with a plain-text body for every litellm exception (BadRequestError,
+    AuthenticationError, RateLimitError, ...). This prevents OpenAI-compatible
+    clients from distinguishing client errors (4xx) from server errors (5xx)
+    and from extracting the upstream error message, leading to wasted retries
+    for what are really 400-class user errors.
+    """
+    from litellm import exceptions as le
+    from openai import APIError as OpenAIAPIError
+
+    # Order matters: more specific subclasses appear first when they exist.
+    # Note that litellm's exception classes inherit from openai's hierarchy
+    # (openai.APIStatusError -> openai.APIError), not from litellm.APIError,
+    # so the handler is registered against openai.APIError to catch them all.
+    exception_status_map: list[tuple[type[Exception], int]] = [
+        (le.AuthenticationError, 401),
+        (le.NotFoundError, 404),
+        (le.ContentPolicyViolationError, 400),
+        (le.UnprocessableEntityError, 422),
+        (le.BadRequestError, 400),
+        (le.RateLimitError, 429),
+        (le.Timeout, 504),
+        (le.APIConnectionError, 502),
+        (le.ServiceUnavailableError, 503),
+        (le.InternalServerError, 500),
+    ]
+
+    async def litellm_error_handler(_request: Request, exc: Exception):
+        for cls, status in exception_status_map:
+            if isinstance(exc, cls):
+                return JSONResponse(
+                    status_code=status,
+                    content={
+                        "error": {
+                            "message": str(exc),
+                            "type": cls.__name__,
+                            "code": getattr(exc, "code", None),
+                        }
+                    },
+                )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "message": str(exc),
+                    "type": type(exc).__name__,
+                }
+            },
+        )
+
+    app.add_exception_handler(OpenAIAPIError, litellm_error_handler)
+    app.add_exception_handler(le.APIError, litellm_error_handler)
 
 
 def _resolve_api_key(litellm_model: str, api_base: str) -> str:
@@ -111,6 +169,8 @@ def create_app(
         base_router.unload()
 
     app = FastAPI(title="Model Router Toolkit", lifespan=lifespan)
+
+    _install_openai_compat_error_handlers(app)
 
     cors_origins = os.environ.get("CORS_ORIGINS", "*").split(",")
     app.add_middleware(
