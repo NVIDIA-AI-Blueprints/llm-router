@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -22,6 +23,25 @@ from model_router_toolkit.config import PoolConfig, load_config
 logger = logging.getLogger(__name__)
 
 
+_SECRET_PATTERNS = (
+    re.compile(r"sk-[A-Za-z0-9_-]{16,}"),
+    re.compile(r"Bearer\s+[A-Za-z0-9._-]+"),
+    re.compile(r'"api[-_]?key"\s*:\s*"[^"]+"', re.IGNORECASE),
+)
+
+
+def _redact_secrets(msg: str) -> str:
+    """Strip obvious credential patterns from upstream error messages.
+
+    litellm sometimes echoes the upstream request (headers, JSON body) into
+    exception strings, which can include short-lived API keys or bearer
+    tokens. Best-effort scrubbing keeps those out of client-facing responses.
+    """
+    for pat in _SECRET_PATTERNS:
+        msg = pat.sub("***REDACTED***", msg)
+    return msg
+
+
 def _install_openai_compat_error_handlers(app: FastAPI) -> None:
     """Translate litellm exceptions into OpenAI-compatible error JSON responses.
 
@@ -32,51 +52,94 @@ def _install_openai_compat_error_handlers(app: FastAPI) -> None:
     and from extracting the upstream error message, leading to wasted retries
     for what are really 400-class user errors.
     """
+    from fastapi.exceptions import HTTPException, RequestValidationError
     from litellm import exceptions as le
-    from openai import APIError as OpenAIAPIError
 
-    # Order matters: more specific subclasses appear first when they exist.
-    # Note that litellm's exception classes inherit from openai's hierarchy
-    # (openai.APIStatusError -> openai.APIError), not from litellm.APIError,
-    # so the handler is registered against openai.APIError to catch them all.
-    exception_status_map: list[tuple[type[Exception], int]] = [
-        (le.AuthenticationError, 401),
-        (le.NotFoundError, 404),
-        (le.ContentPolicyViolationError, 400),
-        (le.UnprocessableEntityError, 422),
-        (le.BadRequestError, 400),
-        (le.RateLimitError, 429),
-        (le.Timeout, 504),
-        (le.APIConnectionError, 502),
-        (le.ServiceUnavailableError, 503),
-        (le.InternalServerError, 500),
+    # (exception class, HTTP status, OpenAI error type string).
+    # Order matters: more specific subclasses appear first.
+    # The OpenAI `error.type` strings mirror the values returned by the
+    # OpenAI API itself (snake_case) so that clients which key off
+    # `error.type` behave consistently against the router.
+    exception_map: list[tuple[type[Exception], int, str]] = [
+        (le.AuthenticationError, 401, "authentication_error"),
+        (le.NotFoundError, 404, "not_found_error"),
+        (le.ContentPolicyViolationError, 400, "content_policy_violation"),
+        (le.ContextWindowExceededError, 400, "context_length_exceeded"),
+        (le.UnprocessableEntityError, 422, "invalid_request_error"),
+        (le.BadRequestError, 400, "invalid_request_error"),
+        (le.BudgetExceededError, 429, "billing_hard_limit_reached"),
+        (le.RateLimitError, 429, "rate_limit_exceeded"),
+        (le.Timeout, 504, "timeout"),
+        (le.APIConnectionError, 502, "api_connection_error"),
+        (le.ServiceUnavailableError, 503, "service_unavailable"),
+        (le.InternalServerError, 500, "server_error"),
     ]
 
     async def litellm_error_handler(_request: Request, exc: Exception):
-        for cls, status in exception_status_map:
+        # FastAPI's own exceptions (HTTPException raised by route handlers,
+        # request validation failures) carry their own status code and shape;
+        # let the default handlers process them.
+        if isinstance(exc, (HTTPException, RequestValidationError)):
+            raise exc
+
+        for cls, status, error_type in exception_map:
             if isinstance(exc, cls):
+                # 5xx upstream failures are worth a full traceback (server-side
+                # bug or outage); 4xx are typically client errors so a one-line
+                # warning is enough to debug without flooding the log.
+                if status >= 500:
+                    logger.exception(
+                        "Upstream %s (HTTP %d)", type(exc).__name__, status
+                    )
+                else:
+                    logger.warning(
+                        "Upstream %s (HTTP %d): %s",
+                        type(exc).__name__,
+                        status,
+                        exc,
+                    )
                 return JSONResponse(
                     status_code=status,
                     content={
                         "error": {
-                            "message": str(exc),
-                            "type": cls.__name__,
+                            "message": _redact_secrets(str(exc)),
+                            "type": error_type,
+                            "param": getattr(exc, "param", None),
                             "code": getattr(exc, "code", None),
                         }
                     },
                 )
+
+        # Catch-all for exceptions that don't match the map above. This includes
+        # litellm classes that inherit from Exception directly (e.g.
+        # BudgetExceededError when it was raised without the proper subclass,
+        # guardrail violations from third-party callbacks). Surface them as 500
+        # and keep a full traceback in the server log.
+        logger.exception(
+            "Unhandled exception in OpenAI-compatible endpoint: %s",
+            type(exc).__name__,
+        )
         return JSONResponse(
             status_code=500,
             content={
                 "error": {
-                    "message": str(exc),
-                    "type": type(exc).__name__,
+                    "message": _redact_secrets(str(exc)),
+                    "type": "server_error",
+                    "param": None,
+                    "code": None,
                 }
             },
         )
 
+    # Register on openai.APIError (covers every litellm exception that
+    # inherits from openai's hierarchy — BadRequestError, RateLimitError, ...)
+    # AND on Exception so the catch-all branch above can map the few classes
+    # that inherit Exception directly. The Exception handler re-raises
+    # FastAPI's own exceptions so it does not interfere with normal 4xx flow.
+    from openai import APIError as OpenAIAPIError
+
     app.add_exception_handler(OpenAIAPIError, litellm_error_handler)
-    app.add_exception_handler(le.APIError, litellm_error_handler)
+    app.add_exception_handler(Exception, litellm_error_handler)
 
 
 def _resolve_api_key(litellm_model: str, api_base: str) -> str:
