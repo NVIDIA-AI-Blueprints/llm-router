@@ -18,10 +18,7 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
     strategy = request.app.state.strategy
     config = request.app.state.config
 
-    messages = body.get("messages", [])
     stream = body.get("stream", False)
-    temperature = body.get("temperature", 0.7)
-    max_tokens = body.get("max_tokens", 4096)
 
     if "tolerance" in body:
         strategy.set_request_tolerance(float(body.get("tolerance", 0.20)))
@@ -30,19 +27,21 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
     # The routing strategy intercepts the call and picks the actual deployment.
     model_group = config.models[0].name if config.models else "default"
 
-    metadata: dict[str, Any] = {}
-    if "models" in body:
-        metadata["models"] = body["models"]
-
+    # Forward every OpenAI-compatible field untouched so that agents which rely
+    # on `tools` / `tool_choice` / `response_format` / `top_p` / `seed` / `stop`
+    # etc. actually reach the upstream model. Only routing-specific keys and
+    # `model` are stripped; `model` is then overridden with the litellm model
+    # group so the routing strategy can intercept the call.
+    routing_only_keys = {"tolerance", "models", "model"}
     kwargs: dict[str, Any] = {
-        "model": model_group,
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        "stream": stream,
+        k: v for k, v in body.items() if k not in routing_only_keys
     }
-    if metadata:
-        kwargs["metadata"] = metadata
+    kwargs["model"] = model_group
+    kwargs.setdefault("temperature", 0.7)
+    kwargs.setdefault("max_tokens", 4096)
+
+    if "models" in body:
+        kwargs.setdefault("metadata", {})["models"] = body["models"]
 
     if stream:
 
@@ -83,7 +82,7 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
     from model_router_toolkit import telemetry
 
     if telemetry.enabled() and strategy.last_result:
-        user_text = extract_user_text(messages)
+        user_text = extract_user_text(body.get("messages", []))
         telemetry.log_chat(
             session_id=None,
             question=user_text,
