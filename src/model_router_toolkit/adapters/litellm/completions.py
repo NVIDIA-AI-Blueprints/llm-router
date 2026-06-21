@@ -21,7 +21,13 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
     stream = body.get("stream", False)
 
     if "tolerance" in body:
-        strategy.set_request_tolerance(float(body.get("tolerance", 0.20)))
+        # Silently fall back to the default tolerance if the client sent a
+        # non-numeric value rather than crashing the request with a 500. This
+        # keeps the routing strategy permissive about loose input shapes.
+        try:
+            strategy.set_request_tolerance(float(body["tolerance"]))
+        except (TypeError, ValueError):
+            pass
 
     # Use the first model name from config as the LiteLLM model group.
     # The routing strategy intercepts the call and picks the actual deployment.
@@ -52,9 +58,17 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
         kwargs["metadata"] = {"models": body["models"]}
 
     if stream:
+        # Resolve the upstream completion BEFORE constructing StreamingResponse
+        # so that any pre-stream errors (e.g. BadRequestError from upstream
+        # validation, AuthenticationError, RateLimitError) bubble up to the
+        # FastAPI exception handler and are converted to a proper 4xx/5xx
+        # JSON response. If we awaited acompletion() inside the SSE generator,
+        # the response headers would already be committed as 200 OK by the
+        # time the error fires and the client would receive a broken SSE
+        # stream instead of an actionable status code.
+        response_stream = await litellm_router.acompletion(**kwargs)
 
         async def sse_stream():
-            response_stream = await litellm_router.acompletion(**kwargs)
             async for chunk in response_stream:
                 data = chunk.model_dump(exclude_none=True)
                 yield f"data: {json.dumps(data)}\n\n"
