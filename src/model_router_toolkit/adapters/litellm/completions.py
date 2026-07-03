@@ -22,6 +22,7 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
     stream = body.get("stream", False)
     temperature = body.get("temperature", 0.7)
     max_tokens = body.get("max_tokens", 4096)
+    extra_headers = body.get("extra_headers")
 
     if "tolerance" in body:
         strategy.set_request_tolerance(float(body.get("tolerance", 0.20)))
@@ -43,6 +44,8 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
     }
     if metadata:
         kwargs["metadata"] = metadata
+    if extra_headers is not None:
+        kwargs["extra_headers"] = extra_headers
 
     if stream:
 

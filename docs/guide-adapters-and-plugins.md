@@ -172,7 +172,10 @@ create_app()
 The app resolves API keys from the `litellm_model` prefix:
 - `openrouter/...` → `OPENROUTER_API_KEY`
 - `nvidia_nim/...` → `NVIDIA_API_KEY`
+- `vercel_ai_gateway/...` → `VERCEL_AI_GATEWAY_API_KEY`
 - Other → `OPENAI_API_KEY`
+
+The OpenAI-compatible LiteLLM endpoints also forward `extra_headers` directly to `litellm.acompletion()` when present, so provider-specific header fields can be passed through unchanged.
 
 ---
 

@@ -57,6 +57,7 @@ async def _call_model(params: dict, messages: list[dict], **kwargs: Any):
         model=params["model"],
         api_key=params.get("api_key", ""),
         messages=messages,
+        extra_headers=params.get("extra_headers"),
         **kwargs,
     )
 
@@ -217,7 +218,11 @@ async def _review_stream(request: Request, req: ReviewRequest):
 
 @router.post("/review")
 async def review(request: Request, req: ReviewRequest):
-    has_key = bool(os.environ.get("OPENROUTER_API_KEY") or os.environ.get("NVIDIA_API_KEY"))
+    has_key = bool(
+        os.environ.get("OPENROUTER_API_KEY")
+        or os.environ.get("NVIDIA_API_KEY")
+        or os.environ.get("VERCEL_AI_GATEWAY_API_KEY")
+    )
     if not has_key:
 
         async def _unavailable():
@@ -225,7 +230,7 @@ async def review(request: Request, req: ReviewRequest):
                 "error",
                 {
                     "message": "Auto-review requires an API key "
-                    "(OPENROUTER_API_KEY or NVIDIA_API_KEY)"
+                    "(OPENROUTER_API_KEY, NVIDIA_API_KEY, or VERCEL_AI_GATEWAY_API_KEY)"
                 },
             )
 

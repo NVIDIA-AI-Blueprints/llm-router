@@ -141,6 +141,41 @@ class TestGenerateLiteLLMConfig:
         assert keys["model-a"] == "os.environ/NVIDIA_API_KEY"
         assert keys["model-b"] == "os.environ/OPENROUTER_API_KEY"
 
+    def test_vercel_ai_gateway_api_key_env_var_resolved(self):
+        config = PoolConfig(
+            routing=RoutingConfig(method="prefill", tolerance=0.20),
+            models=[
+                ModelSpec(
+                    name="model-a",
+                    litellm_model="vercel_ai_gateway/openai/gpt-4o-mini",
+                    cost_per_m_input_tokens=0.10,
+                    cost_per_m_output_tokens=0.10,
+                    api_base="https://ai-gateway.vercel.app/v1",
+                ),
+            ],
+        )
+        generated = generate_litellm_config(config)
+        params = generated["model_list"][0]["litellm_params"]
+        assert params["api_key"] == "os.environ/VERCEL_AI_GATEWAY_API_KEY"
+        assert params["api_base"] == "https://ai-gateway.vercel.app/v1"
+
+    def test_extra_headers_from_config_is_preserved(self):
+        config = PoolConfig(
+            routing=RoutingConfig(method="prefill", tolerance=0.20),
+            models=[
+                ModelSpec(
+                    name="model-a",
+                    litellm_model="openai/gpt-test",
+                    cost_per_m_input_tokens=0.10,
+                    cost_per_m_output_tokens=0.10,
+                    extra_headers={"x-foo": "bar"},
+                ),
+            ],
+        )
+        generated = generate_litellm_config(config)
+        params = generated["model_list"][0]["litellm_params"]
+        assert params["extra_headers"] == {"x-foo": "bar"}
+
     def test_router_settings_included(self):
         config = generate_litellm_config(_pool_config())
         assert "router_settings" in config

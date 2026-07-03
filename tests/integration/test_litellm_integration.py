@@ -202,6 +202,10 @@ class TestResolveApiKey:
         result = _resolve_api_key("openrouter/model", "https://integrate.api.nvidia.com/v1")
         assert result == "or-key"
 
+    def test_vercel_ai_gateway_prefix(self, monkeypatch):
+        monkeypatch.setenv("VERCEL_AI_GATEWAY_API_KEY", "vercel-key-789")
+        assert _resolve_api_key("vercel_ai_gateway/some-model", "") == "vercel-key-789"
+
 
 # ---------------------------------------------------------------------------
 # _build_model_list
@@ -292,6 +296,35 @@ class TestBuildModelList:
         or_entry = next(e for e in model_list if e["model_name"] == "expensive-model")
         assert nvidia_entry["litellm_params"]["api_key"] == "nvda-key"
         assert or_entry["litellm_params"]["api_key"] == "or-key"
+
+    def test_extra_headers_from_config_is_preserved(self):
+        config = _make_config(
+            models=[
+                ModelSpec(
+                    name="with-extra-body",
+                    litellm_model="openai/gpt-test",
+                    extra_headers={"x-foo": "bar"},
+                ),
+            ]
+        )
+        model_list = _build_model_list(config)
+        assert model_list[0]["litellm_params"]["extra_headers"] == {"x-foo": "bar"}
+
+    def test_vercel_ai_gateway_api_key_assigned(self, monkeypatch):
+        monkeypatch.setenv("VERCEL_AI_GATEWAY_API_KEY", "vercel-key-789")
+        config = _make_config(
+            models=[
+                ModelSpec(
+                    name="vercel-model",
+                    litellm_model="vercel_ai_gateway/openai/gpt-4o-mini",
+                    api_base="https://ai-gateway.vercel.app/v1",
+                ),
+            ]
+        )
+        model_list = _build_model_list(config)
+        assert model_list[0]["litellm_params"]["model"] == "vercel_ai_gateway/openai/gpt-4o-mini"
+        assert model_list[0]["litellm_params"]["api_key"] == "vercel-key-789"
+        assert model_list[0]["litellm_params"]["api_base"] == "https://ai-gateway.vercel.app/v1"
 
 
 # ---------------------------------------------------------------------------
@@ -581,6 +614,29 @@ class TestCompletionsEndpoint:
         data = resp.json()
         assert data["choices"][0]["message"]["content"] == "mocked answer"
 
+    def test_extra_headers_is_forwarded(self):
+        app = _make_test_app()
+        client = TestClient(app)
+        litellm_router = app.state.litellm_router
+
+        seen_kwargs = {}
+
+        async def mock_acompletion(**kwargs):
+            seen_kwargs.update(kwargs)
+            return _fake_litellm_response("mocked answer")
+
+        with patch.object(litellm_router, "acompletion", side_effect=mock_acompletion):
+            resp = client.post(
+                "/v1/chat/completions",
+                json={
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "extra_headers": {"x-vercel-ai-data": "1"},
+                },
+            )
+
+        assert resp.status_code == 200
+        assert seen_kwargs["extra_headers"] == {"x-vercel-ai-data": "1"}
+
     def test_response_includes_routing_metadata(self):
         app = _make_test_app()
         client = TestClient(app)
@@ -732,6 +788,51 @@ class TestChatEndpoint:
         assert resp.status_code == 200
         body = resp.text
         assert "event: routing" in body
+
+    def test_chat_extra_headers_is_forwarded(self):
+        app = _make_test_app()
+        client = TestClient(app)
+        litellm_router = app.state.litellm_router
+
+        seen_kwargs = {}
+
+        chunk = MagicMock()
+        chunk.choices = [MagicMock()]
+        chunk.choices[0].delta = MagicMock()
+        chunk.choices[0].delta.content = "ok"
+
+        async def mock_stream(**kwargs):
+            seen_kwargs.update(kwargs)
+
+            class AsyncChunks:
+                def __init__(self):
+                    self._items = [chunk]
+                    self._idx = 0
+
+                def __aiter__(self):
+                    return self
+
+                async def __anext__(self):
+                    if self._idx >= len(self._items):
+                        raise StopAsyncIteration
+                    item = self._items[self._idx]
+                    self._idx += 1
+                    return item
+
+            return AsyncChunks()
+
+        with patch.object(litellm_router, "acompletion", side_effect=mock_stream):
+            resp = client.post(
+                "/api/chat",
+                json={
+                    "message": "test",
+                    "tolerance": 0.42,
+                    "extra_headers": {"x-vercel-ai-data": "1"},
+                },
+            )
+
+        assert resp.status_code == 200
+        assert seen_kwargs["extra_headers"] == {"x-vercel-ai-data": "1"}
 
     def test_chat_with_no_tokens_emits_error_on_exception(self):
         app = _make_test_app()

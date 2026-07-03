@@ -21,6 +21,7 @@ class ModelSpec(BaseModel):
     cost_per_m_output_tokens: float = 0.0
     system_prompt: str = ""
     chat_template_kwargs: dict[str, Any] = Field(default_factory=dict)
+    extra_headers: dict[str, Any] = Field(default_factory=dict)
     api_base: str = ""
 
     def model_post_init(self, __context: Any) -> None:

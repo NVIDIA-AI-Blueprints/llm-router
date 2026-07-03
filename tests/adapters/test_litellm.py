@@ -306,3 +306,32 @@ class TestModelRoutingStrategy:
             request_kwargs={"metadata": {"models": ["model-a"]}},
         )
         assert dep["model_name"] == "model-a"
+
+
+class TestReviewCallModel:
+    @pytest.mark.asyncio
+    async def test_extra_headers_is_forwarded(self, monkeypatch):
+        from model_router_toolkit.adapters.litellm.review import _call_model
+
+        seen_kwargs = {}
+
+        async def fake_acompletion(**kwargs):
+            seen_kwargs.update(kwargs)
+            return "ok"
+
+        monkeypatch.setattr(
+            "litellm.acompletion",
+            fake_acompletion,
+        )
+
+        await _call_model(
+            {
+                "model": "openai/gpt-test",
+                "api_key": "key",
+                "extra_headers": {"x-foo": "bar"},
+            },
+            [{"role": "user", "content": "hello"}],
+            temperature=0.2,
+        )
+
+        assert seen_kwargs["extra_headers"] == {"x-foo": "bar"}

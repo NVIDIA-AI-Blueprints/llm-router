@@ -27,6 +27,8 @@ def _resolve_api_key(litellm_model: str, api_base: str) -> str:
         return os.environ.get("OPENROUTER_API_KEY", "")
     if litellm_model.startswith("nvidia_nim/"):
         return os.environ.get("NVIDIA_API_KEY", "")
+    if litellm_model.startswith("vercel_ai_gateway/"):
+        return os.environ.get("VERCEL_AI_GATEWAY_API_KEY", "")
 
     if "nvidia" in api_base or "integrate.api.nvidia" in api_base:
         return os.environ.get("NVIDIA_API_KEY", "")
@@ -53,6 +55,7 @@ def _build_model_list(config: PoolConfig) -> list[dict]:
             for p in (
                 "openrouter/",
                 "nvidia_nim/",
+                "vercel_ai_gateway/",
                 "openai/",
                 "anthropic/",
                 "ollama/",
@@ -72,6 +75,8 @@ def _build_model_list(config: PoolConfig) -> list[dict]:
         }
         if m.api_base:
             params["api_base"] = m.api_base
+        if m.extra_headers:
+            params["extra_headers"] = m.extra_headers
 
         model_list.append(
             {

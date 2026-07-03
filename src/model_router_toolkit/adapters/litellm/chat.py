@@ -22,6 +22,7 @@ class ChatRequest(BaseModel):
     message: str
     tolerance: float = 0.10
     enabled_models: list[str] | None = None
+    extra_headers: dict[str, Any] | None = None
 
 
 async def _chat_stream(request: Request, req: ChatRequest):
@@ -68,6 +69,7 @@ async def _chat_stream(request: Request, req: ChatRequest):
             model=selected,
             messages=full_messages,
             stream=True,
+            extra_headers=req.extra_headers,
         )
         async for chunk in stream:
             if chunk.choices:

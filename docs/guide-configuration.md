@@ -35,6 +35,8 @@ models:
     litellm_model: openrouter/provider/model-id
     cost_per_m_input_tokens: 0.05
     cost_per_m_output_tokens: 0.20
+    extra_headers:
+      x-foo: bar
   - name: my-expensive-model
     litellm_model: openrouter/provider/model-id
     cost_per_m_input_tokens: 2.50
@@ -174,6 +176,7 @@ Common prefixes:
 |--------|----------|
 | `openrouter/` | OpenRouter (requires `OPENROUTER_API_KEY`) |
 | `nvidia_nim/` | NVIDIA NIM (requires `NVIDIA_API_KEY`) |
+| `vercel_ai_gateway/` | Vercel AI Gateway (requires `VERCEL_AI_GATEWAY_API_KEY`) |
 | `openai/` | OpenAI (requires `OPENAI_API_KEY`) |
 | `anthropic/` | Anthropic (requires `ANTHROPIC_API_KEY`) |
 
@@ -226,6 +229,18 @@ models:
 
 During training, the sweep searches over models with different `chat_template_kwargs` to find which encoding produces the best features. The selected kwargs are stored in the checkpoint.
 
+### `extra_headers` (dict, default: `{}`)
+
+Extra LiteLLM request headers to apply for this model. Use this for provider-specific header options that should always travel with the model entry.
+
+```yaml
+models:
+  - name: structured-output-model
+    litellm_model: openai/gpt-4o-mini
+    extra_headers:
+      x-foo: bar
+```
+
 ### `api_base` (string, default: `""`)
 
 Custom API base URL. Used by LiteLLM for models hosted on custom endpoints.
@@ -264,6 +279,7 @@ models:
 | `cost_per_m_output_tokens` | float | `0.0` | Output cost per million tokens ($) |
 | `system_prompt` | string | `""` | System message for inference |
 | `chat_template_kwargs` | dict | `{}` | Encoder template kwargs |
+| `extra_headers` | dict | `{}` | Extra LiteLLM request headers |
 | `api_base` | string | `""` | Custom API base URL |
 
 ---
@@ -376,6 +392,7 @@ Environment variables are not part of the YAML config but affect the runtime beh
 |----------|---------|-------------|
 | `OPENROUTER_API_KEY` | Standalone server, collect, LiteLLM Proxy | API key for OpenRouter |
 | `NVIDIA_API_KEY` | Standalone server, collect, LiteLLM Proxy | API key for NVIDIA NIM |
+| `VERCEL_AI_GATEWAY_API_KEY` | Standalone server, collect, LiteLLM Proxy | API key for Vercel AI Gateway |
 | `OPENAI_API_KEY` | Standalone server, collect, LiteLLM Proxy | Fallback API key for OpenAI-compatible |
 | `ROUTER_WEBHOOK_SECRET` | Router sidecar | Shared secret for webhook auth |
 | `CORS_ORIGINS` | Standalone server, router sidecar | Comma-separated allowed CORS origins (default: `*`) |

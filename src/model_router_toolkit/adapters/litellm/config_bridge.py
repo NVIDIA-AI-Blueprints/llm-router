@@ -41,6 +41,8 @@ def generate_litellm_config(
             params["api_key"] = f"os.environ/{env_var}"
         if m.api_base:
             params["api_base"] = m.api_base
+        if m.extra_headers:
+            params["extra_headers"] = m.extra_headers
 
         entry: dict[str, Any] = {
             "model_name": m.name,
@@ -116,6 +118,8 @@ def _api_key_env_var(litellm_model: str, api_base: str) -> str:
         return "OPENROUTER_API_KEY"
     if litellm_model.startswith("nvidia_nim/"):
         return "NVIDIA_API_KEY"
+    if litellm_model.startswith("vercel_ai_gateway/"):
+        return "VERCEL_AI_GATEWAY_API_KEY"
     if litellm_model.startswith("openai/"):
         return "OPENAI_API_KEY"
     if litellm_model.startswith("anthropic/"):

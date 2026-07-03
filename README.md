@@ -653,6 +653,7 @@ See [docs/guide-configuration.md](docs/guide-configuration.md) for the full refe
 |----------|-------------|-------------|
 | `OPENROUTER_API_KEY` | Serving, collecting (OpenRouter configs) | API key for OpenRouter |
 | `NVIDIA_API_KEY` | Serving, collecting (NVIDIA configs) | API key for NVIDIA NIM / build.nvidia.com |
+| `VERCEL_AI_GATEWAY_API_KEY` | Serving, collecting (Vercel AI Gateway configs) | API key for Vercel AI Gateway |
 | `OPENAI_API_KEY` | Serving, collecting (OpenAI configs) | Fallback API key for OpenAI-compatible providers |
 | `ROUTER_WEBHOOK_SECRET` | Router sidecar with auth | Shared secret for HMAC-SHA256 / bearer auth |
 | `CORS_ORIGINS` | Servers with restricted CORS | Comma-separated allowed origins (default: `*`) |
