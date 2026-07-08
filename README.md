@@ -1,6 +1,6 @@
- <h2>NVIDIA AI Blueprint: LLM Router v2 (Experimental)</h2>
+ <h2>Deprecated: NVIDIA AI Blueprint for LLM Router </h2>
 
-> **⚠️ EXPERIMENTAL BRANCH**: This branch contains LLM Router v2, a next-generation routing system with multimodal support. For the production-ready LLM Router v1, please visit the [main branch](https://github.com/NVIDIA-AI-Blueprints/llm-router/tree/main).
+> **⚠️ Deprecation Notice**: NVIDIA is excited to announce a new routing library, [NVIDIA NeMo Switchyard](https://github.com/NVIDIA-NeMo/Switchyard). The Switchyard library implements the same patterns as LLM Router v1 and LLM Router v2 and adds broader extensibility, improved performance, and deeper integrations with the NVIDIA NeMo Platform.
 
 ## Important Notes
 
