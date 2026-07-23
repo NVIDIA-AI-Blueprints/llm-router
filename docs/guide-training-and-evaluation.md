@@ -127,9 +127,10 @@ routing:
 
 This path mean-pools every saved encoder state over non-padding tokens,
 concatenates the states in numeric order, and fits a train-only
-`StandardScaler` and randomized PCA-200 transform. For Qwen 3.6 35B's 40
-saved states and hidden width 2,048, the raw feature width is 81,920. The
-concatenated buffer is scaled in place to limit peak host-memory use.
+`StandardScaler` and PCA-200 transform using sklearn's default automatic
+solver selection. For Qwen 3.6 35B's 40 saved states and hidden width 2,048,
+the raw feature width is 81,920. The concatenated buffer is scaled in place
+to limit peak host-memory use.
 
 `hidden_state_indexing: direct` means logical layer `L` reads
 `outputs.hidden_states[L]`. Logical layer 0 is therefore the embedding state.

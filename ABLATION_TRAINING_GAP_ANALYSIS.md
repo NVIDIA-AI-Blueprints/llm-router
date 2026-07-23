@@ -64,7 +64,8 @@ For each pooling mode:
 
 1. Fit `StandardScaler` on the 4,619 training rows.
 2. Transform the complete raw matrix.
-3. Fit randomized PCA-200 on the training rows.
+3. Fit `PCA(n_components=200, random_state=42)` on the training rows. Sklearn's
+   automatic solver resolves to randomized SVD for the reference matrix.
 4. Transform all rows once.
 5. Treat prefixes of that PCA-200 representation as PCA dimensions
    25, 50, 100, and 200.

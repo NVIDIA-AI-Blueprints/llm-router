@@ -154,7 +154,7 @@ class TestTransforms:
         actual = build_features_from_transform(result, transform)
         np.testing.assert_allclose(actual, expected, atol=1e-5)
 
-    def test_inplace_randomized_pipeline_preserves_transform_parity(self):
+    def test_inplace_pipeline_preserves_transform_parity(self):
         rng = np.random.default_rng(7)
         raw = rng.standard_normal((50, 30)).astype(np.float32)
         original = raw.copy()
@@ -165,10 +165,11 @@ class TestTransforms:
             train_mask,
             pca_dim=8,
             inplace=True,
-            randomized=True,
         )
 
         assert not np.array_equal(raw, original)
+        assert pca.svd_solver == "auto"
+        assert pca.iterated_power == "auto"
         actual = pca.transform(scaler.transform(original.copy()))
         np.testing.assert_allclose(actual, expected, atol=1e-5)
 

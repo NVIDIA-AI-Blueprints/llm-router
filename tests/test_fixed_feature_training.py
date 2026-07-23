@@ -119,6 +119,8 @@ def test_fixed_all_layer_training_builds_versioned_checkpoint(
         "hidden_state_indexing": "direct",
     }
     assert transform_a["pca"].components_.shape == (5, n_layers * hidden_dim)
+    assert transform_a["pca"].svd_solver == "auto"
+    assert transform_a["pca"].iterated_power == "auto"
     assert transform_a["scaler"] is transform_b["scaler"]
     assert transform_a["pca"] is transform_b["pca"]
 

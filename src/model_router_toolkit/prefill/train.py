@@ -304,7 +304,6 @@ def train_prefill(
             train_mask,
             fixed_features.pca_dim,
             inplace=True,
-            randomized=True,
         )
         shared_transform = {
             "scaler": scaler,

@@ -83,7 +83,6 @@ def fit_pca_pipeline(
     pca_dim: int,
     *,
     inplace: bool = False,
-    randomized: bool = False,
 ) -> tuple[StandardScaler, PCA, np.ndarray]:
     """Fit scaler + PCA on training rows, transform the full array.
 
@@ -96,13 +95,9 @@ def fit_pca_pipeline(
 
     scaler = StandardScaler(copy=not inplace).fit(train_rows)
     scaled = scaler.transform(raw, copy=not inplace)
-    pca_kwargs: dict[str, Any] = {}
-    if randomized:
-        pca_kwargs = {"svd_solver": "randomized", "iterated_power": 5}
     pca = PCA(
         n_components=n_comp,
         random_state=RANDOM_STATE,
-        **pca_kwargs,
     ).fit(
         scaled if all_rows_train else scaled[train_mask],
     )
