@@ -10,11 +10,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import torch
 
 from model_router_toolkit.prefill.extract import PrefillExtractor, PrefillResult
-from model_router_toolkit.prefill.transforms import build_features
+from model_router_toolkit.prefill.transforms import build_trunk_features
 from model_router_toolkit.prefill.trunk import SharedTrunkNet, predict_proba, reconstruct_trunk
 from model_router_toolkit.router import CostEstimate
 
@@ -54,19 +53,45 @@ class PrefillScorer:
 
     def _needed_layers(self) -> list[int]:
         """Collect all unique layers referenced by the transforms."""
-        layers = set()
+        assert self._ckpt is not None
+        layers: set[int] = set()
         for t in self._ckpt["transforms"].values():
-            layers.add(t["layer"])
+            feature_spec = t.get("feature_spec")
+            if feature_spec:
+                requested = feature_spec.get("layers", "all")
+                if requested == "all":
+                    raise ValueError(
+                        "Checkpoint feature_spec must store resolved layer indexes"
+                    )
+                layers.update(int(layer) for layer in requested)
+            else:
+                layers.add(int(t["layer"]))
         return sorted(layers)
+
+    def _needed_pooling_modes(self) -> list[str]:
+        """Collect pooling modes required by checkpoint transforms."""
+        assert self._ckpt is not None
+        modes: set[str] = set()
+        for transform in self._ckpt["transforms"].values():
+            feature_spec = transform.get("feature_spec")
+            modes.add(
+                feature_spec.get("pooling", "last")
+                if feature_spec
+                else transform.get("mode", "last")
+            )
+        return sorted(modes)
 
     def score(self, question: str) -> RawScores:
         self._ensure_loaded()
+        assert self._ckpt is not None
+        assert self._extractor is not None
 
         needed_layers = self._needed_layers()
+        needed_pooling_modes = self._needed_pooling_modes()
 
         # Cache extraction results by (encoder, template_kwargs) combo
         extraction_cache: dict[str, PrefillResult] = {}
-        per_model_feats: dict[str, np.ndarray] = {}
+        prefill_results: dict[str, PrefillResult] = {}
 
         for mname in self.model_names:
             t = self._ckpt["transforms"][mname]
@@ -79,13 +104,22 @@ class PrefillScorer:
                     question,
                     chat_template_kwargs=tpl_kwargs,
                     extract_layers=needed_layers,
+                    pooling_modes=needed_pooling_modes,
                 )
 
             result = extraction_cache[cache_key]
-            feat = build_features(result, t["layer"], t["mode"], t["scaler"], t["pca"])
-            per_model_feats[mname] = feat
+            prefill_results[mname] = result
 
-        shared_feats = np.hstack([per_model_feats[m] for m in self.model_names])
+        feature_layout = self._ckpt.get("trunk_config", {}).get(
+            "feature_layout",
+            "per_target",
+        )
+        shared_feats = build_trunk_features(
+            prefill_results,
+            self._ckpt["transforms"],
+            self.model_names,
+            feature_layout,
+        )
         probs = predict_proba(self._trunk_nets, shared_feats, device=self._device)
         confidences = probs[0].tolist()
 

@@ -12,7 +12,7 @@ import hashlib
 import logging
 import os
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -47,16 +47,29 @@ def prefill_cache_path(
     encoder: str,
     chat_template_kwargs: dict[str, Any],
     questions: list[str] | None = None,
+    *,
+    extract_layers: list[int] | str | None = None,
+    pooling_modes: list[str] | None = None,
+    hidden_state_indexing: str = "direct",
+    feature_schema_version: int = 1,
 ) -> Path:
-    """Cache filename keyed by (encoder, template, questions)."""
+    """Cache filename keyed by inputs and extraction feature requirements."""
     safe_enc = encoder.replace("/", "_").replace(" ", "_")
     th = template_hash(encoder, chat_template_kwargs)
+    feature_suffix = ""
+    if extract_layers is not None or pooling_modes is not None:
+        feature_key = (
+            f"layers={extract_layers}|pooling={sorted(pooling_modes or [])}|"
+            f"indexing={hidden_state_indexing}|schema={feature_schema_version}"
+        )
+        fh = hashlib.sha256(feature_key.encode()).hexdigest()[:12]
+        feature_suffix = f"_{fh}"
     if questions:
         qh = hashlib.sha256(
-            "|".join(sorted(normalize_question(q) for q in questions)).encode()
+            "|".join(normalize_question(q) for q in questions).encode()
         ).hexdigest()[:12]
-        return Path(prefill_dir) / f"prefill_{safe_enc}_{th}_{qh}.pt"
-    return Path(prefill_dir) / f"prefill_{safe_enc}_{th}.pt"
+        return Path(prefill_dir) / f"prefill_{safe_enc}_{th}_{qh}{feature_suffix}.pt"
+    return Path(prefill_dir) / f"prefill_{safe_enc}_{th}{feature_suffix}.pt"
 
 
 def detect_device() -> str:
@@ -94,14 +107,19 @@ class PrefillResult:
     hidden_mean: dict[int, torch.Tensor]
     n_layers: int
     hidden_dim: int
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def available_layers(self) -> list[int]:
-        return sorted(self.hidden_last.keys())
+        return sorted(set(self.hidden_last) | set(self.hidden_mean))
 
     def to_save_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
-            "config": {"n_layers": self.n_layers, "hidden_dim": self.hidden_dim},
+            "config": {
+                "n_layers": self.n_layers,
+                "hidden_dim": self.hidden_dim,
+                **self.metadata,
+            },
         }
         for li, t in self.hidden_last.items():
             data[f"layer_{li}"] = t
@@ -132,15 +150,27 @@ class PrefillResult:
                 hidden_mean[li] = data[key]
         n_layers = cfg.get(
             "n_layers",
-            max(hidden_last.keys()) + 1 if hidden_last else 0,
+            max(set(hidden_last) | set(hidden_mean)) + 1
+            if hidden_last or hidden_mean
+            else 0,
         )
-        sample = next(iter(hidden_last.values()))
+        sample = next(iter(hidden_last.values()), None)
+        if sample is None:
+            sample = next(iter(hidden_mean.values()), None)
+        if sample is None:
+            raise ValueError("Prefill artifact contains no hidden-state tensors")
         hidden_dim = cfg.get("hidden_dim", sample.shape[-1])
+        metadata = {
+            key: value
+            for key, value in cfg.items()
+            if key not in {"n_layers", "hidden_dim"}
+        }
         return cls(
             hidden_last=hidden_last,
             hidden_mean=hidden_mean,
             n_layers=n_layers,
             hidden_dim=hidden_dim,
+            metadata=metadata,
         )
 
 
@@ -218,13 +248,15 @@ class PrefillExtractor:
         question: str,
         *,
         chat_template_kwargs: dict | None = None,
-        extract_layers: list[int] | None = None,
+        extract_layers: list[int] | str | None = None,
+        pooling_modes: list[str] | None = None,
     ) -> PrefillResult:
         """Extract prefill features for a single question (scorer interface)."""
         return self.extract_batch(
             [question],
             chat_template_kwargs=chat_template_kwargs,
             extract_layers=extract_layers,
+            pooling_modes=pooling_modes,
             batch_size=1,
             show_progress=False,
         )
@@ -234,7 +266,8 @@ class PrefillExtractor:
         questions: list[str],
         *,
         chat_template_kwargs: dict | None = None,
-        extract_layers: list[int] | None = None,
+        extract_layers: list[int] | str | None = None,
+        pooling_modes: list[str] | None = None,
         batch_size: int = 4,
         max_length: int = 2048,
         show_progress: bool = True,
@@ -243,10 +276,28 @@ class PrefillExtractor:
         self._ensure_loaded()
 
         tpl_kwargs = chat_template_kwargs or {}
-        if extract_layers is None:
+        if extract_layers == "all":
+            layers = list(range(self.n_layers))
+        elif extract_layers is None:
             half = self.n_layers // 2
-            extract_layers = list(range(half, self.n_layers))
-        layers = extract_layers
+            layers = list(range(half, self.n_layers))
+        else:
+            layers = [int(layer) for layer in extract_layers]
+        if not layers:
+            raise ValueError("extract_layers resolved to an empty list")
+        invalid = [layer for layer in layers if layer < 0 or layer >= self.n_layers]
+        if invalid:
+            raise ValueError(
+                f"Requested layers {invalid} are outside encoder range "
+                f"0..{self.n_layers - 1}"
+            )
+
+        pools = set(pooling_modes or ["last", "mean"])
+        unknown_pools = pools - {"last", "mean"}
+        if unknown_pools:
+            raise ValueError(f"Unknown pooling modes: {sorted(unknown_pools)}")
+        if not pools:
+            raise ValueError("At least one pooling mode is required")
 
         formatted = [
             self._tokenizer.apply_chat_template(
@@ -258,8 +309,12 @@ class PrefillExtractor:
             for q in questions
         ]
 
-        all_last: dict[int, list[torch.Tensor]] = {li: [] for li in layers}
-        all_mean: dict[int, list[torch.Tensor]] = {li: [] for li in layers}
+        all_last: dict[int, list[torch.Tensor]] = (
+            {li: [] for li in layers} if "last" in pools else {}
+        )
+        all_mean: dict[int, list[torch.Tensor]] = (
+            {li: [] for li in layers} if "mean" in pools else {}
+        )
 
         n_total = len(formatted)
         n_batches = (n_total + batch_size - 1) // batch_size
@@ -302,18 +357,26 @@ class PrefillExtractor:
                 seq_len = int(seq_lengths[b].item())
                 for li in layers:
                     hs = hidden_states[li][b, :seq_len, :].float()
-                    all_last[li].append(hs[-1].cpu())
-                    all_mean[li].append(hs.mean(dim=0).cpu())
+                    if "last" in pools:
+                        all_last[li].append(hs[-1].cpu())
+                    if "mean" in pools:
+                        all_mean[li].append(hs.mean(dim=0).cpu())
 
             del outputs, hidden_states, input_ids, attention_mask
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
         return PrefillResult(
-            hidden_last={li: torch.stack(all_last[li]) for li in layers},
-            hidden_mean={li: torch.stack(all_mean[li]) for li in layers},
+            hidden_last={li: torch.stack(rows) for li, rows in all_last.items()},
+            hidden_mean={li: torch.stack(rows) for li, rows in all_mean.items()},
             n_layers=self.n_layers,
             hidden_dim=self.hidden_dim,
+            metadata={
+                "resolved_layers": layers,
+                "pooling_modes": sorted(pools),
+                "hidden_state_indexing": "direct",
+                "feature_schema_version": 1,
+            },
         )
 
     def unload(self) -> None:
@@ -341,12 +404,25 @@ def run_extraction(
     batch_size: int = 4,
     cache_dir: str | Path | None = None,
     hf_cache_dir: str | None = None,
+    extract_layers: list[int] | str | None = None,
+    pooling_modes: list[str] | None = None,
+    hidden_state_indexing: str = "direct",
 ) -> PrefillResult:
     """Extract prefill features for a list of questions, with caching."""
     tpl = chat_template_kwargs or {}
+    if hidden_state_indexing != "direct":
+        raise ValueError("Only direct hidden-state indexing is supported")
 
     if cache_dir:
-        cp = prefill_cache_path(cache_dir, encoder_hf_path, tpl, questions)
+        cp = prefill_cache_path(
+            cache_dir,
+            encoder_hf_path,
+            tpl,
+            questions,
+            extract_layers=extract_layers,
+            pooling_modes=pooling_modes,
+            hidden_state_indexing=hidden_state_indexing,
+        )
         if cp.exists():
             print(f"  Loading cached prefill: {cp}")
             return PrefillResult.load(cp)
@@ -362,12 +438,22 @@ def run_extraction(
     result = extractor.extract_batch(
         questions,
         chat_template_kwargs=tpl,
+        extract_layers=extract_layers,
+        pooling_modes=pooling_modes,
         batch_size=batch_size,
     )
     extractor.unload()
 
     if cache_dir:
-        cp = prefill_cache_path(cache_dir, encoder_hf_path, tpl, questions)
+        cp = prefill_cache_path(
+            cache_dir,
+            encoder_hf_path,
+            tpl,
+            questions,
+            extract_layers=extract_layers,
+            pooling_modes=pooling_modes,
+            hidden_state_indexing=hidden_state_indexing,
+        )
         result.save(cp)
         print(f"  Saved prefill cache: {cp}")
 
@@ -388,24 +474,59 @@ def extract_from_checkpoint(
     Deduplicates by (encoder, template) so each encoder runs at most once.
     Returns ``{target_name: PrefillResult}``.
     """
-    seen: dict[str, PrefillResult] = {}
+    requirements: dict[str, dict[str, Any]] = {}
     results: dict[str, PrefillResult] = {}
 
     for tname, t in ckpt.get("transforms", {}).items():
         enc = t.get("encoder", "")
         tpl = t.get("chat_template_kwargs", {})
         key = template_hash(enc, tpl)
-
-        if key not in seen:
-            seen[key] = run_extraction(
-                enc,
-                questions,
-                chat_template_kwargs=tpl,
-                device=device,
-                batch_size=batch_size,
-                cache_dir=cache_dir,
-                hf_cache_dir=hf_cache_dir,
+        req = requirements.setdefault(
+            key,
+            {
+                "encoder": enc,
+                "template": tpl,
+                "targets": [],
+                "layers": set(),
+                "all_layers": False,
+                "pooling": set(),
+                "hidden_state_indexing": "direct",
+            },
+        )
+        req["targets"].append(tname)
+        feature_spec = t.get("feature_spec")
+        if feature_spec:
+            requested_layers = feature_spec.get("layers", "all")
+            if requested_layers == "all":
+                req["all_layers"] = True
+            else:
+                req["layers"].update(int(layer) for layer in requested_layers)
+            req["pooling"].add(feature_spec.get("pooling", "last"))
+            req["hidden_state_indexing"] = feature_spec.get(
+                "hidden_state_indexing",
+                "direct",
             )
-        results[tname] = seen[key]
+        else:
+            req["layers"].add(int(t["layer"]))
+            req["pooling"].add(t.get("mode", "last"))
+
+    for req in requirements.values():
+        layers: list[int] | str = (
+            "all" if req["all_layers"] else sorted(req["layers"])
+        )
+        result = run_extraction(
+            req["encoder"],
+            questions,
+            chat_template_kwargs=req["template"],
+            device=device,
+            batch_size=batch_size,
+            cache_dir=cache_dir,
+            hf_cache_dir=hf_cache_dir,
+            extract_layers=layers,
+            pooling_modes=sorted(req["pooling"]),
+            hidden_state_indexing=req["hidden_state_indexing"],
+        )
+        for target_name in req["targets"]:
+            results[target_name] = result
 
     return results

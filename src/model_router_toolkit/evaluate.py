@@ -222,29 +222,18 @@ def _build_shared_features(
     model_names: list[str],
 ) -> np.ndarray:
     """Apply checkpoint transforms and stack into the shared feature matrix."""
-    from model_router_toolkit.prefill.transforms import apply_pipeline
+    from model_router_toolkit.prefill.transforms import build_trunk_features
 
-    feat: dict[str, np.ndarray] = {}
-    for mname in model_names:
-        t = ckpt["transforms"][mname]
-        pr = prefill_results.get(mname)
-        if pr is None:
-            raise RuntimeError(
-                f"No prefill result for target '{mname}' (encoder='{t.get('encoder', '?')}')"
-            )
-        if t["mode"] == "mean":
-            import torch
-
-            raw = pr.hidden_mean[t["layer"]]
-            raw = raw.float().numpy() if isinstance(raw, torch.Tensor) else raw
-        else:
-            import torch
-
-            raw = pr.hidden_last[t["layer"]]
-            raw = raw.float().numpy() if isinstance(raw, torch.Tensor) else raw
-        feat[mname] = apply_pipeline(raw, t["scaler"], t["pca"])
-
-    return np.hstack([feat[m] for m in model_names])
+    feature_layout = ckpt.get("trunk_config", {}).get(
+        "feature_layout",
+        "per_target",
+    )
+    return build_trunk_features(
+        prefill_results,
+        ckpt["transforms"],
+        model_names,
+        feature_layout,
+    )
 
 
 def _print_eval_report(
@@ -308,9 +297,22 @@ def _print_eval_report(
             t = ckpt["transforms"][mname]
             enc = t.get("encoder", "")
             enc_short = enc.split("/")[-1] if enc else ""
-            print(
-                f"    {mname:20s}: L{t['layer']} {t['mode']} PCA{t['pca_dim']} ({enc_short})",
-            )
+            feature_spec = t.get("feature_spec")
+            if feature_spec:
+                layers = feature_spec.get("layers", [])
+                layer_summary = (
+                    f"{layers[0]}..{layers[-1]}" if layers else "none"
+                )
+                print(
+                    f"    {mname:20s}: {feature_spec['aggregation']} "
+                    f"L{layer_summary} {feature_spec['pooling']} "
+                    f"PCA{t['pca_dim']} ({enc_short})",
+                )
+            else:
+                print(
+                    f"    {mname:20s}: L{t['layer']} {t['mode']} "
+                    f"PCA{t['pca_dim']} ({enc_short})",
+                )
 
     # Per-model metrics
     print()

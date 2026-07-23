@@ -109,6 +109,56 @@ Fits StandardScaler + PCA on training data for each model's best configuration.
 - Transforms all data (train + any held-out) through the fitted pipeline
 - Concatenates per-model features into a shared feature matrix
 
+#### Fixed All-Layer Meanpool PCA-200
+
+Training can bypass the layer/mode/PCA sweep with an explicit feature recipe:
+
+```yaml
+routing:
+  method: prefill
+  encoder: Qwen/Qwen3.6-35B-A3B
+  features:
+    aggregation: all_layers_concat
+    layers: all
+    pooling: mean
+    pca_dim: 200
+    hidden_state_indexing: direct
+```
+
+This path mean-pools every saved encoder state over non-padding tokens,
+concatenates the states in numeric order, and fits a train-only
+`StandardScaler` and randomized PCA-200 transform. For Qwen 3.6 35B's 40
+saved states and hidden width 2,048, the raw feature width is 81,920. The
+concatenated buffer is scaled in place to limit peak host-memory use.
+
+`hidden_state_indexing: direct` means logical layer `L` reads
+`outputs.hidden_states[L]`. Logical layer 0 is therefore the embedding state.
+The convention is saved in the generated checkpoint and reused during
+evaluation and serving.
+
+The transformed 200-dimensional feature block enters the multi-output shared
+trunk once, regardless of how many target models are trained. The resulting
+architecture is `200 -> 256 -> 128 -> n_targets`. The scaler and PCA are
+fitted once and shared by all target outputs.
+
+Run it through the normal training command:
+
+```bash
+model-router train \
+  --config configs/qwen36-35b-all-layers-mean-pca200.yaml \
+  --data data/train.csv \
+  --output-dir checkpoints/
+```
+
+This configuration does not inspect test labels and does not run the
+layer/mode/PCA sweep. All-layer extraction and the 81,920-wide raw transform
+have substantially higher memory and runtime requirements than the default
+single-layer path.
+
+The repository provides the training code and example configuration, not a
+trained checkpoint or Qwen prefill artifact. The command writes generated
+artifacts to the selected output and cache directories.
+
 #### Stage 5: Train MLP Ensemble
 
 Trains the SharedTrunkNet with multiple seeds and keeps the best.
