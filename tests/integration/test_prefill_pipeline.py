@@ -50,10 +50,10 @@ class TestExtractUtilities:
         path_b = prefill_cache_path(tmp_path, "enc", {}, ["q1", "q2"])
         assert path_a == path_b
 
-    def test_cache_path_stable_regardless_of_order(self, tmp_path):
+    def test_cache_path_changes_with_question_order(self, tmp_path):
         path_a = prefill_cache_path(tmp_path, "enc", {}, ["q2", "q1"])
         path_b = prefill_cache_path(tmp_path, "enc", {}, ["q1", "q2"])
-        assert path_a == path_b
+        assert path_a != path_b
 
     def test_cache_path_stable_regardless_of_whitespace(self, tmp_path):
         path_a = prefill_cache_path(tmp_path, "enc", {}, ["  What  is  2+2? "])
@@ -66,6 +66,27 @@ class TestExtractUtilities:
         assert path_no_q != path_with_q
         assert len(path_no_q.stem.split("_")) == 3  # prefill_enc_hash
         assert len(path_with_q.stem.split("_")) == 4  # prefill_enc_hash_qhash
+
+    def test_cache_path_includes_feature_requirements(self, tmp_path):
+        default_path = prefill_cache_path(tmp_path, "enc", {}, ["q1"])
+        all_mean_path = prefill_cache_path(
+            tmp_path,
+            "enc",
+            {},
+            ["q1"],
+            extract_layers="all",
+            pooling_modes=["mean"],
+        )
+        selected_mean_path = prefill_cache_path(
+            tmp_path,
+            "enc",
+            {},
+            ["q1"],
+            extract_layers=[1, 2],
+            pooling_modes=["mean"],
+        )
+        assert default_path != all_mean_path
+        assert all_mean_path != selected_mean_path
 
     def test_detect_device(self):
         device = detect_device()
@@ -94,6 +115,30 @@ class TestPrefillResultSerialization:
         for li in layers:
             torch.testing.assert_close(original.hidden_last[li], loaded.hidden_last[li])
             torch.testing.assert_close(original.hidden_mean[li], loaded.hidden_mean[li])
+
+    def test_mean_only_save_load_roundtrip(self, tmp_path):
+        original = PrefillResult(
+            hidden_last={},
+            hidden_mean={li: torch.randn(5, 16) for li in range(3)},
+            n_layers=3,
+            hidden_dim=16,
+            metadata={
+                "resolved_layers": [0, 1, 2],
+                "pooling_modes": ["mean"],
+                "hidden_state_indexing": "direct",
+            },
+        )
+        save_path = tmp_path / "mean_only.pt"
+        original.save(save_path)
+        loaded = PrefillResult.load(save_path)
+        assert loaded.hidden_last == {}
+        assert loaded.available_layers == [0, 1, 2]
+        assert loaded.metadata["pooling_modes"] == ["mean"]
+        for layer in range(3):
+            torch.testing.assert_close(
+                original.hidden_mean[layer],
+                loaded.hidden_mean[layer],
+            )
 
 
 @pytest.mark.slow

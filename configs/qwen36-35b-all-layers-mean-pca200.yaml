@@ -1,0 +1,36 @@
+# Training configuration matching the Qwen 3.6 35B research experiment's
+# fixed all-layer meanpool PCA-200 single-block feature path.
+# Set litellm_model for each target before serving the generated checkpoint.
+routing:
+  method: prefill
+  checkpoint: checkpoints/prefill_router_qwen36_35b_all_layers_mean_pca200.pt
+  tolerance: 0.20
+  encoder: Qwen/Qwen3.6-35B-A3B
+  encoder_backend: transformers
+  features:
+    aggregation: all_layers_concat
+    layers: all
+    pooling: mean
+    pca_dim: 200
+    hidden_state_indexing: direct
+
+models:
+  - name: qwen-122b
+    display_name: Qwen 3.5 122B
+    cost_per_m_input_tokens: 0.26
+    cost_per_m_output_tokens: 2.08
+
+  - name: nemotron-3-super
+    display_name: Nemotron 3 Super
+    cost_per_m_input_tokens: 0.09
+    cost_per_m_output_tokens: 0.45
+
+  - name: opus-4.7
+    display_name: Claude Opus 4.7
+    cost_per_m_input_tokens: 5.00
+    cost_per_m_output_tokens: 25.00
+
+  - name: gpt-5.5
+    display_name: GPT-5.5
+    cost_per_m_input_tokens: 5.00
+    cost_per_m_output_tokens: 30.00

@@ -24,7 +24,13 @@ from model_router_toolkit.prefill.extract import (
     run_extraction,
 )
 from model_router_toolkit.prefill.sweep import SweepResult, sweep_model
-from model_router_toolkit.prefill.transforms import fit_pca_pipeline, raw_hidden
+from model_router_toolkit.prefill.transforms import (
+    assemble_trunk_features,
+    fit_pca_pipeline,
+    raw_features,
+    raw_hidden,
+    resolve_feature_layers,
+)
 from model_router_toolkit.prefill.trunk import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_LR,
@@ -123,7 +129,7 @@ def _build_checkpoint(
     ckpt_transforms: dict[str, Any] = {}
     for mname in model_names:
         t = transforms[mname]
-        ckpt_transforms[mname] = {
+        transform_entry = {
             "scaler": t["scaler"],
             "pca": t["pca"],
             "layer": t["layer"],
@@ -132,9 +138,12 @@ def _build_checkpoint(
             "encoder": t["encoder"],
             "chat_template_kwargs": t.get("chat_template_kwargs", {}),
         }
+        if "feature_spec" in t:
+            transform_entry["feature_spec"] = dict(t["feature_spec"])
+        ckpt_transforms[mname] = transform_entry
 
     return {
-        "version": 2,
+        "version": 3 if any("feature_spec" in t for t in transforms.values()) else 2,
         "pool_config": pool_config,
         "model_names": model_names,
         "transforms": ckpt_transforms,
@@ -226,8 +235,33 @@ def train_prefill(
             cost_table[m.name] = stats
 
     # ── 3–5. Extract, sweep, transform ─────────────────────────────
+    fixed_features = config.routing.features
+    if fixed_features is not None:
+        missing_labels = [
+            (question_key, model_name)
+            for question_key, data in label_data.items()
+            for model_name in model_names
+            if model_name not in data
+        ]
+        if missing_labels:
+            preview = ", ".join(
+                f"{question!r}/{model}" for question, model in missing_labels[:5]
+            )
+            raise ValueError(
+                f"Fixed-feature training requires a complete label matrix; "
+                f"missing {len(missing_labels)} labels ({preview})"
+            )
+
     print()
     print("  [2/6] Extracting prefill features...")
+    extract_layers: list[int] | str | None = None
+    pooling_modes: list[str] | None = None
+    hidden_state_indexing = "direct"
+    if fixed_features is not None:
+        extract_layers = fixed_features.layers
+        pooling_modes = [fixed_features.pooling]
+        hidden_state_indexing = fixed_features.hidden_state_indexing
+
     prefill = run_extraction(
         encoder,
         questions_raw,
@@ -235,53 +269,113 @@ def train_prefill(
         device=dev,
         batch_size=batch_size,
         cache_dir="cache/",
+        extract_layers=extract_layers,
+        pooling_modes=pooling_modes,
+        hidden_state_indexing=hidden_state_indexing,
     )
 
-    print(flush=True)
-    print("  [3/6] Sweeping layer/mode/PCA per target...", flush=True)
-    sweep_results: dict[str, SweepResult] = {}
-    for mi, mname in enumerate(model_names):
-        sweep_results[mname] = sweep_model(
-            prefill,
-            Y[:, mi],
-            train_mask,
-            pca_dims=pca_dims,
-            target_name=mname,
-        )
-
-    print()
-    print("  [4/6] Fitting transforms...")
     transforms: dict[str, dict[str, Any]] = {}
     feat_per_model: dict[str, np.ndarray] = {}
 
-    for mname in model_names:
-        sr = sweep_results[mname]
-        raw = raw_hidden(prefill, sr.layer, sr.mode)
-        scaler, pca, feats = fit_pca_pipeline(raw, train_mask, sr.pca_dim)
-        transforms[mname] = {
+    if fixed_features is not None:
+        print(flush=True)
+        print("  [3/6] Using fixed prefill feature configuration...", flush=True)
+        feature_spec = fixed_features.model_dump()
+        resolved_layers = resolve_feature_layers(prefill, feature_spec)
+        feature_spec["layers"] = resolved_layers
+
+        print()
+        print("  [4/6] Fitting shared all-layer transform...")
+        raw = raw_features(prefill, feature_spec)
+        expected_width = len(resolved_layers) * prefill.hidden_dim
+        if raw.shape[1] != expected_width:
+            raise RuntimeError(
+                f"All-layer feature width mismatch: got {raw.shape[1]}, "
+                f"expected {expected_width}"
+            )
+        max_pca_dim = min(raw.shape[1], int(train_mask.sum()))
+        if fixed_features.pca_dim > max_pca_dim:
+            raise ValueError(
+                f"Configured PCA dimension {fixed_features.pca_dim} exceeds "
+                f"the maximum supported dimension {max_pca_dim}"
+            )
+        scaler, pca, feats = fit_pca_pipeline(
+            raw,
+            train_mask,
+            fixed_features.pca_dim,
+            inplace=True,
+        )
+        shared_transform = {
             "scaler": scaler,
             "pca": pca,
-            "layer": sr.layer,
-            "mode": sr.mode,
-            "pca_dim": sr.pca_dim,
+            "layer": resolved_layers[0],
+            "mode": fixed_features.pooling,
+            "pca_dim": int(pca.n_components_),
             "encoder": encoder,
             "chat_template_kwargs": encoder_tpl,
+            "feature_spec": feature_spec,
         }
-        feat_per_model[mname] = feats
         print(
-            f"         {mname}: L{sr.layer} {sr.mode} PCA{sr.pca_dim} (AUC={sr.cv_auc:.4f})",
+            f"         {fixed_features.aggregation} "
+            f"{fixed_features.pooling} layers={resolved_layers[0]}..{resolved_layers[-1]} "
+            f"raw={raw.shape[1]} PCA{pca.n_components_}",
         )
+        for mname in model_names:
+            transforms[mname] = shared_transform
+            feat_per_model[mname] = feats
+        del raw
+    else:
+        print(flush=True)
+        print("  [3/6] Sweeping layer/mode/PCA per target...", flush=True)
+        sweep_results: dict[str, SweepResult] = {}
+        for mi, mname in enumerate(model_names):
+            sweep_results[mname] = sweep_model(
+                prefill,
+                Y[:, mi],
+                train_mask,
+                pca_dims=pca_dims,
+                target_name=mname,
+            )
 
-    shared_feats = np.hstack([feat_per_model[m] for m in model_names])
+        print()
+        print("  [4/6] Fitting transforms...")
+        for mname in model_names:
+            sr = sweep_results[mname]
+            raw = raw_hidden(prefill, sr.layer, sr.mode)
+            scaler, pca, feats = fit_pca_pipeline(raw, train_mask, sr.pca_dim)
+            transforms[mname] = {
+                "scaler": scaler,
+                "pca": pca,
+                "layer": sr.layer,
+                "mode": sr.mode,
+                "pca_dim": sr.pca_dim,
+                "encoder": encoder,
+                "chat_template_kwargs": encoder_tpl,
+            }
+            feat_per_model[mname] = feats
+            print(
+                f"         {mname}: L{sr.layer} {sr.mode} "
+                f"PCA{sr.pca_dim} (AUC={sr.cv_auc:.4f})",
+            )
+
+    feature_layout = "shared_once" if fixed_features is not None else "per_target"
+    shared_feats = assemble_trunk_features(
+        feat_per_model,
+        model_names,
+        feature_layout,
+    )
 
     # ── 6. Train shared trunk ─────────────────────────────────────────
     print()
     print("  [5/6] Training shared trunk ensemble...")
     d_shared = shared_feats.shape[1]
-    print(
-        f"         Shared input dim: {d_shared} "
-        f"({' + '.join(str(feat_per_model[m].shape[1]) for m in model_names)})",
-    )
+    if feature_layout == "shared_once":
+        print(f"         Shared input dim: {d_shared} (one shared feature block)")
+    else:
+        print(
+            f"         Shared input dim: {d_shared} "
+            f"({' + '.join(str(feat_per_model[m].shape[1]) for m in model_names)})",
+        )
 
     trunk_hidden = DEFAULT_TRUNK_HIDDEN
     trunk_nets = train_ensemble(
@@ -316,6 +410,9 @@ def train_prefill(
         "n_outputs": n_models,
         "hidden": list(trunk_hidden),
     }
+    if fixed_features is not None:
+        trunk_config["feature_layout"] = "shared_once"
+        trunk_config["feature_width"] = int(next(iter(feat_per_model.values())).shape[1])
 
     ckpt = _build_checkpoint(
         config,

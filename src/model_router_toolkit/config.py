@@ -7,10 +7,10 @@ The config determines routing method, model pool, and provider settings.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ModelSpec(BaseModel):
@@ -28,6 +28,38 @@ class ModelSpec(BaseModel):
             self.display_name = self.name
 
 
+class PrefillFeatureConfig(BaseModel):
+    """Fixed prefill feature recipe used instead of the feature sweep."""
+
+    aggregation: Literal["single_layer", "all_layers_concat"] = "single_layer"
+    layers: Literal["all"] | list[int] = "all"
+    pooling: Literal["last", "mean"] = "mean"
+    pca_dim: int = Field(default=200, gt=0)
+    hidden_state_indexing: Literal["direct"] = "direct"
+
+    @field_validator("layers")
+    @classmethod
+    def validate_layers(cls, value: Literal["all"] | list[int]):
+        if value == "all":
+            return value
+        if not value:
+            raise ValueError("layers must be 'all' or a non-empty list")
+        if any(layer < 0 for layer in value):
+            raise ValueError("layers must contain only non-negative integers")
+        if len(set(value)) != len(value):
+            raise ValueError("layers must not contain duplicates")
+        return value
+
+    @model_validator(mode="after")
+    def validate_aggregation_layers(self):
+        if self.aggregation == "single_layer":
+            if self.layers == "all" or len(self.layers) != 1:
+                raise ValueError(
+                    "single_layer aggregation requires one explicit layer"
+                )
+        return self
+
+
 class RoutingConfig(BaseModel):
     method: str = "prefill"
     checkpoint: str = ""
@@ -37,6 +69,7 @@ class RoutingConfig(BaseModel):
     encoder_server: str = ""
     training_mode: str = "auto"
     encoder_backend: str = "transformers"
+    features: PrefillFeatureConfig | None = None
 
 
 class PoolConfig(BaseModel):
