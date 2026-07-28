@@ -346,6 +346,20 @@ const Playground = (function () {
         body: JSON.stringify(payload),
       });
 
+      if (!resp.ok) {
+        var errorText = '';
+        try {
+          errorText = await resp.text();
+        } catch (e) {
+          errorText = resp.statusText || 'Unknown error';
+        }
+        throw new Error('Request failed (' + resp.status + '): ' + (errorText || resp.statusText || 'Unknown error'));
+      }
+
+      if (!resp.body) {
+        throw new Error('Streaming response body was empty');
+      }
+
       typingDiv.remove();
 
       assistantDiv = document.createElement('div');

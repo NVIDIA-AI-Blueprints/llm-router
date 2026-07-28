@@ -6,7 +6,7 @@ pytest.importorskip("fastapi")
 
 from unittest.mock import patch
 
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 from model_router_toolkit.adapters.http.app import create_app
 
@@ -50,6 +50,10 @@ class FakeRouter:
         pass
 
 
+def _test_client(app):
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
 @pytest.mark.asyncio
 class TestOpenClawSidecar:
     """Tests mimicking how the OpenClaw TS plugin calls the sidecar."""
@@ -60,7 +64,7 @@ class TestOpenClawSidecar:
             return_value=FakeRouter(),
         ):
             app = create_app(fake_config_path, warmup=False)
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with _test_client(app) as client:
                 resp = await client.post(
                     "/v1/route",
                     json={
@@ -80,7 +84,7 @@ class TestOpenClawSidecar:
             return_value=FakeRouter(),
         ):
             app = create_app(fake_config_path, warmup=False)
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with _test_client(app) as client:
                 resp = await client.post(
                     "/v1/route",
                     json={
@@ -97,7 +101,7 @@ class TestOpenClawSidecar:
             return_value=FakeRouter(),
         ):
             app = create_app(fake_config_path, warmup=False)
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with _test_client(app) as client:
                 resp = await client.get("/health")
                 assert resp.status_code == 200
                 assert resp.json()["mode"] == "router-only"
@@ -109,7 +113,7 @@ class TestOpenClawSidecar:
             return_value=FakeRouter(),
         ):
             app = create_app(fake_config_path, warmup=False)
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with _test_client(app) as client:
                 resp = await client.post("/v1/route", json={"question": "test"})
                 data = resp.json()
                 assert "selected_model" in data
