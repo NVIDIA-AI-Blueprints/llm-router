@@ -100,11 +100,10 @@ def start_proxy(
 
     os.environ["CONFIG_FILE_PATH"] = litellm_config
 
+    from litellm.proxy.proxy_server import app as litellm_app
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.requests import Request
     from starlette.responses import Response
-
-    from litellm.proxy.proxy_server import app as litellm_app
 
     _strategy_ref = None
 
@@ -122,10 +121,11 @@ def start_proxy(
         """
 
         async def dispatch(self, request: Request, call_next) -> Response:
+            strategy = _strategy_ref
+            if strategy is not None:
+                strategy.begin_request()
 
             response = await call_next(request)
-
-            strategy = _strategy_ref
             if strategy and hasattr(strategy, "last_result") and strategy.last_result:
                 selected = strategy.last_result.selected_model
                 response.headers["X-Model-Router-Selected"] = selected

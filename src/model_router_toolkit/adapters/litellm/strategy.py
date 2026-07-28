@@ -26,6 +26,15 @@ _request_tolerance: contextvars.ContextVar[float | None] = contextvars.ContextVa
     default=None,
 )
 
+# Holds a mutable per-request slot for the routing result. A mutable dict
+# (rather than the result itself) so writes made inside copied contexts —
+# asyncio.to_thread and task groups copy the context — stay visible to the
+# request handler that installed the slot.
+_request_result: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "request_routing_result",
+    default=None,
+)
+
 
 class ModelRoutingStrategy:
     """Wraps a BaseRouter and implements the LiteLLM custom routing interface.
@@ -71,6 +80,21 @@ class ModelRoutingStrategy:
         """Set tolerance for the current async request context only."""
         _request_tolerance.set(max(0.0, min(1.0, value)))
 
+    def begin_request(self) -> None:
+        """Install a request-scoped slot for the routing result.
+
+        Call this in the request handler before dispatching to LiteLLM so
+        that last_result reads back this request's routing decision instead
+        of whichever concurrent request routed most recently.
+        """
+        _request_result.set({"result": None})
+
+    def _record_result(self, result: RoutingResult | None) -> None:
+        slot = _request_result.get()
+        if slot is not None:
+            slot["result"] = result
+        self._last_result = result
+
     @property
     def models(self) -> list[str] | None:
         return self._models
@@ -87,6 +111,9 @@ class ModelRoutingStrategy:
 
     @property
     def last_result(self) -> RoutingResult | None:
+        slot = _request_result.get()
+        if slot is not None:
+            return slot["result"]
         return self._last_result
 
     @property
@@ -120,7 +147,7 @@ class ModelRoutingStrategy:
         pinned = self._router.resolve(pin)
         if pinned is None:
             return None
-        self._last_result = pinned
+        self._record_result(pinned)
         return self._find_deployment(pin)
 
     def _route_and_select(
@@ -141,7 +168,7 @@ class ModelRoutingStrategy:
             text = input
 
         if not text:
-            self._last_result = None
+            self._record_result(None)
             if self._litellm_router:
                 return self._litellm_router.model_list[0]
             return {}
@@ -153,7 +180,7 @@ class ModelRoutingStrategy:
             tolerance=self.effective_tolerance,
             models=allowed,
         )
-        self._last_result = result
+        self._record_result(result)
 
         dep = self._find_deployment(result.selected_model)
         if dep:

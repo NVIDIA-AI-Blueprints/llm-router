@@ -36,6 +36,27 @@ const Playground = (function () {
 
   function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
 
+  // Escape untrusted text (model output, judge verdicts, names) before
+  // interpolating into HTML strings.
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Render markdown sanitized; fall back to plain text if either CDN
+  // library failed to load so model output is never injected raw.
+  function renderMarkdown(el, text) {
+    if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+      el.innerHTML = DOMPurify.sanitize(marked.parse(text));
+    } else {
+      el.textContent = text;
+    }
+  }
+
   // ── Initialization ────────────────────────────────────────────────────
   async function init() {
     await Promise.all([loadConfig(), loadModels()]);
@@ -114,12 +135,12 @@ const Playground = (function () {
     var container = document.getElementById('modelToggles');
     container.innerHTML = models.map(function (m) {
       var outCost = (m.cost_per_m_output_tokens || 0).toFixed(2);
-      return '<div class="model-toggle" data-model="' + m.name + '">' +
+      return '<div class="model-toggle" data-model="' + esc(m.name) + '">' +
         '<label class="toggle-switch">' +
-        '<input type="checkbox" checked data-model="' + m.name + '">' +
+        '<input type="checkbox" checked data-model="' + esc(m.name) + '">' +
         '<span class="toggle-slider"></span></label>' +
         '<div class="model-toggle-info">' +
-        '<div class="model-toggle-name">' + (m.display_name || m.name) + '</div>' +
+        '<div class="model-toggle-name">' + esc(m.display_name || m.name) + '</div>' +
         '<div class="model-toggle-cost">$' + outCost + '/M output</div>' +
         '</div></div>';
     }).join('');
@@ -208,9 +229,9 @@ const Playground = (function () {
       var cls = 'pipeline-step' + (s.active ? ' active' : ' pending');
       if (s.isTtft) cls += ' pipeline-ttft-step';
       html += '<div class="' + cls + '">';
-      html += '<div class="pipeline-step-label">' + s.label + '</div>';
-      html += '<div class="pipeline-step-value' + (s.isTtft ? ' pipeline-ttft-value' : '') + '">' + s.value + '</div>';
-      html += '<div class="pipeline-step-detail">' + s.detail + '</div>';
+      html += '<div class="pipeline-step-label">' + esc(s.label) + '</div>';
+      html += '<div class="pipeline-step-value' + (s.isTtft ? ' pipeline-ttft-value' : '') + '">' + esc(s.value) + '</div>';
+      html += '<div class="pipeline-step-detail">' + esc(s.detail) + '</div>';
       html += '</div>';
     });
     html += '</div>';
@@ -271,7 +292,7 @@ const Playground = (function () {
       else marker = '<span class="prob-marker"></span>';
 
       probsHtml += '<div class="prob-row" style="' + (enabled ? '' : 'opacity:0.35') + '">' +
-        '<span class="prob-name">' + dn(name) + '</span>' +
+        '<span class="prob-name">' + esc(dn(name)) + '</span>' +
         '<span class="prob-value">' + prob.toFixed(3) + '</span>' +
         '<div class="prob-bar-track"><div class="prob-bar-fill" style="width:' + pct + '%"></div></div>' +
         marker + '</div>';
@@ -283,7 +304,7 @@ const Playground = (function () {
       '<div class="routing-header">' +
       '<div class="routing-badge">' +
       '<span class="dot"></span>' +
-      '<span class="model-name">' + dn(selected) + '</span>' +
+      '<span class="model-name">' + esc(dn(selected)) + '</span>' +
       '<span class="cost">' + costStr + '</span>' +
       '<span class="latency">' + routeMs + '</span>' +
       '</div>' +
@@ -294,7 +315,7 @@ const Playground = (function () {
       '<div style="margin-top:8px;">' +
       '<div style="margin-bottom:4px; font-size:10px; color:var(--text-dim);">\u2605 = highest probability, \u2190 = selected model</div>' +
       probsHtml +
-      '<div class="routing-summary"><strong>Selected: ' + dn(selected) + '</strong> \u2014 most efficient model with p(correct) \u2265 ' + thresholdStr + '</div>' +
+      '<div class="routing-summary"><strong>Selected: ' + esc(dn(selected)) + '</strong> \u2014 most efficient model with p(correct) \u2265 ' + thresholdStr + '</div>' +
       '</div></div></div>';
   }
 
@@ -421,7 +442,7 @@ const Playground = (function () {
           assistantDiv.appendChild(contentEl);
         }
         contentText += data.text;
-        contentEl.innerHTML = marked.parse(contentText);
+        renderMarkdown(contentEl, contentText);
 
       } else if (type === 'done') {
         var finalText = contentText || reasoningText;
@@ -518,7 +539,7 @@ const Playground = (function () {
       var pct = ((count / stats.queries) * 100).toFixed(0);
       return '<div class="model-usage-item">' +
         '<span class="model-usage-dot" style="background:' + modelColor(name) + '"></span>' +
-        '<span class="model-usage-name">' + dn(name) + '</span>' +
+        '<span class="model-usage-name">' + esc(dn(name)) + '</span>' +
         '<span class="model-usage-count">' + count + ' (' + pct + '%)</span>' +
         '</div>';
     }).join('');
@@ -574,13 +595,13 @@ const Playground = (function () {
         scrollToBottom();
       }
     } catch (e) {
-      reviewContainer.innerHTML = '<div class="review-card error">Review failed: ' + e.message + '</div>';
+      reviewContainer.innerHTML = '<div class="review-card error">Review failed: ' + esc(e.message) + '</div>';
     }
 
     function handleReviewEvent(type, data) {
       if (type === 'judging') {
         reviewContainer.innerHTML = '<div class="review-card judging review-pulse">' +
-          '<span class="verdict-icon">\uD83D\uDD0D</span> ' + data.status + '</div>';
+          '<span class="verdict-icon">\uD83D\uDD0D</span> ' + esc(data.status) + '</div>';
 
       } else if (type === 'verdict') {
         var isCorrect = data.correct === true;
@@ -589,14 +610,14 @@ const Playground = (function () {
         var conf = data.confidence || 'medium';
         reviewContainer.innerHTML = '<div class="review-card ' + cls + '">' +
           '<span class="verdict-icon">' + icon + '</span> ' +
-          '<strong>' + (isCorrect ? 'Likely correct' : 'May be incorrect') + '</strong> (' + conf + ' confidence)' +
-          '<div style="margin-top:3px; font-size:10px;">' + (data.explanation || '') + '</div>' +
+          '<strong>' + (isCorrect ? 'Likely correct' : 'May be incorrect') + '</strong> (' + esc(conf) + ' confidence)' +
+          '<div style="margin-top:3px; font-size:10px;">' + esc(data.explanation || '') + '</div>' +
           '</div>';
 
       } else if (type === 'comparing') {
         comparisonDiv = document.createElement('div');
         comparisonDiv.className = 'review-card comparing review-pulse';
-        comparisonDiv.innerHTML = '<span class="verdict-icon">\uD83D\uDD04</span> ' + data.status;
+        comparisonDiv.innerHTML = '<span class="verdict-icon">\uD83D\uDD04</span> ' + esc(data.status);
         reviewContainer.appendChild(comparisonDiv);
 
       } else if (type === 'model-result') {
@@ -613,8 +634,8 @@ const Playground = (function () {
         row.innerHTML =
           '<div class="review-model-icon" style="color:' + mColor + '">' + mIcon + '</div>' +
           '<div class="review-model-info">' +
-          '<div class="review-model-name">' + (data.display_name || data.model) + '</div>' +
-          '<div class="review-model-detail">' + (data.explanation || '') + '</div>' +
+          '<div class="review-model-name">' + esc(data.display_name || data.model) + '</div>' +
+          '<div class="review-model-detail">' + esc(data.explanation || '') + '</div>' +
           '</div>';
         comparisonDiv.appendChild(row);
 
@@ -624,7 +645,7 @@ const Playground = (function () {
           comparisonDiv.classList.add(data.any_correct ? 'correct' : 'incorrect');
           var summaryDiv = document.createElement('div');
           summaryDiv.className = 'review-summary';
-          summaryDiv.innerHTML = '<strong>' + data.summary + '</strong>';
+          summaryDiv.innerHTML = '<strong>' + esc(data.summary) + '</strong>';
           comparisonDiv.appendChild(summaryDiv);
         }
       }

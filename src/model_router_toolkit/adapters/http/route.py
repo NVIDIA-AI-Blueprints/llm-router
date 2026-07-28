@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
@@ -83,7 +84,10 @@ async def route(request: Request, req: RouteRequest):
     allowed = req.models or getattr(request.app.state, "allowed_models", None)
 
     t0 = time.perf_counter()
-    result = app_router.route(question, tolerance=req.tolerance, models=allowed)
+    # The route call runs encoder inference; keep it off the event loop.
+    result = await asyncio.to_thread(
+        app_router.route, question, tolerance=req.tolerance, models=allowed
+    )
     route_ms = (time.perf_counter() - t0) * 1000
 
     from model_router_toolkit import telemetry

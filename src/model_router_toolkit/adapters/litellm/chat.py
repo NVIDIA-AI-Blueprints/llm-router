@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from typing import Any
@@ -34,7 +35,9 @@ async def _chat_stream(request: Request, req: ChatRequest):
     messages = [{"role": "user", "content": req.message}]
 
     t0 = time.perf_counter()
-    result = strategy.router.route(
+    # The route call runs encoder inference; keep it off the event loop.
+    result = await asyncio.to_thread(
+        strategy.router.route,
         req.message,
         tolerance=tolerance,
         models=req.enabled_models,
