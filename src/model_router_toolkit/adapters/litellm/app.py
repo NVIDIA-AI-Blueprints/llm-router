@@ -27,6 +27,10 @@ def _resolve_api_key(litellm_model: str, api_base: str) -> str:
         return os.environ.get("OPENROUTER_API_KEY", "")
     if litellm_model.startswith("nvidia_nim/"):
         return os.environ.get("NVIDIA_API_KEY", "")
+    if litellm_model.startswith("openai/"):
+        return os.environ.get("OPENAI_API_KEY", "")
+    if litellm_model.startswith("anthropic/"):
+        return os.environ.get("ANTHROPIC_API_KEY", "")
 
     if "nvidia" in api_base or "integrate.api.nvidia" in api_base:
         return os.environ.get("NVIDIA_API_KEY", "")

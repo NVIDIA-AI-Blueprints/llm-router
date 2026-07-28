@@ -180,6 +180,18 @@ class TestResolveApiKey:
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key-456")
         assert _resolve_api_key("openrouter/some-model", "") == "or-key-456"
 
+    def test_openai_prefix(self, monkeypatch):
+        monkeypatch.setenv("NVIDIA_API_KEY", "nvda-key-123")
+        monkeypatch.setenv("OPENROUTER_API_KEY", "or-key-456")
+        monkeypatch.setenv("OPENAI_API_KEY", "openai-key-789")
+        assert _resolve_api_key("openai/some-model", "") == "openai-key-789"
+
+    def test_anthropic_prefix(self, monkeypatch):
+        monkeypatch.setenv("NVIDIA_API_KEY", "nvda-key-123")
+        monkeypatch.setenv("OPENROUTER_API_KEY", "or-key-456")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-key-789")
+        assert _resolve_api_key("anthropic/some-model", "") == "anthropic-key-789"
+
     def test_nvidia_api_base_fallback(self, monkeypatch):
         monkeypatch.setenv("NVIDIA_API_KEY", "nvda-key-123")
         result = _resolve_api_key("plain-model", "https://integrate.api.nvidia.com/v1")
@@ -194,6 +206,7 @@ class TestResolveApiKey:
         monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         assert _resolve_api_key("plain-model", "https://custom.example.com/v1") == ""
 
     def test_prefix_takes_precedence_over_api_base(self, monkeypatch):
@@ -286,12 +299,37 @@ class TestBuildModelList:
     def test_api_key_assigned_per_provider(self, monkeypatch):
         monkeypatch.setenv("NVIDIA_API_KEY", "nvda-key")
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
-        config = _make_config()
+        monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-key")
+        config = _make_config(
+            models=[
+                ModelSpec(
+                    name="cheap-model",
+                    litellm_model="nvidia_nim/nvidia/test-small",
+                ),
+                ModelSpec(
+                    name="expensive-model",
+                    litellm_model="openrouter/openai/gpt-4o",
+                ),
+                ModelSpec(
+                    name="openai-model",
+                    litellm_model="openai/gpt-4o-mini",
+                ),
+                ModelSpec(
+                    name="anthropic-model",
+                    litellm_model="anthropic/claude-3-5-sonnet",
+                ),
+            ]
+        )
         model_list = _build_model_list(config)
         nvidia_entry = next(e for e in model_list if e["model_name"] == "cheap-model")
         or_entry = next(e for e in model_list if e["model_name"] == "expensive-model")
+        openai_entry = next(e for e in model_list if e["model_name"] == "openai-model")
+        anthropic_entry = next(e for e in model_list if e["model_name"] == "anthropic-model")
         assert nvidia_entry["litellm_params"]["api_key"] == "nvda-key"
         assert or_entry["litellm_params"]["api_key"] == "or-key"
+        assert openai_entry["litellm_params"]["api_key"] == "openai-key"
+        assert anthropic_entry["litellm_params"]["api_key"] == "anthropic-key"
 
 
 # ---------------------------------------------------------------------------
