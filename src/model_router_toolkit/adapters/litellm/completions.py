@@ -13,6 +13,83 @@ from model_router_toolkit.router import extract_user_text
 router = APIRouter()
 
 
+# Modality routing tables.
+#
+# The prefill router uses a text-only encoder, so it has no signal that a
+# request carries non-text content. Without a hint it can pick a model whose
+# upstream provider will 4xx on image_url / audio / video blocks. To avoid
+# that, we read every message's content list, map each non-text block to a
+# capability tag (image / audio / video / ...), and narrow the candidate pool
+# to models known to support every required capability.
+#
+# Extending to a new modality is two edits:
+#   1. Map the OpenAI content block `type` to a capability in
+#      `_BLOCK_TYPE_TO_CAPABILITY`.
+#   2. List the model slugs that can serve that capability in
+#      `_CAPABILITY_TO_MODELS`.
+#
+# Model slugs below match the canonical v3-prefill 9-model pool. Pools with
+# different names simply fall through — the shim only restricts to the
+# intersection with the actually configured pool, so it is safe by default.
+_BLOCK_TYPE_TO_CAPABILITY: dict[str, str] = {
+    "image_url": "image",
+    "input_image": "image",
+    "input_audio": "audio",
+    "audio": "audio",
+    "video_url": "video",
+    "input_video": "video",
+}
+
+_CAPABILITY_TO_MODELS: dict[str, frozenset[str]] = {
+    # Vision: Gemini, Sonnet, and Opus all consume image_url / input_image
+    # blocks via OpenRouter (probe-verified against the v3-prefill pool).
+    "image": frozenset({"gemini-3-5-flash", "claude-sonnet-4-6", "claude-opus-4-8"}),
+    # Audio: of the canonical 9-model pool, only Gemini 3.5 Flash accepts
+    # input_audio blocks (probe-verified with a 1s silent WAV; non-Gemini
+    # upstreams return 404 "No endpoints found that support input audio").
+    "audio": frozenset({"gemini-3-5-flash"}),
+    # Video: same finding as audio — only Gemini 3.5 Flash accepts
+    # video_url blocks (probe-verified with a 1s 64x64 solid-red MP4).
+    "video": frozenset({"gemini-3-5-flash"}),
+}
+
+
+def _required_capabilities(messages: list[dict]) -> set[str]:
+    """Collect modality capability tags needed to serve every block in messages."""
+    required: set[str] = set()
+    for msg in messages:
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            cap = _BLOCK_TYPE_TO_CAPABILITY.get(block.get("type"))
+            if cap:
+                required.add(cap)
+    return required
+
+
+def _modality_filtered_pool(messages: list[dict], pool: set[str]) -> list[str] | None:
+    """Narrow `pool` to models capable of every required modality.
+
+    Returns:
+        Sorted list of candidate model names, or None when the request has no
+        special modality requirements (caller should leave routing untouched).
+        Returns an empty list when no configured model satisfies the required
+        capabilities — in that case the caller should also leave routing
+        untouched so the existing flow surfaces the upstream "unsupported"
+        error rather than forcing the strategy to choose from an empty set.
+    """
+    required = _required_capabilities(messages)
+    if not required:
+        return None
+    candidates = pool
+    for cap in required:
+        candidates = candidates & _CAPABILITY_TO_MODELS.get(cap, frozenset())
+    return sorted(candidates)
+
+
 async def _handle_completion(request: Request, body: dict) -> JSONResponse | StreamingResponse:
     litellm_router = request.app.state.litellm_router
     strategy = request.app.state.strategy
@@ -25,6 +102,19 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
 
     if "tolerance" in body:
         strategy.set_request_tolerance(float(body.get("tolerance", 0.20)))
+
+    # Modality shim: when the client did not already restrict the candidate
+    # pool via `models`, narrow it to models capable of every required
+    # modality (see _BLOCK_TYPE_TO_CAPABILITY / _CAPABILITY_TO_MODELS).
+    # Empty results are intentionally NOT injected so the upstream "no
+    # endpoints support X" error surfaces unchanged for unsupported
+    # modalities, rather than forcing the strategy to choose from an
+    # empty set.
+    if "models" not in body:
+        configured_pool = {m.name for m in config.models}
+        filtered = _modality_filtered_pool(messages, configured_pool)
+        if filtered:
+            body["models"] = filtered
 
     # Use the first model name from config as the LiteLLM model group.
     # The routing strategy intercepts the call and picks the actual deployment.
