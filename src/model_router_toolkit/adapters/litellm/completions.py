@@ -18,36 +18,57 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
     strategy = request.app.state.strategy
     config = request.app.state.config
 
-    messages = body.get("messages", [])
     stream = body.get("stream", False)
-    temperature = body.get("temperature", 0.7)
-    max_tokens = body.get("max_tokens", 4096)
 
     if "tolerance" in body:
-        strategy.set_request_tolerance(float(body.get("tolerance", 0.20)))
+        # Silently fall back to the default tolerance if the client sent a
+        # non-numeric value rather than crashing the request with a 500. This
+        # keeps the routing strategy permissive about loose input shapes.
+        try:
+            strategy.set_request_tolerance(float(body["tolerance"]))
+        except (TypeError, ValueError):
+            pass
 
     # Use the first model name from config as the LiteLLM model group.
     # The routing strategy intercepts the call and picks the actual deployment.
     model_group = config.models[0].name if config.models else "default"
 
-    metadata: dict[str, Any] = {}
-    if "models" in body:
-        metadata["models"] = body["models"]
-
+    # Forward every OpenAI-compatible field untouched so that agents which rely
+    # on `tools` / `tool_choice` / `response_format` / `top_p` / `seed` / `stop`
+    # etc. actually reach the upstream model. Only routing-specific keys are
+    # stripped:
+    #   - `tolerance`, `models`: consumed by the router strategy above
+    #   - `model`: replaced with the litellm model group so the strategy can
+    #     intercept the call (the original value is ignored, matching the prior
+    #     behavior of this endpoint)
+    #   - `metadata`: reserved for the router's internal use (we build a fresh
+    #     dict containing the `models` filter below); passing through a
+    #     client-supplied `metadata` could collide with litellm.Router internal
+    #     keys (trace_id, tags, callback context, ...), so it is dropped to
+    #     keep the prior surface unchanged
+    routing_only_keys = {"tolerance", "models", "model", "metadata"}
     kwargs: dict[str, Any] = {
-        "model": model_group,
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        "stream": stream,
+        k: v for k, v in body.items() if k not in routing_only_keys
     }
-    if metadata:
-        kwargs["metadata"] = metadata
+    kwargs["model"] = model_group
+    kwargs.setdefault("temperature", 0.7)
+    kwargs.setdefault("max_tokens", 4096)
+
+    if "models" in body:
+        kwargs["metadata"] = {"models": body["models"]}
 
     if stream:
+        # Resolve the upstream completion BEFORE constructing StreamingResponse
+        # so that any pre-stream errors (e.g. BadRequestError from upstream
+        # validation, AuthenticationError, RateLimitError) bubble up to the
+        # FastAPI exception handler and are converted to a proper 4xx/5xx
+        # JSON response. If we awaited acompletion() inside the SSE generator,
+        # the response headers would already be committed as 200 OK by the
+        # time the error fires and the client would receive a broken SSE
+        # stream instead of an actionable status code.
+        response_stream = await litellm_router.acompletion(**kwargs)
 
         async def sse_stream():
-            response_stream = await litellm_router.acompletion(**kwargs)
             async for chunk in response_stream:
                 data = chunk.model_dump(exclude_none=True)
                 yield f"data: {json.dumps(data)}\n\n"
@@ -83,7 +104,7 @@ async def _handle_completion(request: Request, body: dict) -> JSONResponse | Str
     from model_router_toolkit import telemetry
 
     if telemetry.enabled() and strategy.last_result:
-        user_text = extract_user_text(messages)
+        user_text = extract_user_text(body.get("messages", []))
         telemetry.log_chat(
             session_id=None,
             question=user_text,
