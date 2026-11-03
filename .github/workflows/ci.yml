@@ -53,6 +53,28 @@ jobs:
           docker version
           docker compose version
 
+      - name: Build and smoke-test CLIP server image (CUDA 12.8)
+        run: |
+          nvidia-smi || true
+          mkdir -p /tmp/clip-server
+          cat > /tmp/clip-server/Dockerfile <<'EOF'
+          FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
+          RUN pip install --no-cache-dir "setuptools<81" clip-server
+          EXPOSE 51000
+          CMD ["python", "-m", "clip_server"]
+          EOF
+          docker build -t clip-server-cu128:ci /tmp/clip-server
+          docker run -d --rm --name clip_smoke --gpus device=0 -p 51000:51000 clip-server-cu128:ci
+          pip install clip-client
+          ok=0
+          for i in $(seq 1 30); do
+            if python -c "from clip_client import Client; print(Client('grpc://0.0.0.0:51000').encode(['hello']).shape)"; then ok=1; break; fi
+            sleep 10
+          done
+          docker logs clip_smoke 2>&1 | tail -50
+          docker stop clip_smoke || true
+          [ "$ok" = 1 ] || { echo "::error::CLIP server smoke test failed"; exit 1; }
+
       - name: "Patch notebooks for CI (notebook 1 uv + wait; notebooks 2-3 uv, NUM_SAMPLES, GPU, CLIP verify sleep)"
         run: |
           python <<'PY'
@@ -70,6 +92,8 @@ jobs:
           num_samples_new = f"NUM_SAMPLES = {_ns}  # Adjust as needed"
           gpus_all = "    --gpus all \\\n"
           gpus_dev0 = "    --gpus device=0 \\\n"
+          clip_image_old = "jinaai/clip-as-service:latest"
+          clip_image_new = "clip-server-cu128:ci"
           clip_verify_old = (
               "# Verify CLIP server is responding\n"
               "c = Client('grpc://0.0.0.0:51000')\n"
@@ -104,6 +128,8 @@ jobs:
                   if num_samples_old in text:
                       text = text.replace(num_samples_old, num_samples_new)
                       num_samples_patched = True
+                  if clip_image_old in text:
+                      text = text.replace(clip_image_old, clip_image_new)
                   if gpus_all in text:
                       text = text.replace(gpus_all, gpus_dev0)
                   if clip_verify_old in text and "time.sleep(30)" not in text:
