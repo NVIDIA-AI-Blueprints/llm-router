@@ -45,7 +45,7 @@ jobs:
         env:
           NGC_API_Key: ${{ secrets.NGC_API_KEY }}
         run: |
-          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade pip wheel "setuptools<81"
           pip install papermill jupyter nbconvert
           # Get System Info
           echo "===================== System Info ====================="
