@@ -139,22 +139,27 @@ def _build_cost_map(
     """Resolve per-model cost from checkpoint pool_config, falling back to config.
 
     Returns {model_name: cost_per_m_input_tokens} or None when costs are
-    unavailable or all zero.
+    unavailable or all zero.  A zero cost for some (not all) models is valid,
+    e.g. a free or self-hosted model in the pool.
     """
     costs: dict[str, float] = {}
 
+    # Trained checkpoints store {"encoders": [...], "targets": [...]};
+    # older checkpoints store the target list directly.
     pool_config = ckpt.get("pool_config", [])
+    if isinstance(pool_config, dict):
+        pool_config = pool_config.get("targets", [])
     if isinstance(pool_config, list):
         for entry in pool_config:
             if isinstance(entry, dict):
                 name = entry.get("name", "")
-                cost = entry.get("cost_per_m_input_tokens", 0.0)
-                if name and cost:
+                cost = entry.get("cost_per_m_input_tokens")
+                if name and cost is not None:
                     costs[name] = cost
 
     if config is not None:
         for m in getattr(config, "models", []):
-            if m.name not in costs and m.cost_per_m_input_tokens > 0:
+            if m.name not in costs:
                 costs[m.name] = m.cost_per_m_input_tokens
 
     if not all(mn in costs for mn in model_names):
@@ -174,7 +179,7 @@ def _load_pricing_csv(
         for row in reader:
             name = row.get("model", "").strip()
             cost = float(row.get("cost_per_m_input_tokens", 0))
-            if name and cost > 0:
+            if name and cost >= 0:
                 costs[name] = cost
     return costs
 

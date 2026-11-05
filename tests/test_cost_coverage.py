@@ -6,6 +6,7 @@ import pytest
 from model_router_toolkit.evaluate import (
     _build_cost_map,
     _build_routing_curve,
+    _load_pricing_csv,
     _padded_auc,
     _pareto_frontier,
     _route_at_tolerance,
@@ -262,6 +263,60 @@ class TestBuildCostMap:
 
         result = _build_cost_map(ckpt, ["a", "b"], config=FakeConfig())
         assert result == {"a": 0.5, "b": 1.5}
+
+    def test_from_trained_checkpoint_pool_config(self):
+        """prefill/train.py stores pool_config as {"encoders", "targets"}."""
+        ckpt = {
+            "pool_config": {
+                "encoders": [{"hf_path": "Qwen/Qwen3.5-0.8B"}],
+                "targets": [
+                    {"name": "a", "cost_per_m_input_tokens": 0.5},
+                    {"name": "b", "cost_per_m_input_tokens": 1.5},
+                ],
+            },
+        }
+        assert _build_cost_map(ckpt, ["a", "b"]) == {"a": 0.5, "b": 1.5}
+
+    def test_zero_cost_model_kept(self):
+        """A free model in a priced pool must not disable the cost curve."""
+        ckpt = {
+            "pool_config": [
+                {"name": "free", "cost_per_m_input_tokens": 0.0},
+                {"name": "paid", "cost_per_m_input_tokens": 1.5},
+            ],
+        }
+        assert _build_cost_map(ckpt, ["free", "paid"]) == {"free": 0.0, "paid": 1.5}
+
+    def test_zero_cost_model_from_config(self):
+        ckpt = {"pool_config": []}
+
+        class FakeModel:
+            def __init__(self, name, cost):
+                self.name = name
+                self.cost_per_m_input_tokens = cost
+
+        class FakeConfig:
+            models = [FakeModel("free", 0.0), FakeModel("paid", 1.5)]
+
+        result = _build_cost_map(ckpt, ["free", "paid"], config=FakeConfig())
+        assert result == {"free": 0.0, "paid": 1.5}
+
+
+# ---------------------------------------------------------------------------
+# _load_pricing_csv
+# ---------------------------------------------------------------------------
+
+
+class TestLoadPricingCsv:
+    def test_zero_cost_row_kept(self, tmp_path):
+        path = tmp_path / "pricing.csv"
+        path.write_text("model,cost_per_m_input_tokens\nfree,0.0\npaid,1.5\n")
+        assert _load_pricing_csv(path) == {"free": 0.0, "paid": 1.5}
+
+    def test_negative_cost_row_skipped(self, tmp_path):
+        path = tmp_path / "pricing.csv"
+        path.write_text("model,cost_per_m_input_tokens\nbad,-1.0\npaid,1.5\n")
+        assert _load_pricing_csv(path) == {"paid": 1.5}
 
 
 # ---------------------------------------------------------------------------
